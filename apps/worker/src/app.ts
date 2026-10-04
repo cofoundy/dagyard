@@ -14,6 +14,7 @@ import {
   parseProjectGraphInput,
   parseProjectInput,
   parseResolveInput,
+  parseTeamPatch,
   slugify,
   type BlockerWaitResult,
   type DagNode,
@@ -301,6 +302,17 @@ app.delete('/api/projects/:pid/edges', async (c) => {
   if (!isSlug(from) || !isSlug(to)) return fail('invalid', 'from y to: ids de tareas');
   await run(c, { kind: 'removeEdge', pid, from, to, actor: c.get('role') });
   return c.body(null, 204);
+});
+
+/* ------------------------------------------------------------------ equipos de la fábrica (#75) */
+
+/** Upsert parcial de un equipo (un sitio de `/factory`); sin cambios no escribe ni emite `team.updated`. */
+app.put('/api/projects/:pid/teams/:tid', async (c) => {
+  const pid = pidParam(c);
+  const tid = c.req.param('tid');
+  if (!isSlug(tid)) return fail('invalid', `tid: el slug del sitio, minúsculas, números y guiones (máx. 64): «${tid}»`);
+  const patch = ok(parseTeamPatch(await body(c)));
+  return c.json(await run(c, { kind: 'putTeam', pid, tid, patch, actor: c.get('role') }));
 });
 
 /* ------------------------------------------------------------------ bloqueantes */

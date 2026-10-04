@@ -3,7 +3,7 @@ import { MESSAGES_IN_SNAPSHOT, type DagEvent, type DagNode, type Edge, type Proj
 import type { Db, Row } from './db.js';
 import type { Env } from './env.js';
 import { ApiFailure, notFound } from './http.js';
-import { BLOCKER_COLS, toBlocker, toEdge, toEvent, toMessage, toNode, toProject } from './rows.js';
+import { BLOCKER_COLS, TEAMS_ORDER, toBlocker, toEdge, toEvent, toMessage, toNode, toProject, toTeam } from './rows.js';
 import type { Idem, WriteOp, WriteValues } from './writes.js';
 
 /* ------------------------------------------------------------------ lecturas */
@@ -35,7 +35,7 @@ export async function loadGraph(db: Db, pid: string): Promise<{ project: Project
 }
 
 export async function snapshot(db: Db, pid: string): Promise<ProjectSnapshot> {
-  const [p, n, e, b, m, q] = await db.batch<Row>([
+  const [p, n, e, b, m, q, t] = await db.batch<Row>([
     db.prepare('SELECT * FROM projects WHERE id = ?').bind(pid),
     nodesQ(db, pid),
     edgesQ(db, pid),
@@ -47,6 +47,7 @@ export async function snapshot(db: Db, pid: string): Promise<ProjectSnapshot> {
       )
       .bind(pid),
     db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM events WHERE project_id = ?').bind(pid),
+    db.prepare(`SELECT * FROM teams WHERE project_id = ? ${TEAMS_ORDER}`).bind(pid),
   ]);
   const row = p!.results[0];
   if (!row) return notFound(`El proyecto «${pid}»`);
@@ -56,6 +57,7 @@ export async function snapshot(db: Db, pid: string): Promise<ProjectSnapshot> {
     edges: e!.results.map(toEdge),
     blockers: b!.results.map(toBlocker),
     messages: m!.results.map(toMessage),
+    teams: t!.results.map(toTeam),
     seq: Number(q!.results[0]?.seq ?? 0),
   };
 }

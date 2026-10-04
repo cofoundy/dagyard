@@ -9,6 +9,7 @@ import {
   NODE_STATUSES,
   type BlockerInput,
   type BlockerKind,
+  type IsoDate,
   type Lang,
   type MessageInput,
   type NodeInput,
@@ -22,6 +23,75 @@ import {
 import { findCycle } from './graph.js';
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; message: string };
+
+/**
+ * `PATCH /api/projects/:pid/nodes/:nid` (#75): además de `NodePatch`, `teamId` = el sitio de la fábrica que la
+ * toma (o null para soltarla). `startedAt`/`doneAt` los pone el servidor; el cliente no los escribe.
+ */
+export type NodePatchInput = NodePatch & { teamId?: string | null };
+
+/**
+ * `PUT /api/projects/:pid/teams/:tid` (#75): upsert parcial. Lo que falta no se toca; `nodeIds` reemplaza la
+ * lista entera. Las fechas llegan normalizadas a `toISOString()`, así el mismo instante escrito de otra forma
+ * no cuenta como un cambio.
+ */
+export interface TeamPatch {
+  name?: string;
+  /** reemplaza la lista entera */
+  nodeIds?: string[];
+  /**
+   * se suman (sin repetir) a la lista vigente DENTRO de la transacción: así dos escritores a la vez no se pisan.
+   * `team start --issues` e `import-ledger` usan esto, nunca una lista leída antes.
+   */
+  addNodeIds?: string[];
+  requestedAt?: IsoDate | null;
+  startedAt?: IsoDate | null;
+  closedAt?: IsoDate | null;
+  outcome?: string | null;
+}
+
+/** Bloqueante del cuerpo de `PUT /api/projects/:id`; `createdAt` (#75) conserva la hora real de la pregunta al recrear. */
+export type GraphBlockerInput = NonNullable<ProjectGraphInput['blockers']>[number] & { createdAt?: IsoDate };
+
+/** Cuántas tareas lista un equipo como máximo, y cuánto puede decir su `outcome` (el ledger trae frases enteras). */
+export const TEAM_LIMITS = {
+  nodeIds: 50,
+  outcome: LIMITS.note,
+  perProject: LIMITS.nodesPerProject,
+  /** una fecha de equipo anterior a esta es un error de quien escribe (la fábrica es de 2026) */
+  earliest: '2020-01-01T00:00:00.000Z',
+  /** cuánto al futuro tolera una fecha de equipo (relojes desfasados), en ms */
+  future: 24 * 60 * 60 * 1000,
+} as const;
+
+const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-](\d{2}):?(\d{2}))$/;
+
+/**
+ * `2026-10-04T05:35:20Z` → `2026-10-04T05:35:20.000Z`; null si no es una fecha ISO 8601 con hora y zona, o si no
+ * existe en el calendario (V8 corre `2026-02-30` al 2 de marzo sin avisar).
+ */
+export function normalizeIso(v: unknown): IsoDate | null {
+  if (typeof v !== 'string') return null;
+  const m = ISO_RE.exec(v.trim());
+  if (!m) return null;
+  const [y, mo, d, h, mi, se = '0', zh = '0', zm = '0'] = m.slice(1).map((x) => x ?? undefined) as string[];
+  const days = new Date(Date.UTC(Number(y), Number(mo), 0)).getUTCDate();
+  if (Number(mo) < 1 || Number(mo) > 12 || Number(d) < 1 || Number(d) > days) return null;
+  if (Number(h) > 23 || Number(mi) > 59 || Number(se) > 59 || Number(zh) > 23 || Number(zm) > 59) return null;
+  const ms = Date.parse(v.trim());
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/** ¿El equipo cierra antes de arrancar? El mensaje del 400, o null. */
+export function teamDatesProblem(t: { startedAt?: IsoDate | null; closedAt?: IsoDate | null }): string | null {
+  return t.startedAt && t.closedAt && t.closedAt < t.startedAt ? `closedAt: el equipo no puede cerrar (${t.closedAt}) antes de arrancar (${t.startedAt})` : null;
+}
+
+/** «demo-viva» → «Demo viva»: el nombre de un equipo que llegó sin uno. */
+export function teamNameFromSlug(slug: string): string {
+  const s = slug.replace(/-+/g, ' ').trim();
+  return (s.charAt(0).toUpperCase() + s.slice(1)).slice(0, LIMITS.name) || slug;
+}
 
 class Invalid extends Error {}
 const fail = (message: string): never => {
@@ -106,6 +176,12 @@ function stringList(v: unknown, field: string, max: number, maxLen: number): str
   return v.map((x, i) => str(x, `${field}[${i}]`, maxLen)!);
 }
 
+function isoDate(v: unknown, field: string): IsoDate | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  return normalizeIso(v) ?? fail(`${field}: una fecha ISO 8601 con hora y zona, p. ej. 2026-10-04T05:35:20Z`);
+}
+
 function lang(v: unknown): Lang | undefined {
   if (v === undefined) return undefined;
   if (!LANGS.includes(v as Lang)) fail(`lang: uno de ${LANGS.join(', ')}`);
@@ -175,13 +251,14 @@ export function parseNodeInput(body: unknown): Parsed<NodeInput> {
   return wrap(() => nodeInput(obj(body, 'body'), ''));
 }
 
-export function parseNodePatch(body: unknown): Parsed<NodePatch> {
+export function parseNodePatch(body: unknown): Parsed<NodePatchInput> {
   return wrap(() => {
     const o = obj(body, 'body');
-    const allowed = ['stage', 'title', 'status', 'progress', 'team', 'goal', 'reportUrl', 'link'];
+    const allowed = ['stage', 'title', 'status', 'progress', 'team', 'goal', 'reportUrl', 'link', 'teamId'];
     const extra = Object.keys(o).filter((k) => !allowed.includes(k));
     if (extra.length) fail(`campos no editables: ${extra.join(', ')}`);
-    const p: NodePatch = {};
+    const p: NodePatchInput = {};
+    if (o.teamId !== undefined) p.teamId = o.teamId === null ? null : slug(o.teamId, 'teamId');
     if (o.stage !== undefined) p.stage = slug(o.stage, 'stage');
     if (o.title !== undefined) p.title = str(o.title, 'title', LIMITS.title);
     const s = status(o.status);
@@ -275,9 +352,11 @@ export function parseProjectGraphInput(body: unknown): Parsed<ProjectGraphInput>
     g.nodes = raw.map((x, i) => nodeInput(obj(x, `nodes[${i}]`), `nodes[${i}].`));
     if (o.blockers !== undefined) {
       if (!Array.isArray(o.blockers)) fail('blockers: se esperaba una lista');
-      g.blockers = (o.blockers as unknown[]).map((x, i) => {
+      g.blockers = (o.blockers as unknown[]).map((x, i): GraphBlockerInput => {
         const bo = obj(x, `blockers[${i}]`);
-        return { ...blockerInput(bo, `blockers[${i}].`), nodeId: slug(bo.nodeId, `blockers[${i}].nodeId`)! };
+        const b: GraphBlockerInput = { ...blockerInput(bo, `blockers[${i}].`), nodeId: slug(bo.nodeId, `blockers[${i}].nodeId`)! };
+        if (bo.createdAt !== undefined) b.createdAt = isoDate(bo.createdAt, `blockers[${i}].createdAt`)!;
+        return b;
       });
     }
     if (o.messages !== undefined) {
@@ -290,6 +369,37 @@ export function parseProjectGraphInput(body: unknown): Parsed<ProjectGraphInput>
     const problem = checkGraph(g);
     if (problem) fail(problem);
     return g;
+  });
+}
+
+/** `PUT /api/projects/:pid/teams/:tid` (#75): valida el upsert parcial de un equipo. `{}` vale (crea uno vacío). */
+export function parseTeamPatch(body: unknown): Parsed<TeamPatch> {
+  return wrap(() => {
+    const o = obj(body, 'body');
+    const allowed = ['name', 'nodeIds', 'addNodeIds', 'requestedAt', 'startedAt', 'closedAt', 'outcome'];
+    const extra = Object.keys(o).filter((k) => !allowed.includes(k));
+    if (extra.length) fail(`campos no editables: ${extra.join(', ')}`);
+    const p: TeamPatch = {};
+    const name = str(o.name, 'name', LIMITS.name, { optional: true });
+    if (name !== undefined) p.name = name;
+    for (const k of ['nodeIds', 'addNodeIds'] as const) {
+      if (o[k] === undefined) continue;
+      if (!Array.isArray(o[k])) fail(`${k}: se esperaba una lista`);
+      const ids = [...new Set((o[k] as unknown[]).map((x, i) => slug(x, `${k}[${i}]`)!))];
+      if (ids.length > TEAM_LIMITS.nodeIds) fail(`${k}: máximo ${TEAM_LIMITS.nodeIds}`);
+      p[k] = ids;
+    }
+    const latest = new Date(Date.now() + TEAM_LIMITS.future).toISOString();
+    for (const k of ['requestedAt', 'startedAt', 'closedAt'] as const) {
+      const d = isoDate(o[k], k);
+      if (d && (d < TEAM_LIMITS.earliest || d > latest)) fail(`${k}: fuera de rango (desde 2020 hasta mañana): ${d}`);
+      if (d !== undefined) p[k] = d;
+    }
+    const problem = teamDatesProblem(p);
+    if (problem) fail(problem);
+    const outcome = nullableStr(o.outcome, 'outcome', TEAM_LIMITS.outcome);
+    if (outcome !== undefined) p.outcome = outcome;
+    return p;
   });
 }
 
