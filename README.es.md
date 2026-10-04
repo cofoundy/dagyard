@@ -114,7 +114,7 @@ flags. Detalle en [`packages/cli/README.md`](packages/cli/README.md).
 claude plugin marketplace add cofoundy/dagyard && claude plugin install dagyard@dagyard
 ```
 
-Trae la banda, el menú `/dagyard` y el CLI `dagyard` en el PATH de tus agentes. Desde un clon, usa
+Trae la banda, el menú `/dagyard`, el CLI `dagyard` en el PATH de tus agentes y la skill `dagyard:protocol`, que le enseña a cualquier agente a trabajar a la vista. Desde un clon, usa
 `claude plugin marketplace add "$PWD"`. El canal opcional: [`packages/mod/README.md`](packages/mod/README.md).
 
 La interfaz, el CLI y el mod hablan inglés por defecto y español cuando tu sistema está en español.
