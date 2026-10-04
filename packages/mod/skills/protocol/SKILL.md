@@ -1,6 +1,6 @@
 ---
 name: protocol
-description: This skill should be used when working in a repo that has a `.dagyard.json`, when a kickoff names a Dagyard node (such as `gh-91`), or when the user asks to "start your node", "leave a message on Dagyard", "report progress to Dagyard", "ask the owner a decision", "block on a decision", "wait for the answer", "close the task", "create the nodes for your lanes", "record what André asked", or mentions the dagyard CLI, the sky or the factory's DAG. It teaches the protocol an agent follows to keep its work visible in Dagyard.
+description: This skill should be used when working in a repo that has a `.dagyard.json`, when a kickoff names a Dagyard node (such as `gh-91`), or when the user asks to "start your node", "leave a message on Dagyard", "report progress to Dagyard", "ask the owner a decision", "block on a decision", "wait for the answer", "close the task", "create the nodes for your lanes", "record what the owner asked", or mentions the dagyard CLI, the sky or the factory's DAG. It teaches the protocol an agent follows to keep its work visible in Dagyard.
 version: 0.1.0
 ---
 
