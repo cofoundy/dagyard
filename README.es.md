@@ -108,11 +108,14 @@ node packages/cli/dist/dagyard.mjs --help
 Un repo puede commitear un `.dagyard.json` (`{"project": "…", "url": "…"}`) para que sus agentes no necesiten
 flags. Detalle en [`packages/cli/README.md`](packages/cli/README.md).
 
-**4. Agrega el mod de Claude Code** (desde la raíz de tu clon):
+**4. Agrega Dagyard a Claude Code** (un paso, sin clonar):
 
 ```bash
-claude plugin marketplace add "$PWD/packages/mod" && claude plugin install dagyard@dagyard
+claude plugin marketplace add cofoundy/dagyard && claude plugin install dagyard@dagyard
 ```
+
+Trae la banda, el menú `/dagyard` y el CLI `dagyard` en el PATH de tus agentes. Desde un clon, usa
+`claude plugin marketplace add "$PWD"`. El canal opcional: [`packages/mod/README.md`](packages/mod/README.md).
 
 La interfaz, el CLI y el mod hablan inglés por defecto y español cuando tu sistema está en español.
 
@@ -150,8 +153,8 @@ Entra con `OWNER_TOKEN` y siembra el ejemplo con `node apps/worker/scripts/seed.
 | `apps/web` | Vite + React + three.js: el cielo 3D, la ficha de la tarea, el carril de etapas |
 | `packages/model` | Tipos, validación, utilidades del grafo y el proyecto de ejemplo |
 | `packages/cli` | `dagyard`: el CLI con el que los agentes mueven sus tareas, abren bloqueantes y esperan respuesta |
-| `packages/channel` | Server MCP que Claude Code carga como *channel*: le lleva tus respuestas a la sesión del agente |
-| `packages/mod` | Plugin de Claude Code: la banda sobre el prompt y el menú `/dagyard` |
+| `packages/channel` | Server MCP que Claude Code carga como *channel*: le lleva tus respuestas a la sesión del agente (plugin `dagyard-channel` en `plugin/`) |
+| `packages/mod` | Plugin de Claude Code `dagyard`: la banda sobre el prompt, el menú `/dagyard` y el CLI en `bin/` |
 | `docs/` | Contrato de la API (`docs/api.md`), spec de v0, evidencia de QA, las imágenes del README (`docs/media/`) |
 | `design/` | Referencia visual (`preview-constelacion.html`) y anti-referencias |
 

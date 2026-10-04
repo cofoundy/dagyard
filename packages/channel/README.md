@@ -21,7 +21,21 @@ La misma que el CLI: `DAGYARD_URL`, `DAGYARD_KEY` (la API key del agente), `DAGY
 `~/.config/dagyard/{url,agent-key,project}`. Opcional `DAGYARD_NODES=pagos,login` para escuchar solo
 esos nodos (sin él, todos los del proyecto). Los logs van a stderr y la key sale como `***`.
 
-## Registrarlo en un proyecto
+## Como plugin (lo recomendado)
+
+`plugin/` es el plugin `dagyard-channel` del marketplace del repo: su `bin/dagyard-channel.mjs` es este
+bundle, commiteado (lo regenera `node scripts/plugin-bundle.mjs` desde la raíz; el CI lo verifica con
+`--check`). Instalarlo es el opt-in, y se activa por sesión:
+
+```bash
+claude plugin marketplace add cofoundy/dagyard   # o "$PWD" desde la raíz de un clon
+claude plugin install dagyard-channel@dagyard
+claude --dangerously-load-development-channels plugin:dagyard-channel@dagyard
+```
+
+El server se llama `dagyard`, así que los eventos siguen llegando como `<channel source="dagyard" …>`.
+
+## Registrarlo a mano en un proyecto
 
 En el `.mcp.json` **del proyecto** donde trabaja el agente (nunca en `~/.mcp.json`: cada MCP global
 se paga en cada sesión abierta). La key no va en el archivo: sale de `~/.config/dagyard/agent-key`.

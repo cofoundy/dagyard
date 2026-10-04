@@ -1,0 +1,20 @@
+{
+  "name": "dagyard",
+  "description": "Dagyard inside Claude Code",
+  "owner": {
+    "name": "Cofoundy",
+    "email": "info@cofoundy.dev"
+  },
+  "plugins": [
+    {
+      "name": "dagyard",
+      "source": "./packages/mod",
+      "description": "The Dagyard bar, menu and notice inside Claude Code, and the dagyard CLI on the PATH"
+    },
+    {
+      "name": "dagyard-channel",
+      "source": "./packages/channel/plugin",
+      "description": "Opt-in channel: the owner's answer to your blocker reaches the session on its own"
+    }
+  ]
+}
