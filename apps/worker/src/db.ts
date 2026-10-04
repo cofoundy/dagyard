@@ -6,7 +6,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from './env.js';
 import { ApiFailure } from './http.js';
-import { MIGRATIONS } from './schema.js';
+import { migrate } from './schema.js';
 import { runWrite, type Idem, type WriteOp, type WriteResult } from './writes.js';
 
 export type SqlValue = string | number | null;
@@ -81,16 +81,7 @@ export function db(env: Pick<Env, 'STORE'>): Db {
 export class Store extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const sql = ctx.storage.sql;
-    ctx.storage.transactionSync(() => {
-      sql.exec('CREATE TABLE IF NOT EXISTS _schema (version INTEGER NOT NULL)');
-      const current = Number(sql.exec<{ v: number | null }>('SELECT MAX(version) AS v FROM _schema').one().v ?? 0);
-      MIGRATIONS.forEach((stmts, i) => {
-        if (i + 1 <= current) return;
-        for (const s of stmts) sql.exec(s);
-        sql.exec('INSERT INTO _schema (version) VALUES (?)', i + 1);
-      });
-    });
+    ctx.storage.transactionSync(() => migrate(ctx.storage.sql));
   }
 
   private lastNow = 0;

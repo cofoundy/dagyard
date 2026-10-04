@@ -103,4 +103,55 @@ export const MIGRATIONS: string[][] = [
   // v6: idioma de los datos del proyecto (#77). NULL = guardado antes del campo; se lee como LEGACY_LANG ('es')
   // y nadie lo reescribe: solo cambia si un POST, PUT o PATCH manda `lang`.
   [`ALTER TABLE projects ADD COLUMN lang TEXT`],
+  // v7: la fábrica en el tiempo (#75). Un equipo = un sitio de `/factory`, con las fechas del sitio (no las de la
+  // escritura). Cada tarea gana cuándo arrancó (primera vez en `working`), cuándo quedó lista y qué equipo la tomó.
+  [
+    `CREATE TABLE teams (
+       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+       id TEXT NOT NULL,
+       name TEXT NOT NULL,
+       node_ids TEXT NOT NULL DEFAULT '[]', -- JSON: ids de tareas (pueden no existir todavía)
+       requested_at TEXT,
+       started_at TEXT,
+       closed_at TEXT,
+       outcome TEXT,
+       updated_at TEXT NOT NULL,
+       PRIMARY KEY (project_id, id)
+     )`,
+    `ALTER TABLE nodes ADD COLUMN started_at TEXT`,
+    `ALTER TABLE nodes ADD COLUMN done_at TEXT`,
+    `ALTER TABLE nodes ADD COLUMN team_id TEXT`,
+    // backfill desde el log: el primer evento de la tarea en `working` (un PUT no deja eventos por tarea: esas
+    // quedan en null, y la UI infiere como con los datos viejos)
+    `UPDATE nodes SET started_at = (
+       SELECT MIN(e.at) FROM events e
+        WHERE e.project_id = nodes.project_id AND e.type IN ('node.added', 'node.updated')
+          AND json_extract(e.payload, '$.node.id') = nodes.id AND json_extract(e.payload, '$.node.status') = 'working'
+     )`,
+    // las que están `done`: la llegada a `done` más reciente (el primer `done` después del último evento que no lo era)
+    `UPDATE nodes SET done_at = (
+       SELECT MIN(e.at) FROM events e
+        WHERE e.project_id = nodes.project_id AND e.type IN ('node.added', 'node.updated')
+          AND json_extract(e.payload, '$.node.id') = nodes.id AND json_extract(e.payload, '$.node.status') = 'done'
+          AND e.seq > COALESCE((
+            SELECT MAX(f.seq) FROM events f
+             WHERE f.project_id = nodes.project_id AND f.type IN ('node.added', 'node.updated')
+               AND json_extract(f.payload, '$.node.id') = nodes.id AND json_extract(f.payload, '$.node.status') <> 'done'
+          ), 0)
+     ) WHERE status = 'done'`,
+  ],
 ];
+
+/**
+ * Lleva el SQL a la versión `upTo` (por defecto, la última). Cada versión corre una sola vez, en orden; el llamador
+ * la envuelve en una transacción. Los tests la usan para preparar una base vieja y migrarla.
+ */
+export function migrate(sql: SqlStorage, upTo = MIGRATIONS.length): void {
+  sql.exec('CREATE TABLE IF NOT EXISTS _schema (version INTEGER NOT NULL)');
+  const current = Number(sql.exec<{ v: number | null }>('SELECT MAX(version) AS v FROM _schema').one().v ?? 0);
+  MIGRATIONS.forEach((stmts, i) => {
+    if (i + 1 <= current || i + 1 > upTo) return;
+    for (const s of stmts) sql.exec(s);
+    sql.exec('INSERT INTO _schema (version) VALUES (?)', i + 1);
+  });
+}

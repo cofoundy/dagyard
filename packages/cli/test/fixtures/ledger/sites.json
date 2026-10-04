@@ -1,0 +1,494 @@
+[
+ {
+  "site": "nucleo",
+  "event": "requested",
+  "ts": "2026-10-04T05:35:20Z",
+  "issues": [
+   "2"
+  ],
+  "intent": "Worker+D1+tiempo real+API+deploy (#2)"
+ },
+ {
+  "site": "cielo",
+  "event": "requested",
+  "ts": "2026-10-04T05:35:20Z",
+  "issues": [
+   "3"
+  ],
+  "intent": "UI 3D portando el preview (#3)"
+ },
+ {
+  "site": "cli",
+  "event": "requested",
+  "ts": "2026-10-04T05:35:21Z",
+  "issues": [
+   "4"
+  ],
+  "intent": "CLI dagyard + import (#4)"
+ },
+ {
+  "site": "entrega",
+  "event": "requested",
+  "ts": "2026-10-04T05:35:21Z",
+  "issues": [
+   "5"
+  ],
+  "intent": "integración+QA+handoff (#5)"
+ },
+ {
+  "site": "nucleo",
+  "event": "started",
+  "ts": "2026-10-04T05:36:46Z",
+  "branch": "sprint/nucleo"
+ },
+ {
+  "site": "cielo",
+  "event": "started",
+  "ts": "2026-10-04T05:37:49Z",
+  "branch": "sprint/cielo"
+ },
+ {
+  "site": "cli",
+  "event": "started",
+  "ts": "2026-10-04T05:37:49Z",
+  "branch": "sprint/cli"
+ },
+ {
+  "site": "nucleo",
+  "event": "closed",
+  "ts": "2026-10-04T06:38:36Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "entrega",
+  "event": "started",
+  "ts": "2026-10-04T06:39:20Z",
+  "branch": "sprint/entrega"
+ },
+ {
+  "site": "cli",
+  "event": "closed",
+  "ts": "2026-10-04T06:53:15Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "cielo",
+  "event": "closed",
+  "ts": "2026-10-04T06:53:17Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "endurecer",
+  "event": "requested",
+  "ts": "2026-10-04T06:53:38Z",
+  "issues": [
+   "12",
+   "13",
+   "14"
+  ],
+  "intent": "seguridad del worker: #12 #13 #14"
+ },
+ {
+  "site": "endurecer",
+  "event": "started",
+  "ts": "2026-10-04T06:54:09Z",
+  "branch": "sprint/endurecer"
+ },
+ {
+  "site": "legible",
+  "event": "requested",
+  "ts": "2026-10-04T07:10:32Z",
+  "issues": [
+   "20",
+   "21"
+  ],
+  "intent": "el proyecto importado legible para un PM: #20 #21"
+ },
+ {
+  "site": "legible",
+  "event": "started",
+  "ts": "2026-10-04T07:11:04Z",
+  "branch": "sprint/legible"
+ },
+ {
+  "site": "entrega",
+  "event": "closed",
+  "ts": "2026-10-04T07:14:02Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "endurecer",
+  "event": "closed",
+  "ts": "2026-10-04T07:39:02Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "legible",
+  "event": "closed",
+  "ts": "2026-10-04T07:39:04Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "contrato",
+  "event": "requested",
+  "ts": "2026-10-04T07:39:28Z",
+  "issues": [
+   "18",
+   "19"
+  ],
+  "intent": "contrato: #18 #19"
+ },
+ {
+  "site": "movil",
+  "event": "requested",
+  "ts": "2026-10-04T07:39:28Z",
+  "issues": [
+   "27"
+  ],
+  "intent": "celular denso: #27"
+ },
+ {
+  "site": "canal",
+  "event": "requested",
+  "ts": "2026-10-04T07:39:28Z",
+  "issues": [
+   "6"
+  ],
+  "intent": "stretch channel: #6"
+ },
+ {
+  "site": "contrato",
+  "event": "started",
+  "ts": "2026-10-04T07:40:56Z",
+  "branch": "sprint/contrato"
+ },
+ {
+  "site": "movil",
+  "event": "started",
+  "ts": "2026-10-04T07:40:56Z",
+  "branch": "sprint/movil"
+ },
+ {
+  "site": "canal",
+  "event": "started",
+  "ts": "2026-10-04T07:40:56Z",
+  "branch": "sprint/canal"
+ },
+ {
+  "site": "contrato",
+  "event": "closed",
+  "ts": "2026-10-04T07:55:53Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "contrato2",
+  "event": "requested",
+  "ts": "2026-10-04T07:55:55Z",
+  "issues": [
+   "32",
+   "33"
+  ],
+  "intent": "contrato: #32 #33"
+ },
+ {
+  "site": "contrato2",
+  "event": "started",
+  "ts": "2026-10-04T07:56:31Z",
+  "branch": "sprint/contrato2"
+ },
+ {
+  "site": "canal",
+  "event": "closed",
+  "ts": "2026-10-04T08:05:55Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "contrato2",
+  "event": "closed",
+  "ts": "2026-10-04T08:20:44Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "movil",
+  "event": "closed",
+  "ts": "2026-10-04T08:55:06Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "cierre",
+  "event": "requested",
+  "ts": "2026-10-04T08:58:03Z",
+  "issues": [],
+  "intent": "handoff final de la corrida"
+ },
+ {
+  "site": "cierre",
+  "event": "started",
+  "ts": "2026-10-04T08:58:29Z",
+  "branch": "sprint/cierre"
+ },
+ {
+  "site": "cierre",
+  "event": "closed",
+  "ts": "2026-10-04T09:04:05Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "dogfood",
+  "event": "requested",
+  "ts": "2026-10-04T15:42:52Z",
+  "issues": [
+   "45"
+  ],
+  "intent": "#45"
+ },
+ {
+  "site": "mod",
+  "event": "requested",
+  "ts": "2026-10-04T15:42:52Z",
+  "issues": [
+   "46"
+  ],
+  "intent": "#46"
+ },
+ {
+  "site": "avisos",
+  "event": "requested",
+  "ts": "2026-10-04T15:42:52Z",
+  "issues": [
+   "47"
+  ],
+  "intent": "#47"
+ },
+ {
+  "site": "latencia",
+  "event": "requested",
+  "ts": "2026-10-04T15:42:52Z",
+  "issues": [
+   "48"
+  ],
+  "intent": "#48"
+ },
+ {
+  "site": "dogfood",
+  "event": "started",
+  "ts": "2026-10-04T15:43:26Z",
+  "branch": "sprint/dogfood"
+ },
+ {
+  "site": "mod",
+  "event": "started",
+  "ts": "2026-10-04T15:43:52Z",
+  "branch": "sprint/mod"
+ },
+ {
+  "site": "avisos",
+  "event": "started",
+  "ts": "2026-10-04T15:44:21Z",
+  "branch": "sprint/avisos"
+ },
+ {
+  "site": "mod",
+  "event": "closed",
+  "ts": "2026-10-04T16:03:35Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "latencia",
+  "event": "started",
+  "ts": "2026-10-04T16:04:04Z",
+  "branch": "sprint/latencia"
+ },
+ {
+  "site": "latencia",
+  "event": "closed",
+  "ts": "2026-10-04T16:27:36Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "deploys",
+  "event": "requested",
+  "ts": "2026-10-04T16:28:31Z",
+  "issues": [
+   "54",
+   "55"
+  ],
+  "intent": "#54 #55"
+ },
+ {
+  "site": "deploys",
+  "event": "started",
+  "ts": "2026-10-04T16:28:57Z",
+  "branch": "sprint/deploys"
+ },
+ {
+  "site": "dogfood",
+  "event": "closed",
+  "ts": "2026-10-04T16:37:50Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "pulido",
+  "event": "requested",
+  "ts": "2026-10-04T16:37:52Z",
+  "issues": [
+   "58",
+   "59"
+  ],
+  "intent": "#58 #59"
+ },
+ {
+  "site": "pulido",
+  "event": "started",
+  "ts": "2026-10-04T16:38:19Z",
+  "branch": "sprint/pulido"
+ },
+ {
+  "site": "avisos",
+  "event": "closed",
+  "ts": "2026-10-04T16:38:46Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "deploys",
+  "event": "closed",
+  "ts": "2026-10-04T16:59:47Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "robusto",
+  "event": "requested",
+  "ts": "2026-10-04T17:00:02Z",
+  "issues": [
+   "61",
+   "62"
+  ],
+  "intent": "#61 #62"
+ },
+ {
+  "site": "robusto",
+  "event": "started",
+  "ts": "2026-10-04T17:00:29Z",
+  "branch": "sprint/robusto"
+ },
+ {
+  "site": "pulido",
+  "event": "closed",
+  "ts": "2026-10-04T17:12:53Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "enlace",
+  "event": "requested",
+  "ts": "2026-10-04T17:15:52Z",
+  "issues": [
+   "64"
+  ],
+  "intent": "#64"
+ },
+ {
+  "site": "enlace",
+  "event": "started",
+  "ts": "2026-10-04T17:16:19Z",
+  "branch": "sprint/enlace"
+ },
+ {
+  "site": "abierto",
+  "event": "requested",
+  "ts": "2026-10-04T17:22:24Z",
+  "issues": [
+   "25"
+  ],
+  "intent": "#25 preparar OSS"
+ },
+ {
+  "site": "abierto",
+  "event": "started",
+  "ts": "2026-10-04T17:22:51Z",
+  "branch": "sprint/abierto"
+ },
+ {
+  "site": "robusto",
+  "event": "closed",
+  "ts": "2026-10-04T17:28:24Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "enlace",
+  "event": "closed",
+  "ts": "2026-10-04T17:33:18Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "ws",
+  "event": "requested",
+  "ts": "2026-10-04T17:33:36Z",
+  "issues": [
+   "69"
+  ],
+  "intent": "#69"
+ },
+ {
+  "site": "ws",
+  "event": "started",
+  "ts": "2026-10-04T17:34:03Z",
+  "branch": "sprint/ws"
+ },
+ {
+  "site": "ws",
+  "event": "closed",
+  "ts": "2026-10-04T18:06:32Z",
+  "outcome": "merged"
+ },
+ {
+  "site": "i18n",
+  "event": "requested",
+  "ts": "2026-10-04T19:04:17Z",
+  "issues": [
+   "73"
+  ],
+  "intent": "#73"
+ },
+ {
+  "site": "i18n",
+  "event": "started",
+  "ts": "2026-10-04T19:04:45Z",
+  "branch": "sprint/i18n"
+ },
+ {
+  "site": "demo",
+  "event": "requested",
+  "ts": "2026-10-04T19:04:45Z",
+  "issues": [
+   "74"
+  ],
+  "intent": "#74"
+ },
+ {
+  "site": "demo",
+  "event": "started",
+  "ts": "2026-10-04T19:05:12Z",
+  "branch": "sprint/demo"
+ },
+ {
+  "site": "abierto",
+  "event": "closed",
+  "ts": "2026-10-04T19:06:40Z",
+  "outcome": "pr-open-25"
+ },
+ {
+  "site": "tiempo",
+  "event": "requested",
+  "ts": "2026-10-04T19:07:16Z",
+  "issues": [
+   "75"
+  ],
+  "intent": "#75 rediseño temporal"
+ },
+ {
+  "site": "tiempo",
+  "event": "started",
+  "ts": "2026-10-04T19:07:42Z",
+  "branch": "sprint/tiempo"
+ }
+]
