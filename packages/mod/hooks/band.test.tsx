@@ -122,6 +122,10 @@ describe('banda de dagyard', () => {
     }
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...MENU } as any)
     await ui.press({ key: 'mn-b1-1' })
+    expect(calls.filter(c => /\/resolve$/.test(c))).toEqual([]) // elegir pide confirmar (#89)
+    expect(await ui.find({ type: 'Text', text: /¿Eliges «Al cliente»\?/ })).toBeDefined()
+    expect((await ui.find({ key: 'mn-b1-confirm' }))?.props.hotkey).toBeUndefined()
+    await ui.press({ key: 'mn-b1-confirm' })
     expect(calls).toContain('POST https://dagyard.cofoundy-dev.workers.dev/api/projects/marketplace-reservas/blockers/b1/resolve')
     expect(JSON.parse(bodies[bodies.length - 1]!).choice).toBe(1)
     await ui.unmount()
@@ -140,12 +144,86 @@ describe('banda de dagyard', () => {
   })
 })
 
+describe('ninguna tecla suelta resuelve (#89)', () => {
+  const RESOLVE = /\/blockers\/[^/]+\/resolve$/
+
+  /**
+   * Presiona, como lo haría su tecla, cada Button con `hotkey` de la banda o del menú, ronda tras ronda (lo
+   * que una tecla deja dibujado puede traer otros). Un dígito en el prompt vacío arma los de la banda.
+   */
+  async function everyHotkey(ui: any) {
+    const pressed: string[] = []
+    for (let round = 0; round < 4; round++) {
+      for (const b of await ui.findAll({ type: 'Button' })) {
+        if (typeof b.props.hotkey !== 'string' || !b.key) continue
+        if (!(await ui.find({ key: b.key }))) continue // la tecla anterior ya lo quitó
+        await ui.press({ key: b.key })
+        pressed.push(`${b.props.hotkey}:${b.key}`)
+      }
+    }
+    return pressed
+  }
+
+  test('un dígito no resuelve la decisión de la banda', async ($, on) => {
+    const { calls } = world(on)
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    const digits = (await ui.findAll({ type: 'Button' })).filter((b: any) => /^\d$/.test(String(b.props.hotkey ?? '')))
+    for (const b of digits) await ui.press({ key: b.key! })
+    expect(calls.filter(c => RESOLVE.test(c))).toEqual([])
+    await ui.unmount()
+  })
+
+  for (const [name, target] of [['la banda', BAND], ['el menú', MENU]] as const) {
+    test(`ninguna tecla de ${name}, ni dígito ni letra, resuelve un bloqueante`, async ($, on) => {
+      const { calls } = world(on)
+      await start($)
+      const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...target } as any)
+      await everyHotkey(ui)
+      expect(calls.filter(c => RESOLVE.test(c))).toEqual([])
+      await ui.unmount()
+    })
+  }
+
+  test('elegir en la banda pide confirmar; Cancelar no manda nada', async ($, on) => {
+    const { calls, bodies } = world(on)
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    await ui.press({ key: 'dy-opt-1' })
+    expect(calls.filter(c => RESOLVE.test(c))).toEqual([])
+    expect(await ui.find({ type: 'Text', text: /¿Eliges «Al cliente»\?/ })).toBeDefined()
+    const confirm = await ui.find({ key: 'dy-confirm' })
+    expect(confirm?.props.hotkey).toBeUndefined()
+    await ui.press({ key: 'dy-cancel' })
+    expect(await ui.find({ key: 'dy-confirm' })).toBeUndefined()
+    expect(await ui.find({ key: 'dy-opt-1' })).toBeDefined()
+    expect(calls.filter(c => RESOLVE.test(c))).toEqual([])
+
+    await ui.press({ key: 'dy-opt-1' })
+    await ui.press({ key: 'dy-confirm' })
+    expect(calls).toContain('POST https://dagyard.cofoundy-dev.workers.dev/api/projects/marketplace-reservas/blockers/b1/resolve')
+    expect(JSON.parse(bodies[bodies.length - 1]!).choice).toBe(1)
+    await ui.unmount()
+  })
+
+  test('en inglés la confirmación también se lee', async ($, on) => {
+    world(on, { env: { LANG: 'en_US.UTF-8' } })
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    await ui.press({ key: 'dy-opt-0' })
+    expect(await ui.find({ type: 'Text', text: /Choose «Al proveedor»\?/ })).toBeDefined()
+    await ui.unmount()
+  })
+})
+
 describe('en el celular (sin campo de texto)', () => {
   test('Pedir cambios se manda sin nota en vez de romper el menú', async ($, on) => {
     const { bodies } = world(on)
     await start($)
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'mobile', ...MENU } as any)
     await ui.press({ key: 'mn-b2-1' })
+    expect(bodies).toEqual([]) // también pide confirmar (#89)
+    await ui.press({ key: 'mn-b2-confirm' })
     const sent = JSON.parse(bodies[bodies.length - 1]!)
     expect(sent.choice).toBe(1)
     expect(sent.note).toBe('Desde Claude Code')

@@ -4,8 +4,11 @@ Una banda sobre el prompt con lo que le toca a esta sesión, un menú para respo
 y un aviso cuando algo nuevo te espera. Todo lo que haces aquí se ve al instante en el cielo (la web),
 porque escribe en la misma API.
 
-- **Te espera**: una decisión o una revisión se responden desde la banda o el menú. Un acceso se da
-  en el cielo: su valor nunca pasa por la terminal. «Darlo en el cielo» abre esa tarea con su ficha.
+- **Te espera**: una decisión o una revisión se responden desde la banda o el menú, en dos pasos:
+  marcas la opción y confirmas con «Sí, elegir» («Cancelar» la deja como estaba). Resolver no se
+  deshace, así que ninguna tecla suelta elige: las opciones no tienen atajo y un dígito en el prompt
+  vacío se queda en el prompt. Un acceso se da en el cielo: su valor nunca pasa por la terminal.
+  «Darlo en el cielo» abre esa tarea con su ficha.
 - **Ver el cielo**: abre el proyecto del repo (o la tarea en la que estás trabajando).
 - **Para tomar**: lo pendiente, sin equipo y con todo lo que necesita ya listo. «Trabajar en esto» la
   arranca y fija su `/goal` en la sesión.
@@ -13,6 +16,7 @@ porque escribe en la misma API.
 - **Aviso**: cuando se abre algo nuevo que te espera, un toast en ≤20 s.
 
 ![La banda sobre el prompt](docs/band.png)
+![Elegir una opción pide confirmarla; el foco empieza en «Cancelar»](docs/confirm.png)
 ![El menú abierto con /dagyard en una terminal de 120 columnas](docs/menu.png)
 ![El aviso de un bloqueante nuevo, arriba a la derecha](docs/toast.png)
 

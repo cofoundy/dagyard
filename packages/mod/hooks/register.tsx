@@ -38,6 +38,9 @@ let busy = false
 let lastError = ''
 let loading = false
 let commenting: string | null = null // la revisión a la que se le está escribiendo «qué cambiarías»
+// La opción elegida que espera «Sí, elegir»: resolver no se deshace (el servidor da 409), así que ninguna
+// opción lleva hotkey ni se manda de un toque; un dígito en el prompt vacío arma los de la banda (#89).
+let picked: { id: string; choice: number } | null = null
 let s: Strings = text('en') // los textos en el idioma del entorno; se fija en session.start
 
 async function home($: any): Promise<string> {
@@ -147,6 +150,8 @@ async function refresh($: any): Promise<void> {
     const snap = (await api($, `/api/projects/${project}`, 'GET', undefined, false)) as Snapshot
     view = viewOf(snap)
     notice($, view)
+    const p = picked
+    if (p && !view.waiting.some(it => it.kind === 'waiting' && it.blocker.id === p.id)) picked = null
     const w = working
     if (w) working = snap.nodes.find(n => n.id === w.id && n.status === 'working') ?? null
     lastError = ''
@@ -172,6 +177,7 @@ async function resolve($: any, it: Extract<Item, { kind: 'waiting' }>, choice: n
   try {
     await api($, `/api/projects/${project}/blockers/${it.blocker.id}/resolve`, 'POST', { choice, note: note || 'Desde Claude Code' }, true)
     commenting = null
+    picked = null
     $.ui.toast(s.resolved(it.node.title, it.blocker.options[choice] ?? ''))
   } catch (e) {
     err = e
@@ -225,6 +231,13 @@ async function openMenu($: any): Promise<void> {
 
 async function comment($: any, blockerId: string | null): Promise<void> {
   commenting = blockerId
+  picked = null
+  $.ui.invalidate('ui.render')
+}
+
+/** Primer paso de elegir: marca la opción; el segundo es «Sí, elegir». `null` cancela. */
+async function pick($: any, choice: { id: string; choice: number } | null): Promise<void> {
+  picked = choice
   $.ui.invalidate('ui.render')
 }
 
@@ -235,6 +248,7 @@ async function toggleBand($: any): Promise<void> {
 
 async function skip($: any): Promise<void> {
   cursor += 1
+  picked = null
   $.ui.invalidate('ui.render')
 }
 
@@ -331,11 +345,13 @@ export const register: Register = on => {
       if (it.kind === 'waiting') {
         const b = it.blocker
         const label = s.waitingLabel(b.kind)
+        const p = picked && picked.id === b.id && b.kind !== 'access' ? picked : null
+        // las opciones no llevan hotkey: elegir es marcar y después «Sí, elegir» (#89)
         const buttons =
           b.kind === 'access'
             ? [<Button key="dy-sky" label={s.grantInSky} hotkey="o" variant="primary" onPress={() => void openSky($, it.node.id)} />]
             : b.options.slice(0, 3).map((opt, k) => (
-                <Button key={`dy-opt-${k}`} label={opt} hotkey={String(k + 1)} variant={k === 0 ? 'primary' : undefined} onPress={() => void resolve($, it, k, '')} />
+                <Button key={`dy-opt-${k}`} label={opt} variant={k === 0 ? 'primary' : undefined} onPress={() => void pick($, { id: b.id, choice: k })} />
               ))
         body = (
           <Box flexDirection="column">
@@ -344,11 +360,25 @@ export const register: Register = on => {
               <Text bold>{it.node.title}</Text>
               <Text color={MUTED}> — {b.kind === 'access' ? b.accessLabel ?? b.question : b.question}</Text>
             </Text>
-            <Box flexWrap="wrap">
-              {buttons}
-              {more}
-              <Button key="dy-menu" label={s.seeAll} hotkey="m" dimColor onPress={() => void openMenu($)} />
-            </Box>
+            {p ? (
+              <Box flexDirection="column">
+                <Text wrap="truncate-end">
+                  <Text bold>{s.confirmPick(b.options[p.choice] ?? '')}</Text>
+                  <Text color={MUTED}> {s.cannotUndo}</Text>
+                </Text>
+                {/* Cancelar primero: un Enter de más sobre el mismo lugar cancela en vez de resolver */}
+                <Box flexWrap="wrap">
+                  <Button key="dy-cancel" label={s.cancel} dimColor onPress={() => void pick($, null)} />
+                  <Button key="dy-confirm" label={s.yesChoose} variant="primary" onPress={() => void resolve($, it, p.choice, '')} />
+                </Box>
+              </Box>
+            ) : (
+              <Box flexWrap="wrap">
+                {buttons}
+                {more}
+                <Button key="dy-menu" label={s.seeAll} hotkey="m" dimColor onPress={() => void openMenu($)} />
+              </Box>
+            )}
           </Box>
         )
       } else {
@@ -435,14 +465,29 @@ export const register: Register = on => {
             <Button key={`mn-${id}-cancel`} label={s.cancel} dimColor onPress={() => void comment($, null)} />
           </Box>
         )
+      } else if (picked && picked.id === id) {
+        const choice = picked.choice
+        actions = (
+          <Box flexDirection="column">
+            <Text wrap="wrap">
+              <Text bold>{s.confirmPick(b.options[choice] ?? '')}</Text>
+              <Text color={MUTED}> {s.cannotUndo}</Text>
+            </Text>
+            <Box flexWrap="wrap">
+              <Button key={`mn-${id}-cancel`} label={s.cancel} dimColor onPress={() => void pick($, null)} />
+              <Button key={`mn-${id}-confirm`} label={s.yesChoose} variant="primary" onPress={() => void resolve($, it, choice, '')} />
+            </Box>
+          </Box>
+        )
       } else {
+        // «Pedir cambios» ya son dos pasos (abrir el campo y enviar); el resto marca y pide «Sí, elegir» (#89)
         actions = (
           <Box flexWrap="wrap">
             {b.options.map((opt, k) =>
               b.kind === 'review' && Input && REQUEST_CHANGES.test(opt) ? (
                 <Button key={`mn-${id}-${k}`} label={opt} onPress={() => void comment($, id)} />
               ) : (
-                <Button key={`mn-${id}-${k}`} label={opt} variant={k === 0 ? 'primary' : undefined} onPress={() => void resolve($, it, k, '')} />
+                <Button key={`mn-${id}-${k}`} label={opt} variant={k === 0 ? 'primary' : undefined} onPress={() => void pick($, { id, choice: k })} />
               ),
             )}
           </Box>
