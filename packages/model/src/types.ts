@@ -73,7 +73,34 @@ export interface DagNode {
   reportUrl: string | null;
   /** detalle técnico: URL del issue o del PR. La UI lo muestra como «Detalle técnico ↗», sin jerga */
   link: string | null;
+  /** primera vez que pasó a `working` (#75); null si nunca arrancó. Opcional: datos previos a #75 */
+  startedAt?: IsoDate | null;
+  /** cuándo pasó a `done` (#75); null si no está lista */
+  doneAt?: IsoDate | null;
+  /** id del `Team` (sitio de la fábrica) que la tomó (#75); null si no se sabe */
+  teamId?: string | null;
   createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+/**
+ * Un equipo de la fábrica: un sitio de `/factory` que arrancó, llevó unas tareas y cerró (#75).
+ * Es lo que la vista en el tiempo dibuja como un carril. Sus fechas son las del sitio (no las de la
+ * escritura), así la historia se puede traer después desde el ledger de la fábrica.
+ */
+export interface Team {
+  /** slug del sitio, p. ej. `tiempo`; único por proyecto */
+  id: string;
+  projectId: string;
+  /** nombre humano, p. ej. «Tiempo» */
+  name: string;
+  /** ids de los nodos que lleva, p. ej. `["gh-75"]` (pueden no existir todavía en el grafo) */
+  nodeIds: string[];
+  requestedAt: IsoDate | null;
+  startedAt: IsoDate | null;
+  closedAt: IsoDate | null;
+  /** cómo cerró: `merged`, `pr-open`, `stopped`…; null si sigue abierto */
+  outcome: string | null;
   updatedAt: IsoDate;
 }
 
@@ -144,7 +171,8 @@ export type DagEvent =
   | EventBase<'edge.removed', { edge: Edge }>
   | EventBase<'blocker.opened', { blocker: Blocker }>
   | EventBase<'blocker.resolved', { blocker: Blocker }>
-  | EventBase<'message.posted', { message: Message }>;
+  | EventBase<'message.posted', { message: Message }>
+  | EventBase<'team.updated', { team: Team }>;
 
 export type DagEventType = DagEvent['type'];
 
@@ -169,6 +197,8 @@ export interface ProjectSnapshot {
   blockers: Blocker[];
   /** los últimos 200, del más viejo al más nuevo */
   messages: Message[];
+  /** los equipos de la fábrica (#75), por `startedAt`. Opcional: servidores previos a #75 */
+  teams?: Team[];
   /** seq del último evento aplicado: la UI se suscribe al WebSocket con `?since=<seq>` */
   seq: number;
 }
