@@ -153,6 +153,8 @@ export function toEvent(e: WireEvent): DagEvent | null {
     case 'project.replaced':
     case 'project.updated':
     case 'team.updated': // #75: hasta que la UI tenga equipos, recarga el snapshot
+    case 'origin.added': // #90: «nació de» todavía no se dibuja
+    case 'origin.removed':
       return null;
   }
 }

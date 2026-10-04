@@ -31,7 +31,7 @@ function seeded(seed: number): () => number {
 function initial(lang: DemoLang): PulseState {
   const d = demoProject(lang);
   return {
-    nodes: d.nodes.map((n) => ({ id: n.id!, stage: n.stage!, status: n.status!, progress: n.progress!, team: n.team ?? null })),
+    nodes: d.nodes.map((n) => ({ id: n.id!, stage: n.stage, status: n.status!, progress: n.progress!, team: n.team ?? null })),
     edges: d.nodes.flatMap((n) => (n.deps ?? []).map((from) => ({ from, to: n.id! }))),
     blockers: d.blockers!.map((b) => ({ nodeId: b.nodeId, status: 'open' as const })),
   };
