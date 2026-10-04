@@ -260,7 +260,9 @@ export const register: Register = on => {
     s = text(langFromEnv({ LC_ALL: await $.env.get('LC_ALL'), LC_MESSAGES: await $.env.get('LC_MESSAGES'), LANG: await $.env.get('LANG') }))
     view = null
     seen = null
-    await $.command.register({ name: 'dagyard', description: s.commandDescription })
+    // Si el motor rechaza /dagyard (otra pieza ya ocupa el nombre), la banda y el aviso siguen: el menú
+    // también se abre con «Ver todo».
+    await $.command.register({ name: 'dagyard', description: s.commandDescription }).catch(() => undefined)
     if (project) {
       $.clock.every(POLL_MS, () => void refresh($))
       void refresh($)

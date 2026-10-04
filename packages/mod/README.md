@@ -45,6 +45,13 @@ Mientras el plugin está activo, `dagyard` está en el PATH de los comandos que 
 el bundle de `packages/cli`, sin dependencias, Node ≥22). Se llama con el comando primero y las opciones
 después: `dagyard msg pagos "listo el cobro" --project mi-proyecto`.
 
+### La skill del protocolo
+
+`skills/protocol/SKILL.md` (`dagyard:protocol`) le enseña a cualquier agente a trabajar a la vista: arrancar su nodo, dejar un
+mensaje en cada hito, pedir lo que es de una persona con `block` y cerrar con motivo. Carga sola cuando el
+repo tiene `.dagyard.json` o cuando el pedido habla de Dagyard; los comandos que piden el modelo nuevo (#90)
+están marcados.
+
 ### El canal (opcional, apagado por defecto)
 
 Un segundo plugin del mismo marketplace, `dagyard-channel`, lleva a la sesión la respuesta del dueño a tu

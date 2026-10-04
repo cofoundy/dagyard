@@ -1,0 +1,130 @@
+---
+name: protocol
+description: This skill should be used when working in a repo that has a `.dagyard.json`, when a kickoff names a Dagyard node (such as `gh-91`), or when the user asks to "start your node", "leave a message on Dagyard", "report progress to Dagyard", "ask the owner a decision", "block on a decision", "wait for the answer", "close the task", "create the nodes for your lanes", "record what André asked", or mentions the dagyard CLI, the sky or the factory's DAG. It teaches the protocol an agent follows to keep its work visible in Dagyard.
+version: 0.1.0
+---
+
+# Dagyard: keep the plan alive while working
+
+Dagyard is the factory's plan as a live DAG. People (PMs, the owner) watch it in the browser, «the sky»,
+and answer there what is theirs. Agents move their own nodes with the `dagyard` CLI while they work, so
+every change shows up in the sky within seconds. This skill is the protocol for doing that well.
+
+## How to call the CLI (read this first)
+
+The plugin puts `dagyard` on the PATH of every shell command. If `command -v dagyard` finds nothing,
+call `${CLAUDE_PLUGIN_ROOT}/bin/dagyard` with the same arguments.
+
+Two rules that broke real runs before; follow them every time:
+
+1. **Command first, options after:** `dagyard msg gh-91 'Ready to review' --report <url>`. Never put
+   `--project` or any option before the command.
+2. **Spell out the binary on every call.** Never store it in a shell variable (`DY="dagyard --project x"`
+   then `$DY msg …`): zsh does not split the variable into words and the call fails. Quote free text with
+   single quotes so `$`, `!` and backticks stay literal.
+
+Inside a repo with a `.dagyard.json` the project and server come from that file: no `--project` or
+`--url` needed. The API key comes from `~/.config/dagyard/agent-key` (or `DAGYARD_KEY`); never print it,
+never put it in a commit, a message or a file.
+
+## Which node is mine
+
+- A kickoff or issue names it: in the `dagyard` repo, issue `#n` is node `gh-<n>`.
+- Otherwise, `dagyard next` prints the next task ready to start as `/goal …` (exit 3 when none is ready).
+- If the work has no node yet, create one (needs #90, see the table below) **born from** the node or goal
+  it serves, with the reason:
+
+  ```bash
+  dagyard node add pay-retry --title 'Retry failed payments' --kind task --from payments --why 'Cards fail at night and nobody retries'
+  ```
+
+  Every task exists to serve another node or a goal. A node with no path to a goal is shown as possible
+  waste, so always pass `--from` and `--why`. Creation commands print only the new id.
+
+One node = one owner, one session, one `/goal`. The agent's internal steps (read the code, write a test)
+are not nodes.
+
+## The lifecycle
+
+| Moment | Command | Needs #90 |
+|---|---|---|
+| Start working | `dagyard start <node> --team '<Team name>'` | no |
+| Each milestone (PR opened, merged, deployed) | `dagyard msg <node> '<≤280 chars for a PM>' --report <url>` and `dagyard progress <node> <0..1>` | no |
+| Something only a person can decide | `dagyard block <node> --kind decision --q '<question>' --opt '<A>' --opt '<B>'` | no |
+| Cannot go on without that answer | `dagyard wait <node>` (exit 2 on timeout: call it again) | no |
+| Work splits into lanes other sessions own | `dagyard node add <lane> --title '…' --kind task --from <node> --why '…'` per lane | **yes** |
+| A lane must finish before another starts | `dagyard edge add <from> <to>` (`<to>` needs `<from>`) | no |
+| A person asked for something in chat | `dagyard request add <id> --title '…' --quote '<their exact words>' --author '<name>'` | **yes** |
+| A new long-lived outcome | `dagyard goal add <id> --title '…'` | **yes** |
+| Finished, with evidence | `dagyard node close <node> --as done --why '<what proves it>'` (today: `dagyard done <node> --report <url>`) | **yes** (`done`: no) |
+| Superseded by another node | `dagyard node close <node> --as replaced --by <other> --why '…'` | **yes** |
+| Abandoned | `dagyard node close <node> --as dropped --why '…'` | **yes** |
+| Turned out to be a question, now answered | `dagyard node close <node> --as learned --why '<what we learned>'` | **yes** |
+
+**Needs #90**: these commands exist only in a CLI built after the DAG model (#90, decision D12) is
+merged. Check with `dagyard --help`: if it does not list `node close`, the CLI is older. Then close
+with `dagyard done <node> --report <url>`, create nodes with `node add` without `--kind/--from/--why`
+(and `--stage <stage>`), and say the reason in a `msg` instead.
+
+### Starting and leaving a message
+
+The minimal correct session start, for node `gh-91`:
+
+```bash
+dagyard start gh-91 --team 'Plugin'
+dagyard msg gh-91 'Started: Dagyard installs in Claude Code in one step'
+```
+
+### Writing for the PM
+
+A `msg` is read by a product person, not an engineer:
+
+- What changed for them, in one or two sentences, ≤280 characters.
+- No branch names, file paths, PR numbers or stack traces. Put the PR or the report URL in `--report`
+  instead; the first report that arrives becomes the node's report.
+- Write in the project's language (the sky shows it as is; it is never translated).
+
+### Blockers: what is a person's
+
+A person's call is one of three kinds: `decision` (pick an option), `review` (approve or request
+changes) and `access` (a credential or permission). Open it as a blocker on the node, not as an issue or
+a chat message: the person answers in the sky.
+
+- Keep working on everything else after `block`. Call `dagyard wait <node>` only when nothing else can
+  move. It prints the chosen option on the first line and `note: …` after it if there is one.
+- For `access`, the answer is the secret itself: use it, never echo it into a message, a commit or a log.
+- An agent never resolves a blocker, not even its own.
+
+### Closing with a reason
+
+Branches die in plain sight, never silently. Close every node with what happened:
+
+- `done` needs evidence: the `--why` says what proves it (the test, the deploy, the URL that works).
+- `replaced --by <node>`: the work continues in another node. To split a node, close it as replaced by
+  one of the parts and create the others `--from` it.
+- `dropped`: no longer worth doing, and why.
+- `learned`: it was a question; the `--why` is the answer.
+
+Closing can leave continuations: new nodes created `--from` the closed one, each with its `--why`.
+A node with an open blocker cannot be closed (409): get the answer first.
+
+## Rules that are not negotiable
+
+- Never resolve a blocker; never delete a node (nothing is deleted: dropping is an owner's close).
+- `blocked` is set only by `dagyard block`; never set it with `node update`.
+- Removing a «born from» link is the owner's: an agent only adds them.
+- Report facts in `msg`, never permissions or promises on someone else's behalf.
+
+## Exit codes worth handling
+
+| Command | Exit | Meaning |
+|---|---|---|
+| `dagyard wait` | 2 | timed out: call it again (or keep working) |
+| `dagyard next` | 3 | nothing ready to start |
+| any | other non-zero | the error is on stderr; the key is redacted as `***` |
+
+## Additional resources
+
+- **`references/commands.md`**: every command with its options, output and examples, including the
+  #90 commands and `sync`/`import`/`open`.
+- `dagyard <command> --help` is always the ground truth for the installed CLI.
