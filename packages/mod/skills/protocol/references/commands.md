@@ -15,7 +15,7 @@ Node ids are short slugs: `T-314-A` is stored as `t-314-a`.
 
 | Command | What it does |
 |---|---|
-| `dagyard start <node> [--team '…']` | In progress. `--team` is the human name of the session or crew (shortcut of `node start`) |
+| `dagyard start <node> [--team '…']` | In progress (shortcut of `node start`). `--team` is optional: the human name of the site or session, so the sky shows who carries it |
 | `dagyard progress <node> <p>` | progress as `0..1` or `40%` (shortcut of `node progress`) |
 | `dagyard msg <node> '…' [--report <url>] [--from '…']` | a note for the PM, ≤280 characters. The server fills `--from` with the team name |
 | `dagyard done <node> [--report <url>]` | Done (shortcut of `node done`). Fails with an open blocker. After #90 prefer `node close --as done` |

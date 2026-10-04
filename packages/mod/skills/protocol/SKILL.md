@@ -48,7 +48,7 @@ are not nodes.
 
 | Moment | Command | Needs #90 |
 |---|---|---|
-| Start working | `dagyard start <node> --team '<Team name>'` | no |
+| Start working | `dagyard start <node> [--team '<site or session name>']` | no |
 | Each milestone (PR opened, merged, deployed) | `dagyard msg <node> '<≤280 chars for a PM>' --report <url>` and `dagyard progress <node> <0..1>` | no |
 | Something only a person can decide | `dagyard block <node> --kind decision --q '<question>' --opt '<A>' --opt '<B>'` | no |
 | Cannot go on without that answer | `dagyard wait <node>` (exit 2 on timeout: call it again) | no |
@@ -75,6 +75,8 @@ dagyard start gh-91 --team 'Plugin'
 dagyard msg gh-91 'Started: Dagyard installs in Claude Code in one step'
 ```
 
+`--team` is optional: pass the human name of the site or session so the sky shows who carries the task.
+
 ### Writing for the PM
 
 A `msg` is read by a product person, not an engineer:
@@ -82,7 +84,8 @@ A `msg` is read by a product person, not an engineer:
 - What changed for them, in one or two sentences, ≤280 characters.
 - No branch names, file paths, PR numbers or stack traces. Put the PR or the report URL in `--report`
   instead; the first report that arrives becomes the node's report.
-- Write in the project's language (the sky shows it as is; it is never translated).
+- Write in the language of whoever gave the work (the kickoff or the request). The sky shows the text as
+  is: a person's words are never translated.
 
 ### Blockers: what is a person's
 
