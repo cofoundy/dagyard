@@ -98,6 +98,10 @@ describe('banda de dagyard', () => {
     for (let i = 0; i < 3; i++) await ui.press({ key: 'dy-next' })
     expect(await ui.find({ key: 'dy-take' })).toBeDefined()
     await ui.press({ key: 'dy-take' })
+    expect(sent).toEqual([]) // tomar pide confirmar: fija un /goal en la sesión de la persona
+    expect(await ui.find({ type: 'Text', text: /¿Trabajas en «Página de lanzamiento»\?/ })).toBeDefined()
+    expect((await ui.find({ key: 'dy-confirm' }))?.props.hotkey).toBeUndefined()
+    await ui.press({ key: 'dy-confirm' })
     expect(sent).toContain('/goal Arma la página de lanzamiento')
     await ui.unmount()
   })
@@ -122,6 +126,10 @@ describe('banda de dagyard', () => {
     }
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...MENU } as any)
     await ui.press({ key: 'mn-b1-1' })
+    expect(calls.filter(c => /\/resolve$/.test(c))).toEqual([]) // elegir pide confirmar (#89)
+    expect(await ui.find({ type: 'Text', text: /¿Eliges «Al cliente»\?/ })).toBeDefined()
+    expect((await ui.find({ key: 'mn-b1-confirm' }))?.props.hotkey).toBeUndefined()
+    await ui.press({ key: 'mn-b1-confirm' })
     expect(calls).toContain('POST https://dagyard.cofoundy-dev.workers.dev/api/projects/marketplace-reservas/blockers/b1/resolve')
     expect(JSON.parse(bodies[bodies.length - 1]!).choice).toBe(1)
     await ui.unmount()
@@ -140,12 +148,164 @@ describe('banda de dagyard', () => {
   })
 })
 
+describe('ninguna tecla suelta resuelve (#89)', () => {
+  const RESOLVE = /\/blockers\/[^/]+\/resolve$/
+
+  /**
+   * Presiona, como lo haría su tecla, cada Button con `hotkey` de la banda o del menú, ronda tras ronda (lo
+   * que una tecla deja dibujado puede traer otros). Un dígito en el prompt vacío arma los de la banda.
+   */
+  async function everyHotkey(ui: any) {
+    const pressed: string[] = []
+    for (let round = 0; round < 4; round++) {
+      for (const b of await ui.findAll({ type: 'Button' })) {
+        if (typeof b.props.hotkey !== 'string' || !b.key) continue
+        if (!(await ui.find({ key: b.key }))) continue // la tecla anterior ya lo quitó
+        await ui.press({ key: b.key })
+        pressed.push(`${b.props.hotkey}:${b.key}`)
+      }
+    }
+    return pressed
+  }
+
+  test('un dígito no resuelve la decisión de la banda', async ($, on) => {
+    const { calls } = world(on)
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    const digits = (await ui.findAll({ type: 'Button' })).filter((b: any) => /^\d$/.test(String(b.props.hotkey ?? '')))
+    for (const b of digits) await ui.press({ key: b.key! })
+    expect(calls.filter(c => RESOLVE.test(c))).toEqual([])
+    await ui.unmount()
+  })
+
+  /** lo que escribe en el servidor: todo lo que no es un GET */
+  const writes = (calls: string[]) => calls.filter(c => !c.startsWith('GET '))
+
+  for (const [name, target] of [['la banda', BAND], ['el menú', MENU]] as const) {
+    test(`ninguna tecla de ${name}, ni dígito ni letra, resuelve ni escribe nada`, async ($, on) => {
+      const { calls, sent } = world(on)
+      await start($)
+      const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...target } as any)
+      await everyHotkey(ui)
+      expect(calls.filter(c => RESOLVE.test(c))).toEqual([])
+      expect(writes(calls)).toEqual([])
+      expect(sent).toEqual([]) // ni un /goal en la sesión
+      await ui.unmount()
+    })
+  }
+
+  test('con una tarea en curso, ninguna tecla la marca hecha ni la suelta', async ($, on) => {
+    const snap: any = JSON.parse(JSON.stringify(SNAP))
+    const { calls } = world(on, { snap: () => snap })
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    for (let i = 0; i < 3; i++) await ui.press({ key: 'dy-next' })
+    snap.nodes[1] = { ...snap.nodes[1], status: 'working', team: 'Claude Code' }
+    await ui.press({ key: 'dy-take' })
+    await ui.press({ key: 'dy-confirm' })
+    expect(await ui.find({ key: 'dy-done' })).toBeDefined()
+    const before = writes(calls).length
+    await everyHotkey(ui)
+    expect(writes(calls).length).toBe(before)
+    expect(await ui.find({ key: 'dy-done' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('Hecha y Soltarla de la banda piden confirmar', async ($, on) => {
+    const snap: any = JSON.parse(JSON.stringify(SNAP))
+    const { calls, bodies } = world(on, { snap: () => snap })
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    for (let i = 0; i < 3; i++) await ui.press({ key: 'dy-next' })
+    snap.nodes[1] = { ...snap.nodes[1], status: 'working', team: 'Claude Code' }
+    await ui.press({ key: 'dy-take' })
+    await ui.press({ key: 'dy-confirm' })
+    const before = writes(calls).length
+    await ui.press({ key: 'dy-release' })
+    expect(writes(calls).length).toBe(before)
+    expect(await ui.find({ type: 'Text', text: /¿Sueltas «Página de lanzamiento»\?/ })).toBeDefined()
+    await ui.press({ key: 'dy-cancel' })
+    expect(writes(calls).length).toBe(before)
+    await ui.press({ key: 'dy-done' })
+    expect(await ui.find({ type: 'Text', text: /¿«Página de lanzamiento» está hecha\?/ })).toBeDefined()
+    await ui.press({ key: 'dy-confirm' })
+    expect(writes(calls).length).toBe(before + 1)
+    expect(JSON.parse(bodies[bodies.length - 1]!).status).toBe('done')
+    await ui.unmount()
+  })
+
+  test('Soltarla del menú pide confirmar', async ($, on) => {
+    const snap: any = JSON.parse(JSON.stringify(SNAP))
+    const { calls, bodies } = world(on, { snap: () => snap })
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    for (let i = 0; i < 3; i++) await ui.press({ key: 'dy-next' })
+    snap.nodes[1] = { ...snap.nodes[1], status: 'working', team: 'Claude Code' }
+    await ui.press({ key: 'dy-take' })
+    await ui.press({ key: 'dy-confirm' })
+    await ui.unmount()
+    const menu = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...MENU } as any)
+    const n = writes(calls).length
+    await menu.press({ key: 'mn-w-release' })
+    expect(writes(calls).length).toBe(n)
+    expect(await menu.find({ type: 'Text', text: /¿Sueltas «Página de lanzamiento»\?/ })).toBeDefined()
+    await menu.press({ key: 'mn-w-confirm' })
+    expect(writes(calls).length).toBe(n + 1)
+    expect(JSON.parse(bodies[bodies.length - 1]!).status).toBe('pending')
+    await menu.unmount()
+  })
+
+  test('Trabajar en esto del menú pide confirmar', async ($, on) => {
+    const { calls, sent } = world(on)
+    await start($)
+    const menu = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...MENU } as any)
+    await menu.press({ key: 'mn-t-landing-take' })
+    expect(writes(calls)).toEqual([])
+    await menu.press({ key: 'mn-t-landing-confirm' })
+    expect(writes(calls).length).toBe(1)
+    expect(sent).toContain('/goal Arma la página de lanzamiento')
+    await menu.unmount()
+  })
+
+  test('elegir en la banda pide confirmar; Cancelar no manda nada', async ($, on) => {
+    const { calls, bodies } = world(on)
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    await ui.press({ key: 'dy-opt-1' })
+    expect(calls.filter(c => RESOLVE.test(c))).toEqual([])
+    expect(await ui.find({ type: 'Text', text: /¿Eliges «Al cliente»\?/ })).toBeDefined()
+    const confirm = await ui.find({ key: 'dy-confirm' })
+    expect(confirm?.props.hotkey).toBeUndefined()
+    await ui.press({ key: 'dy-cancel' })
+    expect(await ui.find({ key: 'dy-confirm' })).toBeUndefined()
+    expect(await ui.find({ key: 'dy-opt-1' })).toBeDefined()
+    expect(calls.filter(c => RESOLVE.test(c))).toEqual([])
+
+    await ui.press({ key: 'dy-opt-1' })
+    await ui.press({ key: 'dy-confirm' })
+    expect(calls).toContain('POST https://dagyard.cofoundy-dev.workers.dev/api/projects/marketplace-reservas/blockers/b1/resolve')
+    expect(JSON.parse(bodies[bodies.length - 1]!).choice).toBe(1)
+    await ui.unmount()
+  })
+
+  test('en inglés la confirmación también se lee', async ($, on) => {
+    world(on, { env: { LANG: 'en_US.UTF-8' } })
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    await ui.press({ key: 'dy-opt-0' })
+    expect(await ui.find({ type: 'Text', text: /Choose «Al proveedor»\?/ })).toBeDefined()
+    await ui.unmount()
+  })
+})
+
 describe('en el celular (sin campo de texto)', () => {
   test('Pedir cambios se manda sin nota en vez de romper el menú', async ($, on) => {
     const { bodies } = world(on)
     await start($)
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'mobile', ...MENU } as any)
     await ui.press({ key: 'mn-b2-1' })
+    expect(bodies).toEqual([]) // también pide confirmar (#89)
+    await ui.press({ key: 'mn-b2-confirm' })
     const sent = JSON.parse(bodies[bodies.length - 1]!)
     expect(sent.choice).toBe(1)
     expect(sent.note).toBe('Desde Claude Code')
@@ -214,6 +374,7 @@ describe('durante un deploy', () => {
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
     for (let i = 0; i < 3; i++) await ui.press({ key: 'dy-next' })
     await ui.press({ key: 'dy-take' })
+    await ui.press({ key: 'dy-confirm' })
     return ui
   }
 
@@ -245,6 +406,7 @@ describe('durante un deploy', () => {
     const ui = await takeLanding($)
     await clock.settle()
     await ui.press({ key: 'dy-take' }) // el snapshot la sigue dando pendiente: se toma otra vez
+    await ui.press({ key: 'dy-confirm' })
     await clock.settle()
     expect(keys.length).toBe(2)
     expect(keys[1]).not.toBe(keys[0])

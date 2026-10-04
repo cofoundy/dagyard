@@ -38,6 +38,13 @@ let busy = false
 let lastError = ''
 let loading = false
 let commenting: string | null = null // la revisión a la que se le está escribiendo «qué cambiarías»
+// La opción elegida que espera «Sí, elegir»: resolver no se deshace (el servidor da 409), así que ninguna
+// opción lleva hotkey ni se manda de un toque; un dígito en el prompt vacío arma los de la banda (#89).
+let picked: { id: string; choice: number } | null = null
+// Tomar, terminar o soltar una tarea también escriben (y tomar fija un /goal en la sesión): pasan por la
+// misma confirmación, sin hotkey. Medido 2026-10-04 18:32: un «t» suelto tomó gh-89 desde la banda.
+type Act = 'take' | 'done' | 'release'
+let asking: { act: Act; id: string } | null = null
 let s: Strings = text('en') // los textos en el idioma del entorno; se fija en session.start
 
 async function home($: any): Promise<string> {
@@ -147,6 +154,8 @@ async function refresh($: any): Promise<void> {
     const snap = (await api($, `/api/projects/${project}`, 'GET', undefined, false)) as Snapshot
     view = viewOf(snap)
     notice($, view)
+    const p = picked
+    if (p && !view.waiting.some(it => it.kind === 'waiting' && it.blocker.id === p.id)) picked = null
     const w = working
     if (w) working = snap.nodes.find(n => n.id === w.id && n.status === 'working') ?? null
     lastError = ''
@@ -172,6 +181,7 @@ async function resolve($: any, it: Extract<Item, { kind: 'waiting' }>, choice: n
   try {
     await api($, `/api/projects/${project}/blockers/${it.blocker.id}/resolve`, 'POST', { choice, note: note || 'Desde Claude Code' }, true)
     commenting = null
+    picked = null
     $.ui.toast(s.resolved(it.node.title, it.blocker.options[choice] ?? ''))
   } catch (e) {
     err = e
@@ -225,6 +235,30 @@ async function openMenu($: any): Promise<void> {
 
 async function comment($: any, blockerId: string | null): Promise<void> {
   commenting = blockerId
+  picked = null
+  $.ui.invalidate('ui.render')
+}
+
+/** Primer paso de tomar, terminar o soltar: pregunta; el segundo es el «Sí, …». `null` cancela. */
+async function ask($: any, a: { act: Act; id: string } | null): Promise<void> {
+  asking = a
+  $.ui.invalidate('ui.render')
+}
+
+/** Lo que hace cada acción confirmada sobre su tarea. */
+function act($: any, a: Act, node: Node): void {
+  asking = null
+  if (a === 'take') void take($, node)
+  else if (a === 'done') void patchWorking($, node, { status: 'done' }, s.isDone(node.title))
+  else void patchWorking($, node, { status: 'pending', team: null, progress: 0 }, '')
+}
+
+const question = (a: Act, n: Node) => (a === 'take' ? s.confirmTake(n.title) : a === 'done' ? s.confirmDone(n.title) : s.confirmRelease(n.title))
+const yes = (a: Act) => (a === 'take' ? s.yesTake : a === 'done' ? s.yesDone : s.yesRelease)
+
+/** Primer paso de elegir: marca la opción; el segundo es «Sí, elegir». `null` cancela. */
+async function pick($: any, choice: { id: string; choice: number } | null): Promise<void> {
+  picked = choice
   $.ui.invalidate('ui.render')
 }
 
@@ -235,6 +269,8 @@ async function toggleBand($: any): Promise<void> {
 
 async function skip($: any): Promise<void> {
   cursor += 1
+  picked = null
+  asking = null
   $.ui.invalidate('ui.render')
 }
 
@@ -290,6 +326,18 @@ export const register: Register = on => {
     }
 
     const { Box, Button, Text } = $.ui.resolve(e)
+    // la pregunta de una acción que escribe y su [Cancelar][Sí, …]; Cancelar primero: un Enter de más cancela
+    const confirmRow = (prefix: string, a: Act, n: Node) => (
+      <Box flexDirection="column">
+        <Text wrap="truncate-end">
+          <Text bold>{question(a, n)}</Text>
+        </Text>
+        <Box flexWrap="wrap">
+          <Button key={`${prefix}-cancel`} label={s.cancel} dimColor onPress={() => void ask($, null)} />
+          <Button key={`${prefix}-confirm`} label={yes(a)} variant="primary" onPress={() => act($, a, n)} />
+        </Box>
+      </Box>
+    )
     const list: Item[] = [...v.waiting, ...v.startable]
 
     const head = (
@@ -314,11 +362,15 @@ export const register: Register = on => {
             <Text color={BLUE}>{s.workingOn}</Text>
             <Text bold>{w.title}</Text>
           </Text>
-          <Box flexWrap="wrap">
-            <Button key="dy-done" label={s.done} hotkey="h" variant="primary" onPress={() => void patchWorking($, w, { status: 'done' }, s.isDone(w.title))} />
-            <Button key="dy-release" label={s.release} hotkey="l" onPress={() => void patchWorking($, w, { status: 'pending', team: null, progress: 0 }, '')} />
-            <Button key="dy-open" label={s.openSky} hotkey="o" dimColor onPress={() => void openSky($, w.id)} />
-          </Box>
+          {asking && asking.id === w.id && asking.act !== 'take' ? (
+            confirmRow('dy', asking.act, w)
+          ) : (
+            <Box flexWrap="wrap">
+              <Button key="dy-done" label={s.done} variant="primary" onPress={() => void ask($, { act: 'done', id: w.id })} />
+              <Button key="dy-release" label={s.release} onPress={() => void ask($, { act: 'release', id: w.id })} />
+              <Button key="dy-open" label={s.openSky} hotkey="o" dimColor onPress={() => void openSky($, w.id)} />
+            </Box>
+          )}
         </Box>
       )
     } else if (list.length > 0) {
@@ -331,11 +383,13 @@ export const register: Register = on => {
       if (it.kind === 'waiting') {
         const b = it.blocker
         const label = s.waitingLabel(b.kind)
+        const p = picked && picked.id === b.id && b.kind !== 'access' ? picked : null
+        // las opciones no llevan hotkey: elegir es marcar y después «Sí, elegir» (#89)
         const buttons =
           b.kind === 'access'
             ? [<Button key="dy-sky" label={s.grantInSky} hotkey="o" variant="primary" onPress={() => void openSky($, it.node.id)} />]
             : b.options.slice(0, 3).map((opt, k) => (
-                <Button key={`dy-opt-${k}`} label={opt} hotkey={String(k + 1)} variant={k === 0 ? 'primary' : undefined} onPress={() => void resolve($, it, k, '')} />
+                <Button key={`dy-opt-${k}`} label={opt} variant={k === 0 ? 'primary' : undefined} onPress={() => void pick($, { id: b.id, choice: k })} />
               ))
         body = (
           <Box flexDirection="column">
@@ -344,11 +398,25 @@ export const register: Register = on => {
               <Text bold>{it.node.title}</Text>
               <Text color={MUTED}> — {b.kind === 'access' ? b.accessLabel ?? b.question : b.question}</Text>
             </Text>
-            <Box flexWrap="wrap">
-              {buttons}
-              {more}
-              <Button key="dy-menu" label={s.seeAll} hotkey="m" dimColor onPress={() => void openMenu($)} />
-            </Box>
+            {p ? (
+              <Box flexDirection="column">
+                <Text wrap="truncate-end">
+                  <Text bold>{s.confirmPick(b.options[p.choice] ?? '')}</Text>
+                  <Text color={MUTED}> {s.cannotUndo}</Text>
+                </Text>
+                {/* Cancelar primero: un Enter de más sobre el mismo lugar cancela en vez de resolver */}
+                <Box flexWrap="wrap">
+                  <Button key="dy-cancel" label={s.cancel} dimColor onPress={() => void pick($, null)} />
+                  <Button key="dy-confirm" label={s.yesChoose} variant="primary" onPress={() => void resolve($, it, p.choice, '')} />
+                </Box>
+              </Box>
+            ) : (
+              <Box flexWrap="wrap">
+                {buttons}
+                {more}
+                <Button key="dy-menu" label={s.seeAll} hotkey="m" dimColor onPress={() => void openMenu($)} />
+              </Box>
+            )}
           </Box>
         )
       } else {
@@ -360,11 +428,15 @@ export const register: Register = on => {
               <Text bold>{n.title}</Text>
               {n.goal ? <Text color={MUTED}> — /goal {n.goal}</Text> : null}
             </Text>
-            <Box flexWrap="wrap">
-              <Button key="dy-take" label={s.workOnThis} hotkey="t" variant="primary" onPress={() => void take($, n)} />
-              {more}
-              <Button key="dy-menu" label={s.seeAll} hotkey="m" dimColor onPress={() => void openMenu($)} />
-            </Box>
+            {asking && asking.id === n.id && asking.act === 'take' ? (
+              confirmRow('dy', 'take', n)
+            ) : (
+              <Box flexWrap="wrap">
+                <Button key="dy-take" label={s.workOnThis} variant="primary" onPress={() => void ask($, { act: 'take', id: n.id })} />
+                {more}
+                <Button key="dy-menu" label={s.seeAll} hotkey="m" dimColor onPress={() => void openMenu($)} />
+              </Box>
+            )}
           </Box>
         )
       }
@@ -382,6 +454,18 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: MENU }, async ($, e) => {
     const els = $.ui.resolve(e)
     const { Box, Button, Text } = els
+    // la pregunta de una acción que escribe y su [Cancelar][Sí, …]; Cancelar primero: un Enter de más cancela
+    const confirmRow = (prefix: string, a: Act, n: Node) => (
+      <Box flexDirection="column">
+        <Text wrap="wrap">
+          <Text bold>{question(a, n)}</Text>
+        </Text>
+        <Box flexWrap="wrap">
+          <Button key={`${prefix}-cancel`} label={s.cancel} dimColor onPress={() => void ask($, null)} />
+          <Button key={`${prefix}-confirm`} label={yes(a)} variant="primary" onPress={() => act($, a, n)} />
+        </Box>
+      </Box>
+    )
     // «Qué cambiarías» se escribe donde la superficie tiene campo de texto (el celular no lo dibuja);
     // donde no, «Pedir cambios» se manda sin nota en vez de dejar un «Cancelar» solo
     const Input = e.surface !== 'mobile' && 'Input' in els ? els.Input : null
@@ -409,10 +493,14 @@ export const register: Register = on => {
       rows.push(
         <Box key="mn-w" flexDirection="column">
           <Text bold>{w.title}</Text>
-          <Box flexWrap="wrap">
-            <Button key="mn-w-done" label={s.done} variant="primary" onPress={() => void patchWorking($, w, { status: 'done' }, s.isDone(w.title))} />
-            <Button key="mn-w-release" label={s.release} onPress={() => void patchWorking($, w, { status: 'pending', team: null, progress: 0 }, '')} />
-          </Box>
+          {asking && asking.id === w.id && asking.act !== 'take' ? (
+            confirmRow('mn-w', asking.act, w)
+          ) : (
+            <Box flexWrap="wrap">
+              <Button key="mn-w-done" label={s.done} variant="primary" onPress={() => void ask($, { act: 'done', id: w.id })} />
+              <Button key="mn-w-release" label={s.release} onPress={() => void ask($, { act: 'release', id: w.id })} />
+            </Box>
+          )}
         </Box>,
       )
     }
@@ -435,14 +523,29 @@ export const register: Register = on => {
             <Button key={`mn-${id}-cancel`} label={s.cancel} dimColor onPress={() => void comment($, null)} />
           </Box>
         )
+      } else if (picked && picked.id === id) {
+        const choice = picked.choice
+        actions = (
+          <Box flexDirection="column">
+            <Text wrap="wrap">
+              <Text bold>{s.confirmPick(b.options[choice] ?? '')}</Text>
+              <Text color={MUTED}> {s.cannotUndo}</Text>
+            </Text>
+            <Box flexWrap="wrap">
+              <Button key={`mn-${id}-cancel`} label={s.cancel} dimColor onPress={() => void pick($, null)} />
+              <Button key={`mn-${id}-confirm`} label={s.yesChoose} variant="primary" onPress={() => void resolve($, it, choice, '')} />
+            </Box>
+          </Box>
+        )
       } else {
+        // «Pedir cambios» ya son dos pasos (abrir el campo y enviar); el resto marca y pide «Sí, elegir» (#89)
         actions = (
           <Box flexWrap="wrap">
             {b.options.map((opt, k) =>
               b.kind === 'review' && Input && REQUEST_CHANGES.test(opt) ? (
                 <Button key={`mn-${id}-${k}`} label={opt} onPress={() => void comment($, id)} />
               ) : (
-                <Button key={`mn-${id}-${k}`} label={opt} variant={k === 0 ? 'primary' : undefined} onPress={() => void resolve($, it, k, '')} />
+                <Button key={`mn-${id}-${k}`} label={opt} variant={k === 0 ? 'primary' : undefined} onPress={() => void pick($, { id, choice: k })} />
               ),
             )}
           </Box>
@@ -468,7 +571,11 @@ export const register: Register = on => {
         <Box key={`mn-t-${n.id}`} flexDirection="column">
           <Text bold>{n.title}</Text>
           {n.goal ? <Text wrap="wrap" color={MUTED}>/goal {n.goal}</Text> : null}
-          <Button key={`mn-t-${n.id}-take`} label={s.workOnThis} variant="primary" onPress={() => void take($, n)} />
+          {asking && asking.id === n.id && asking.act === 'take' ? (
+            confirmRow(`mn-t-${n.id}`, 'take', n)
+          ) : (
+            <Button key={`mn-t-${n.id}-take`} label={s.workOnThis} variant="primary" onPress={() => void ask($, { act: 'take', id: n.id })} />
+          )}
         </Box>,
       )
     })

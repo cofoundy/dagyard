@@ -57,6 +57,17 @@ export type Strings = {
   oneLine: string
   send: string
   cancel: string
+  /** elegir una opción de una decisión o una revisión pide confirmar (#89) */
+  confirmPick: (option: string) => string
+  cannotUndo: string
+  yesChoose: string
+  /** tomar, terminar o soltar una tarea también pide confirmar: escriben en el servidor */
+  confirmTake: (title: string) => string
+  confirmDone: (title: string) => string
+  confirmRelease: (title: string) => string
+  yesTake: string
+  yesDone: string
+  yesRelease: string
   startableSection: (n: number) => string
   nothingStartable: string
   showBand: string
@@ -105,6 +116,15 @@ const EN: Strings = {
   oneLine: 'in one line',
   send: 'send',
   cancel: 'Cancel',
+  confirmPick: option => `Choose «${option}»?`,
+  cannotUndo: 'It cannot be undone.',
+  yesChoose: 'Yes, choose',
+  confirmTake: title => `Work on «${title}»? It sets its /goal in this session.`,
+  confirmDone: title => `Is «${title}» done?`,
+  confirmRelease: title => `Release «${title}»? It goes back to pending, with no team.`,
+  yesTake: 'Yes, work on it',
+  yesDone: 'Yes, it is done',
+  yesRelease: 'Yes, release it',
   startableSection: n => `READY TO TAKE (${n})`,
   nothingStartable: 'Nothing unblocked left to take.',
   showBand: 'Show the bar',
@@ -153,6 +173,15 @@ const ES: Strings = {
   oneLine: 'en una línea',
   send: 'enviar',
   cancel: 'Cancelar',
+  confirmPick: option => `¿Eliges «${option}»?`,
+  cannotUndo: 'No se puede deshacer.',
+  yesChoose: 'Sí, elegir',
+  confirmTake: title => `¿Trabajas en «${title}»? Fija su /goal en esta sesión.`,
+  confirmDone: title => `¿«${title}» está hecha?`,
+  confirmRelease: title => `¿Sueltas «${title}»? Vuelve a pendiente, sin equipo.`,
+  yesTake: 'Sí, trabajar en esto',
+  yesDone: 'Sí, está hecha',
+  yesRelease: 'Sí, soltarla',
   startableSection: n => `PARA TOMAR (${n})`,
   nothingStartable: 'Nada desbloqueado sin tomar.',
   showBand: 'Mostrar la banda',
