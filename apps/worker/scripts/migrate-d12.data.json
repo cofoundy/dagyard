@@ -1,0 +1,157 @@
+{
+  "project": "dagyard",
+  "goals": [
+    {
+      "id": "goal-fabrica",
+      "title": "El equipo usa Dagyard para ver su fábrica",
+      "bornAt": "2026-10-04T05:24:00.000Z"
+    }
+  ],
+  "requests": [
+    {
+      "id": "req-v0",
+      "title": "La v0 terminada al despertar",
+      "quote": "necesito el proyecto terminado al despertar",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T05:24:00.000Z",
+      "from": "goal-fabrica",
+      "why": "el encargo de la corrida nocturna (épica #1)"
+    },
+    {
+      "id": "req-m7",
+      "title": "Que Dagyard se construya con su propio grafo",
+      "quote": "ponte a construir todo lo q falte y quiero el dogfooding de dagyard funcionando y q sirva el mismo grafo para su construccion y tu figure out all the neccesary context scaffolding",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T15:38:00.000Z",
+      "from": "goal-fabrica",
+      "why": "Mensaje 7, tras ver la v0 (épica #44)"
+    },
+    {
+      "id": "req-m7-menu",
+      "title": "Un menú en Claude Code para responder todo",
+      "quote": "esta genial aunque tal vez seria bueno q sea un menu donde podamos responder a todo?",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T15:38:00.000Z",
+      "from": "goal-fabrica",
+      "why": "Mensaje 7, tras probar el mod de Claude Code"
+    },
+    {
+      "id": "req-ver-grafo",
+      "title": "Poder abrir el grafo con un link",
+      "quote": "quiero ver el grafo, cómo lo veo? creo q hay ese gap",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T17:14:00.000Z",
+      "from": "goal-fabrica",
+      "why": "André no encontraba cómo abrir el proyecto"
+    },
+    {
+      "id": "req-m8",
+      "title": "Inglés primero y una demo más vistosa",
+      "quote": "oye q sea main english con system detect i18n spanish, q la demo tmb sea en english y q sea mas vistoza",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T19:02:00.000Z",
+      "from": "goal-fabrica",
+      "why": "Mensaje 8"
+    },
+    {
+      "id": "req-m9",
+      "title": "Que Dagyard reemplace el informe de la fábrica, en el tiempo",
+      "quote": "creo q deberíamos de hacer q esta plataforma reemplace el reporte de factory para q tenga seecuencia temporal, q podamos ver cuando abrieron cada agente y q los nuevos se vayan desplegando, also no se xq siempre lo pones como matriz",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T19:05:00.000Z",
+      "from": "goal-fabrica",
+      "why": "Mensaje 9, con una captura del proyecto «Dagyard»"
+    },
+    {
+      "id": "req-readme",
+      "title": "Un README que se vea",
+      "quote": "el readme todavia se ve medio feito",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T19:27:00.000Z",
+      "from": "goal-fabrica",
+      "why": "André, mirando el README antes de abrir el código"
+    },
+    {
+      "id": "req-m10",
+      "title": "Una sola vista: el grafo que crece solo",
+      "quote": "Podría ser más como un grafo de dependencias que se ve autoactualizando todo el tiempo.",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T22:25:00.000Z",
+      "from": "goal-fabrica",
+      "why": "Mensaje 10, tras ver los prototipos A/B/C"
+    },
+    {
+      "id": "req-m11",
+      "title": "Un DAG donde cada tarea tiene un propósito",
+      "quote": "no tenia q ser arbol, tenia q ser DAG. cada task tiene q tener un propósito o poder ser continuada no?",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T23:00:00.000Z",
+      "from": "goal-fabrica",
+      "why": "Mensaje 11"
+    },
+    {
+      "id": "req-m11-go",
+      "title": "Modelo primero, después plugin, después factory",
+      "quote": "Sí go",
+      "quoteBy": "André",
+      "bornAt": "2026-10-04T23:17:00.000Z",
+      "from": "req-m11",
+      "why": "aprobó el orden: modelo → plugin → factory usa Dagyard (D12)"
+    }
+  ],
+  "origins": [
+    { "to": "intencion", "from": "req-v0", "why": "la intención se escribió para la corrida" },
+    { "to": "spec", "from": "intencion", "why": "el plan de la v0 sale de la intención" },
+    { "to": "preview", "from": "intencion", "why": "la dirección visual (D11)" },
+    { "to": "gh-2", "from": "spec", "why": "el servidor del plan de la v0" },
+    { "to": "gh-3", "from": "spec", "why": "el cielo 3D del plan de la v0" },
+    { "to": "gh-4", "from": "spec", "why": "la interfaz para agentes del plan de la v0" },
+    { "to": "gh-5", "from": "spec", "why": "la entrega de la v0" },
+    { "to": "gh-6", "from": "spec", "why": "el stretch del plan de la v0" },
+    { "to": "gh-7", "from": "spec", "why": "el dominio quedó para André" },
+    { "to": "gh-25", "from": "spec", "why": "el plan deja el código privado hasta que André lo apruebe" },
+    { "to": "gh-9", "from": "gh-2", "why": "el token de Cloudflare no tenía permiso de D1" },
+    { "to": "gh-12", "from": "gh-2", "why": "salió de la revisión del servidor (PR #11)" },
+    { "to": "gh-13", "from": "gh-2", "why": "salió de la revisión del servidor (PR #11)" },
+    { "to": "gh-14", "from": "gh-2", "why": "salió de la revisión del servidor (PR #11)" },
+    { "to": "gh-18", "from": "gh-13", "why": "salió de la revisión de #13" },
+    { "to": "gh-19", "from": "gh-13", "why": "salió de la revisión de #13" },
+    { "to": "gh-20", "from": "gh-5", "why": "lo encontró la entrega al abrir el proyecto importado" },
+    { "to": "gh-21", "from": "gh-5", "why": "lo encontró la entrega al abrir el proyecto importado" },
+    { "to": "gh-27", "from": "gh-20", "why": "apareció al cerrar #20" },
+    { "to": "gh-41", "from": "gh-27", "why": "apareció al cerrar #27" },
+    { "to": "gh-58", "from": "gh-41", "why": "apareció al cerrar #41" },
+    { "to": "gh-29", "from": "req-v0", "why": "lo pidió el supervisor de la corrida (02:50)" },
+    { "to": "gh-30", "from": "req-v0", "why": "lo pidió el supervisor de la corrida (02:50)" },
+    { "to": "gh-32", "from": "gh-18", "why": "salió de la revisión de #18 y #19" },
+    { "to": "gh-33", "from": "gh-18", "why": "salió de la revisión de #18 y #19" },
+    { "to": "gh-35", "from": "gh-32", "why": "salió de la revisión de #32 y #33" },
+    { "to": "gh-38", "from": "gh-35", "why": "el arreglo de #35 dejó el contador en 0" },
+    { "to": "reporte-v0", "from": "gh-5", "why": "el cierre de la entrega" },
+    { "to": "v1", "from": "goal-fabrica", "why": "el siguiente hito para el equipo" },
+    { "to": "prueba-dogfood", "from": "req-m7", "why": "probar el dogfooding con sitios reales" },
+    { "to": "gh-45", "from": "req-m7", "why": "el mismo grafo para construir Dagyard" },
+    { "to": "gh-46", "from": "req-m7-menu", "why": "el menú para responder desde la terminal" },
+    { "to": "gh-47", "from": "intencion", "why": "la intención pide avisos cuando tu entrada es necesaria (§3.4)" },
+    { "to": "gh-48", "from": "gh-2", "why": "el tiempo real subió de 0,6 s a 1,8 s" },
+    { "to": "gh-54", "from": "gh-48", "why": "lo encontró la medición de #48" },
+    { "to": "gh-55", "from": "gh-48", "why": "lo encontró la medición de #48" },
+    { "to": "gh-61", "from": "gh-54", "why": "salió de la revisión de #54 (PR #60)" },
+    { "to": "gh-62", "from": "gh-54", "why": "salió de #54 (PR #60)" },
+    { "to": "gh-67", "from": "gh-61", "why": "salió de la revisión de #61" },
+    { "to": "gh-71", "from": "gh-67", "why": "salió de #67" },
+    { "to": "gh-59", "from": "gh-45", "why": "el protocolo cuelga el PR como informe" },
+    { "to": "gh-64", "from": "req-ver-grafo", "why": "un link directo al proyecto o a la tarea" },
+    { "to": "gh-69", "from": "gh-64", "why": "lo encontró el sitio enlace" },
+    { "to": "gh-73", "from": "req-m8", "why": "inglés por defecto" },
+    { "to": "gh-74", "from": "req-m8", "why": "la demo en inglés y más vistosa" },
+    { "to": "gh-77", "from": "gh-73", "why": "lo que el CLI escribe seguía en español" },
+    { "to": "gh-83", "from": "gh-73", "why": "textos que quedaron solo en español" },
+    { "to": "gh-80", "from": "req-readme", "why": "un README visual" },
+    { "to": "gh-75", "from": "req-m9", "why": "la fábrica en el tiempo" },
+    { "to": "gh-75", "from": "req-m10", "why": "una sola vista que crece" },
+    { "to": "gh-89", "from": "gh-75", "why": "el bloqueante de diseño de gh-75 se resolvió con una tecla suelta" },
+    { "to": "gh-90", "from": "req-m11-go", "why": "primero el modelo (D12)" },
+    { "to": "gh-91", "from": "req-m11-go", "why": "después Dagyard como plugin (D12)" }
+  ]
+}

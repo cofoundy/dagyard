@@ -47,7 +47,7 @@ Campos nuevos, todos presentes en cada snapshot (opcionales en el tipo solo para
 | `closedAt` | `ISO \| null` | cuándo se cerró |
 
 `status` sigue con los cuatro valores de siempre. Un nodo cerrado (con cualquier motivo) queda en
-`status: 'done'`; `closedAs` dice cuál. Pasar a `done` por `PATCH {status: 'done'}` cierra como `done`;
+`status: 'done'`; `closedAs` dice cuál. Pasar a `done` por `PATCH {status: 'done'}` cierra como `done` (sin exigir evidencia, como hoy; en un `goal` o `stream` → 400);
 volver a `pending` o `working` reabre (limpia los cuatro campos de cierre; el log guarda el cierre anterior).
 
 | Tipo | Qué es | Arranca (`next`) | Cómo se cierra |
@@ -67,7 +67,7 @@ en la API: sin él, la primera etapa del proyecto.
 | Sentido | `to` necesita que `from` esté cerrado | `to` nació de `from` |
 | Campos | `projectId, from, to` (como siempre) | `projectId, from, to, why: string \| null` (≤280), `createdAt` |
 | Eventos | `edge.added`, `edge.removed` | `origin.added`, `origin.removed` |
-| Ciclos | prohibidos (409 `cycle`) | prohibidos, por separado (409 `cycle`) |
+| Ciclos | prohibidos (400 `cycle`, como siempre) | prohibidos, por separado (400 `cycle`) |
 | Restricción | `from` no puede ser `goal` ni `stream` (nunca se cierran: bloquearían para siempre) | ninguna |
 | Quitar | dueño o agente (como hoy) | solo el dueño (es el porqué) |
 
@@ -95,10 +95,10 @@ marcarlos.
 | `POST` | `/api/projects/:pid/nodes` | ambos | acepta `kind`, `bornAt`, `quote`, `quoteBy` y `origins: [{from, why?}]` (además de `deps`) |
 | `PATCH` | `/api/projects/:pid/nodes/:nid` | ambos | acepta `kind`, `quote`, `quoteBy`; `status: 'done'` cierra como `done`; no acepta `closedAs` (para eso, `close`) |
 | `POST` | `/api/projects/:pid/nodes/:nid/close` | ambos | `{as, why?, by?, reportUrl?}`: cierra con motivo; emite `node.updated`. Reglas de la tabla de tipos; una `task` cerrada como `done` necesita evidencia (`why`, `reportUrl` en el cuerpo o el que ya tenía) → si no, 400; cerrar un nodo ya cerrado → 409; con una pregunta abierta → 409 (como `done` hoy) |
-| `DELETE` | `/api/projects/:pid/nodes/:nid` | solo el dueño | **descartar**: cierra como `dropped` (motivo opcional en `?why=`). Nunca borra la fila. Agente → 403 |
+| `DELETE` | `/api/projects/:pid/nodes/:nid` | solo el dueño | **descartar**: cierra como `dropped` (motivo opcional en `?why=`), con las reglas de `close` (ya cerrado o con pregunta abierta → 409). Nunca borra la fila. Agente → 403 |
 | `POST` | `/api/projects/:pid/edges` | ambos | `{from, to, kind?: 'requires' \| 'origin', why?}`; sin `kind`, `requires` |
 | `DELETE` | `/api/projects/:pid/edges?from&to[&kind=origin]` | `requires`: ambos; `origin`: dueño | |
-| `PUT` | `/api/projects/:pid` | ambos | en un proyecto existente que no es demo, un nodo que el cuerpo no trae ya no se borra: queda con sus aristas, orígenes, preguntas y mensajes, cerrado como `dropped` («no está en el import») si estaba abierto. Las aristas «necesita» que llegan a un nodo del cuerpo salen de sus `deps`; los orígenes existentes se conservan y se suman los del cuerpo. Los nodos del cuerpo aceptan `kind`, `bornAt`, `quote`, `quoteBy`, `origins` |
+| `PUT` | `/api/projects/:pid` | ambos | en un proyecto existente que no es demo, un nodo que el cuerpo no trae ya no se borra: queda con sus aristas, orígenes, preguntas y mensajes, cerrado como `dropped` («no está en el import») si estaba abierto y sin una pregunta abierta (con una, queda como está). Si el cuerpo cambia las etapas y uno de esos nodos usa una que desaparece → 400. Un nodo que el cuerpo sí trae conserva su `kind`, `quote`, `quoteBy` y `bornAt` si no los manda (como `link`). Las aristas «necesita» que llegan a un nodo del cuerpo salen de sus `deps`; los orígenes existentes se conservan y se suman los del cuerpo. Los nodos del cuerpo aceptan `kind`, `bornAt`, `quote`, `quoteBy`, `origins` |
 
 - Ningún camino de escritura borra la fila de un nodo, salvo dos que no son caminos de nodo y quedan
   documentados como tales: re-sembrar una **demo** (la demo es una fixture que vuelve a su guion) y borrar
