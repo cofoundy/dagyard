@@ -42,7 +42,9 @@ var ROUTES = {
   nodes: (projectId) => `/api/projects/${p(projectId)}/nodes`,
   /** PATCH: actualiza un nodo. */
   node: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}`,
-  /** POST: crea una arista `{ from, to }`. */
+  /** POST: cierra un nodo con motivo `{ as, why?, by?, reportUrl? }` (#90). */
+  close: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}/close`,
+  /** POST: crea una arista `{ from, to, kind?, why? }`: «necesita» o, con `kind: 'origin'`, «nació de» (#90). */
   edges: (projectId) => `/api/projects/${p(projectId)}/edges`,
   /** POST: abre un bloqueante sobre el nodo. */
   blockers: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}/blockers`,
@@ -99,8 +101,14 @@ var DagyardClient = class {
   updateNode(projectId, nodeId2, patch) {
     return this.json("PATCH", ROUTES.node(projectId, nodeId2), patch);
   }
-  addEdge(projectId, from, to) {
-    return this.json("POST", ROUTES.edges(projectId), { from, to });
+  /** Sin `kind`, «necesita»; `kind: 'origin'` = «nació de», con su `why` (#90). */
+  addEdge(projectId, from, to, opts = {}) {
+    const body = opts.kind === "origin" ? { from, to, kind: "origin", ...opts.why ? { why: opts.why } : {} } : { from, to };
+    return this.json("POST", ROUTES.edges(projectId), body);
+  }
+  /** Cierra con motivo (#90): lista, reemplazada, descartada o «aprendimos». */
+  closeNode(projectId, nodeId2, input) {
+    return this.json("POST", ROUTES.close(projectId, nodeId2), input);
   }
   openBlocker(projectId, nodeId2, input) {
     return this.json("POST", ROUTES.blockers(projectId, nodeId2), input);
@@ -181,7 +189,7 @@ var UsageError = class extends Error {
 };
 var ALIASES = { h: "help", q: "q", p: "project" };
 function parseArgs(argv, booleans) {
-  const out = { positionals: [], flags: {}, bools: /* @__PURE__ */ new Set() };
+  const out = { positionals: [], flags: {}, bools: /* @__PURE__ */ new Set(), seq: [] };
   const isBool = (k) => booleans.includes(k) || k === "help";
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -206,6 +214,7 @@ function parseArgs(argv, booleans) {
       if (value === void 0) throw new UsageError(t(`--${key} needs a value`, `a --${key} le falta el valor`));
     }
     (out.flags[key] ??= []).push(value);
+    out.seq.push([key, value]);
   }
   return out;
 }
@@ -350,6 +359,8 @@ function fromConfigDir(env, name) {
 // ../model/dist/types.js
 var NODE_STATUSES = ["pending", "working", "blocked", "done"];
 var BLOCKER_KINDS = ["decision", "review", "access"];
+var NODE_KINDS = ["goal", "request", "task", "stream"];
+var CLOSE_AS = ["done", "replaced", "dropped", "learned"];
 var LANGS = ["en", "es"];
 var DEFAULT_LANG = "en";
 var LEGACY_LANG = "es";
@@ -385,7 +396,11 @@ var LIMITS = {
   url: 2048,
   accessValue: 4096,
   note: 1e3,
-  nodesPerProject: 500
+  nodesPerProject: 500,
+  /** #90 */
+  quote: 1e3,
+  closedReason: 500,
+  originWhy: 280
 };
 
 // ../model/dist/graph.js
@@ -445,6 +460,9 @@ function wouldCreateCycle(edges, from, to) {
     q.push(...out.get(u) ?? []);
   }
   return false;
+}
+function neverDone(kind2) {
+  return kind2 === "goal" || kind2 === "stream";
 }
 
 // ../model/dist/validate.js
@@ -562,6 +580,51 @@ function isoDate(v, field) {
     return null;
   return normalizeIso(v) ?? fail(`${field}: una fecha ISO 8601 con hora y zona, p. ej. 2026-10-04T05:35:20Z`);
 }
+function kind(v, field) {
+  if (v === void 0)
+    return void 0;
+  if (!NODE_KINDS.includes(v))
+    fail(`${field}: uno de ${NODE_KINDS.join(", ")}`);
+  return v;
+}
+var BORN_AT_FUTURE_MS = TEAM_LIMITS.future;
+function bornAt(v, field) {
+  if (v === void 0)
+    return void 0;
+  if (v === null)
+    return fail(`${field}: una fecha ISO 8601, o no lo mandes`);
+  const d = isoDate(v, field);
+  if (d < TEAM_LIMITS.earliest || d > new Date(Date.now() + BORN_AT_FUTURE_MS).toISOString())
+    fail(`${field}: fuera de rango (desde 2020 hasta ahora): ${d}`);
+  return d;
+}
+function origins(v, field) {
+  if (v === void 0)
+    return void 0;
+  if (!Array.isArray(v))
+    return fail(`${field}: se esperaba una lista de {from, why?}`);
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  v.forEach((x, i) => {
+    const o = obj(x, `${field}[${i}]`);
+    const from = slug(o.from, `${field}[${i}].from`);
+    const why = nullableStr(o.why, `${field}[${i}].why`, LIMITS.originWhy);
+    if (seen.has(from))
+      return;
+    seen.add(from);
+    out.push(why !== void 0 ? { from, why } : { from });
+  });
+  return out;
+}
+function kindRules(n, at, creating) {
+  const k = n.kind ?? "task";
+  if (k === "request" && creating && !n.quote)
+    fail(`${at}quote: un pedido (request) lleva la cita literal de la persona`);
+  if (n.kind !== void 0 && k !== "request" && n.quote)
+    fail(`${at}quote: solo un pedido (request) lleva cita`);
+  if (n.status === "done" && neverDone(k))
+    fail(`${at}status: un ${k} no se cierra como \xABdone\xBB; ci\xE9rralo con otro motivo (replaced, dropped o learned)`);
+}
 function lang2(v) {
   if (v === void 0)
     return void 0;
@@ -592,13 +655,25 @@ function stages(v) {
   return out;
 }
 function nodeInput(o, at) {
-  const n = {
-    stage: slug(o.stage, `${at}stage`),
-    title: str(o.title, `${at}title`, LIMITS.title)
-  };
+  const n = { title: str(o.title, `${at}title`, LIMITS.title) };
+  const stage = slug(o.stage, `${at}stage`, true);
+  if (stage)
+    n.stage = stage;
   const id = slug(o.id, `${at}id`, true);
   if (id)
     n.id = id;
+  const k = kind(o.kind, `${at}kind`);
+  if (k)
+    n.kind = k;
+  const b = bornAt(o.bornAt, `${at}bornAt`);
+  if (b)
+    n.bornAt = b;
+  const quote = nullableStr(o.quote, `${at}quote`, LIMITS.quote);
+  if (quote !== void 0)
+    n.quote = quote;
+  const quoteBy = nullableStr(o.quoteBy, `${at}quoteBy`, LIMITS.name);
+  if (quoteBy !== void 0)
+    n.quoteBy = quoteBy;
   const s = status(o.status);
   if (s)
     n.status = s;
@@ -622,15 +697,19 @@ function nodeInput(o, at) {
       fail(`${at}deps: se esperaba una lista`);
     n.deps = o.deps.map((d, i) => slug(d, `${at}deps[${i}]`));
   }
+  const og = origins(o.origins, `${at}origins`);
+  if (og)
+    n.origins = og;
+  kindRules(n, at, n.kind === "request");
   return n;
 }
 function blockerInput(o, at) {
   if (!BLOCKER_KINDS.includes(o.kind))
     fail(`${at}kind: uno de ${BLOCKER_KINDS.join(", ")}`);
-  const kind = o.kind;
-  const b = { kind, question: str(o.question, `${at}question`, LIMITS.question) };
+  const kind2 = o.kind;
+  const b = { kind: kind2, question: str(o.question, `${at}question`, LIMITS.question) };
   const options = stringList(o.options, `${at}options`, LIMITS.options, LIMITS.option);
-  if (kind === "access") {
+  if (kind2 === "access") {
     if (options && options.length)
       fail(`${at}options: un acceso no lleva opciones`);
     b.options = [];
@@ -638,7 +717,7 @@ function blockerInput(o, at) {
   } else {
     if (options && options.length)
       b.options = options;
-    else if (kind !== "review")
+    else if (kind2 !== "review")
       fail(`${at}options: una decisi\xF3n necesita al menos una opci\xF3n`);
     b.accessLabel = null;
   }
@@ -704,12 +783,20 @@ function checkGraph(g) {
       return `nodes: id repetido \xAB${id}\xBB`;
     seen.add(id);
   }
+  const kindOf = new Map(g.nodes.map((n, i) => [ids[i], n.kind]));
   for (const [i, n] of g.nodes.entries()) {
-    if (g.stages && !stageIds.has(n.stage))
+    if (g.stages && n.stage !== void 0 && !stageIds.has(n.stage))
       return `nodes[${i}].stage: \xAB${n.stage}\xBB no es una etapa del proyecto`;
-    for (const d of n.deps ?? [])
+    for (const d of n.deps ?? []) {
       if (!seen.has(d))
         return `nodes[${i}].deps: \xAB${d}\xBB no existe`;
+      const k = kindOf.get(d);
+      if (k && neverDone(k))
+        return `nodes[${i}].deps: \xAB${d}\xBB es un ${k}, nunca se cierra: nada puede necesitarlo`;
+    }
+    for (const o of n.origins ?? [])
+      if (!seen.has(o.from))
+        return `nodes[${i}].origins: \xAB${o.from}\xBB no existe`;
   }
   for (const [i, b] of (g.blockers ?? []).entries())
     if (!seen.has(b.nodeId))
@@ -721,6 +808,10 @@ function checkGraph(g) {
   const cyc = findCycle(ids, edges);
   if (cyc)
     return `ciclo en las dependencias: ${cyc.join(" \u2192 ")}`;
+  const born = g.nodes.flatMap((n, i) => (n.origins ?? []).map((o) => ({ from: o.from, to: ids[i] })));
+  const ocyc = findCycle(ids, born);
+  if (ocyc)
+    return `ciclo en \xABnaci\xF3 de\xBB: ${ocyc.join(" \u2192 ")}`;
   return null;
 }
 
@@ -1427,7 +1518,8 @@ function closingRefs(text) {
 function dependencyRefs(text) {
   return {
     partOf: refsAfter(text, "parte de|part of"),
-    dependsOn: refsAfter(text, "depende de|depends on|blocked by|bloquead[oa] por")
+    dependsOn: refsAfter(text, "depende de|depends on|blocked by|bloquead[oa] por"),
+    bornFrom: refsAfter(text, "sale de la revisi[o\xF3]n de|nace de|born from")
   };
 }
 var OPTION_BOLD = /^\s*[-*]\s+\*\*\s*([A-Za-z0-9]{1,2})\s*(?:\(([^)]*)\))?\s*[:.)]?\s*\*\*\s*[:.)]?\s*(.*)$/;
@@ -1472,6 +1564,7 @@ async function syncGithub(api, source, projectId, opts) {
 ${pr.body}`)) withPr.add(n);
   const nodes = new Map(snap.nodes.map((n) => [n.id, n]));
   const edges = snap.edges.map((e) => ({ from: e.from, to: e.to }));
+  const origins2 = (snap.origins ?? []).map((o) => ({ from: o.from, to: o.to }));
   const report = {
     repo: opts.repo,
     project: projectId,
@@ -1597,6 +1690,31 @@ ${pr.body}`)) withPr.add(n);
       updated.add(self);
       report.actions.push(`${from} \u2192 ${to}`);
     }
+    for (const n of refs.bornFrom) {
+      const from = nodeIdOf(n);
+      if (from === self || !nodes.has(from) || foreign.has(from) || foreign.has(self)) continue;
+      if (origins2.some((o) => o.from === from && o.to === self)) continue;
+      if (dry) {
+        if (wouldCreateCycle(origins2, from, self)) {
+          report.warnings.push(bornCycleWarning(from, self));
+          continue;
+        }
+      } else {
+        try {
+          await api.addEdge(projectId, from, self, { kind: "origin" });
+        } catch (err) {
+          if (!(err instanceof ApiRequestError)) throw err;
+          if (err.status === 400 && err.code === "cycle") report.warnings.push(bornCycleWarning(from, self));
+          else if (err.status === 409) report.warnings.push(t(`${self} was already born from ${from}`, `${self} ya nac\xEDa de ${from}`));
+          else if ([400, 404].includes(err.status)) report.warnings.push(t(`did not say ${self} was born from ${from}: ${err.message}`, `no dije que ${self} naci\xF3 de ${from}: ${err.message}`));
+          else throw err;
+          continue;
+        }
+      }
+      origins2.push({ from, to: self });
+      updated.add(self);
+      report.actions.push(t(`${self} born from ${from}`, `${self} naci\xF3 de ${from}`));
+    }
   }
   for (const issue of considered) {
     if (issue.state !== "open" || !issue.labels.includes(FOUNDER_LABEL)) continue;
@@ -1638,6 +1756,9 @@ function openQuestion(id, status2) {
 }
 function cycleWarning(from, to) {
   return t(`did not add ${from} \u2192 ${to}: it would close a loop`, `no agregu\xE9 ${from} \u2192 ${to}: cerrar\xEDa un ciclo`);
+}
+function bornCycleWarning(from, to) {
+  return t(`did not say ${to} was born from ${from}: it would close a loop`, `no dije que ${to} naci\xF3 de ${from}: cerrar\xEDa un ciclo`);
 }
 function hasOpenBlocker(blockers, nodeId2) {
   return blockers.some((b) => b.nodeId === nodeId2 && b.status === "open");
@@ -1692,30 +1813,55 @@ dagyard.run, la de DAGYARD_URL o ~/.config/dagyard/url, o una l\xEDnea de ~/.con
 La API key sale solo de DAGYARD_KEY o ~/.config/dagyard/agent-key; nunca se imprime.
 Los mensajes salen en ingl\xE9s; con LANG=es (o LC_ALL / LC_MESSAGES), en espa\xF1ol.`
 ];
-var COMMANDS = {
-  "node add": {
+function addNodeCommand(fixed) {
+  const kindFlag = fixed ? [] : ["kind"];
+  const quoteFlags = fixed === "goal" ? [] : ["quote", "author"];
+  const opts = fixed === "goal" ? "" : fixed === "request" ? ' --quote "\u2026" [--author "\u2026"]' : ' [--kind goal|request|task|stream] [--quote "\u2026"] [--author "\u2026"]';
+  const cmd = fixed ? `${fixed} add` : "node add";
+  return {
     usage: [
-      'dagyard node add <node> --title "\u2026" --stage <stage> [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--link <url>]',
-      'dagyard node add <nodo> --title "\u2026" --stage <etapa> [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--link <url>]'
+      `dagyard ${cmd} <node> --title "\u2026"${opts} [--from <node> [--why "\u2026"]]\u2026 [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--link <url>]`,
+      `dagyard ${cmd} <nodo> --title "\u2026"${opts} [--from <nodo> [--why "\u2026"]]\u2026 [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--link <url>]`
     ],
-    summary: ["adds a task to the plan", "agrega una tarea al plan"],
+    summary: fixed === "goal" ? ["adds a goal: a living outcome, the root of the whys", "agrega un objetivo: un resultado vivo, ra\xEDz de los porqu\xE9s"] : fixed === "request" ? ["adds a person's request or decision, with their exact words", "agrega el pedido o la decisi\xF3n de una persona, con su cita"] : ["adds a node to the plan (a task by default)", "agrega un nodo al plan (una tarea por defecto)"],
     help: [
       `<node> is a short id (T-314-A is stored as t-314-a). Repeat --dep or separate it with commas.
-Statuses: pending, working, done (blocked is set by dagyard block).
---link is the technical detail (the issue or PR URL); the task card shows it as a technical-detail link.`,
+Kinds: task (one owner, one session, one /goal; the only one that starts), goal (a living outcome; it starts
+In progress and never closes as done), request (a person's request, --quote is their exact words, --author who said
+it), stream (ongoing work that spawns tasks). ${fixed ? `This is node add --kind ${fixed}.` : ""}
+--from <node> says which node this one was born from (repeat it); the --why right after it says why. Born-from is not
+a dependency: it never blocks. --dep is a dependency: this node needs <dep> closed.
+Without --stage it goes to the project's first stage. Statuses: pending, working, done (blocked is set by dagyard
+block). --link is the technical detail (the issue or PR URL). Prints only the id.`,
       `<nodo> es un id corto (T-314-A se guarda como t-314-a). --dep se repite o va separado por comas.
-Estados: pending, working, done (blocked lo pone dagyard block).
---link es el detalle t\xE9cnico (URL del issue o del PR); la ficha lo muestra como \xABDetalle t\xE9cnico \u2197\xBB.`
+Tipos: task (un due\xF1o, una sesi\xF3n, un /goal; la \xFAnica que arranca), goal (un resultado vivo; nace En progreso y nunca
+se cierra como lista), request (el pedido de una persona: --quote es su cita literal, --author qui\xE9n lo dijo), stream
+(trabajo continuo que suelta tareas). ${fixed ? `Es node add --kind ${fixed}.` : ""}
+--from <nodo> dice de qu\xE9 nodo naci\xF3 este (se repite); el --why que va justo despu\xE9s dice por qu\xE9. Nacer de no es
+depender: nunca bloquea. --dep s\xED es una dependencia: este nodo necesita <dep> cerrado.
+Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done (blocked lo pone dagyard block).
+--link es el detalle t\xE9cnico (URL del issue o del PR). Imprime solo el id.`
     ],
-    flags: ["title", "stage", "goal", "team", "dep", "status", "report", "link", ...GLOBAL_FLAGS],
+    flags: ["title", "stage", "goal", "team", "dep", "status", "report", "link", "from", "why", ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
       const input = {
         id: nodeId(id),
         title: required(args, "title", LIMITS.title),
-        stage: slugify(required(args, "stage")),
         deps: (args.flags.dep ?? []).flatMap((d) => d.split(",")).map((d) => d.trim()).filter(Boolean).map(nodeId)
       };
+      const kind2 = fixed ?? kindArg(args);
+      if (kind2) input.kind = kind2;
+      const stage = flag(args, "stage");
+      if (stage !== void 0) input.stage = slugify(stage);
+      const quote = optional(args, "quote", LIMITS.quote);
+      const author = optional(args, "author", LIMITS.name);
+      if (kind2 === "request" && !quote) throw new UsageError(t("a request needs --quote: the exact words of the person", "un request necesita --quote: la cita literal de la persona"));
+      if (kind2 !== "request" && (quote !== void 0 || author !== void 0)) throw new UsageError(t("--quote and --author are only for a request", "--quote y --author son solo para un request"));
+      if (quote) input.quote = quote;
+      if (author) input.quoteBy = author;
+      const origins2 = originsArg(args);
+      if (origins2.length) input.origins = origins2;
       const goal = optional(args, "goal", LIMITS.goal);
       if (goal !== void 0) input.goal = goal;
       const team = optional(args, "team", LIMITS.name);
@@ -1731,7 +1877,12 @@ Estados: pending, working, done (blocked lo pone dagyard block).
 `);
       return EXIT.ok;
     }
-  },
+  };
+}
+var COMMANDS = {
+  "node add": addNodeCommand(),
+  "goal add": addNodeCommand("goal"),
+  "request add": addNodeCommand("request"),
   "node update": {
     usage: [
       'dagyard node update <node> [--title "\u2026"] [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--status <status>] [--progress <p>] [--report <url>] [--link <url>]',
@@ -1824,15 +1975,62 @@ suma la tarea a ese equipo, y crea el equipo si todav\xEDa no existe.`
       return EXIT.ok;
     }
   },
+  "node close": {
+    usage: ['dagyard node close <node> --as done|replaced|dropped|learned [--why "\u2026"] [--by <node>] [--report <url>]', 'dagyard node close <nodo> --as done|replaced|dropped|learned [--why "\u2026"] [--by <nodo>] [--report <url>]'],
+    summary: ["closes a node with its reason: done, replaced, dropped or learned", "cierra un nodo con su motivo: lista, reemplazada, descartada o aprendimos"],
+    help: [
+      `--why says why; it is required for replaced, dropped and learned. A task closed as done needs evidence: --why
+(what got done) or --report (or the report it already had). --by is the node that replaces it (only with replaced).
+A goal or a stream never closes as done. To split a node, close it as replaced by one part and add the others with
+--from <node>; to merge two, close one as replaced by the other. Closing leaves the node in the plan, in plain sight.
+Prints only the id.`,
+      `--why dice por qu\xE9; es obligatorio para replaced, dropped y learned. Una tarea cerrada como done necesita
+evidencia: --why (qu\xE9 qued\xF3) o --report (o el informe que ya ten\xEDa). --by es el nodo que la reemplaza (solo con
+replaced). Un goal o un stream nunca se cierra como done. Para partir un nodo, ci\xE9rralo como replaced por una parte
+y agrega las dem\xE1s con --from <nodo>; para unir dos, cierra uno como replaced por el otro. Cerrar deja el nodo en el
+plan, a la vista. Imprime solo el id.`
+    ],
+    flags: ["as", "why", "by", "report", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"]]);
+      const as = required(args, "as");
+      const reasons = CLOSE_AS.join(", ");
+      if (!CLOSE_AS.includes(as)) throw new UsageError(t(`--as must be ${reasons}`, `--as debe ser ${reasons}`));
+      const input = { as };
+      const why = optional(args, "why", LIMITS.closedReason);
+      if (why) input.why = why;
+      const by = flag(args, "by");
+      if (as === "replaced" && !by) throw new UsageError(t("replaced needs --by <node>: the one that replaces it", "replaced necesita --by <nodo>: el que la reemplaza"));
+      if (as !== "replaced" && by !== void 0) throw new UsageError(t("--by is only for --as replaced", "--by es solo para --as replaced"));
+      if (by) input.by = nodeId(by);
+      if (as !== "done" && !why) throw new UsageError(t(`closing as ${as} needs --why`, `cerrar como ${as} necesita --why`));
+      const report = optional(args, "report", LIMITS.url);
+      if (report !== void 0) input.reportUrl = report;
+      await client(io, args).closeNode(project(io, args), nodeId(id), input);
+      io.stdout(`${nodeId(id)}
+`);
+      return EXIT.ok;
+    }
+  },
   "edge add": {
-    usage: ["dagyard edge add <from> <to>", "dagyard edge add <de> <a>"],
-    summary: ["adds a dependency: <to> needs <from> to be done", "agrega una dependencia: <a> necesita que <de> est\xE9 lista"],
-    help: ["The server rejects the dependency if it closes a loop.", "El servidor rechaza la arista si arma un ciclo."],
-    flags: [...GLOBAL_FLAGS],
+    usage: ['dagyard edge add <from> <to> [--kind origin --why "\u2026"]', 'dagyard edge add <de> <a> [--kind origin --why "\u2026"]'],
+    summary: ["adds a dependency: <to> needs <from> to be closed", "agrega una dependencia: <a> necesita que <de> est\xE9 cerrada"],
+    help: [
+      `With --kind origin it is not a dependency but a born-from: <to> was born from <from> (--why says why). It never
+blocks. The server rejects either kind if it closes a loop, and a dependency on a goal or a stream (they never close).`,
+      `Con --kind origin no es una dependencia sino un \xABnaci\xF3 de\xBB: <a> naci\xF3 de <de> (--why dice por qu\xE9). Nunca
+bloquea. El servidor rechaza cualquiera de las dos si arma un ciclo, y una dependencia de un goal o un stream (nunca se
+cierran).`
+    ],
+    flags: ["kind", "why", ...GLOBAL_FLAGS],
     async run({ io, args }) {
       const [from, to] = need(args, [["from", "de"], ["to", "a"]]);
-      await client(io, args).addEdge(project(io, args), nodeId(from), nodeId(to));
-      io.stdout(`${nodeId(from)} \u2192 ${nodeId(to)}
+      const kind2 = flag(args, "kind");
+      if (kind2 !== void 0 && kind2 !== "origin" && kind2 !== "requires") throw new UsageError(t("--kind must be origin (or requires)", "--kind debe ser origin (o requires)"));
+      const why = optional(args, "why", LIMITS.originWhy);
+      if (why !== void 0 && kind2 !== "origin") throw new UsageError(t("--why goes with --kind origin", "--why va con --kind origin"));
+      await client(io, args).addEdge(project(io, args), nodeId(from), nodeId(to), kind2 === "origin" ? { kind: "origin", ...why ? { why } : {} } : {});
+      io.stdout(`${nodeId(from)} ${kind2 === "origin" ? "\u21E2" : "\u2192"} ${nodeId(to)}
 `);
       return EXIT.ok;
     }
@@ -1857,22 +2055,22 @@ Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`
     bools: ["json"],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
-      const kind = required(args, "kind");
+      const kind2 = required(args, "kind");
       const kinds = BLOCKER_KINDS.join(", ");
-      if (!BLOCKER_KINDS.includes(kind)) throw new UsageError(t(`--kind must be ${kinds}`, `--kind debe ser ${kinds}`));
-      const input = { kind, question: required(args, "q", LIMITS.question) };
+      if (!BLOCKER_KINDS.includes(kind2)) throw new UsageError(t(`--kind must be ${kinds}`, `--kind debe ser ${kinds}`));
+      const input = { kind: kind2, question: required(args, "q", LIMITS.question) };
       const opts = (args.flags.opt ?? []).map((o) => o.trim()).filter(Boolean);
       for (const o of opts) {
         if (o.length > LIMITS.option) throw new UsageError(t(`each --opt is at most ${LIMITS.option} characters`, `cada --opt va hasta ${LIMITS.option} caracteres`));
       }
       if (opts.length > LIMITS.options) throw new UsageError(t(`at most ${LIMITS.options} options`, `m\xE1ximo ${LIMITS.options} opciones`));
-      if (kind === "access") {
+      if (kind2 === "access") {
         if (opts.length) throw new UsageError(t("access takes no --opt; use --label", "access no lleva --opt; usa --label"));
         input.options = [];
         input.accessLabel = required(args, "label", LIMITS.name);
       } else {
         if (flag(args, "label") !== void 0) throw new UsageError(t("--label is only for access", "--label es solo para access"));
-        if (!opts.length && kind !== "review") throw new UsageError(t("decision needs at least one --opt", "decision necesita al menos un --opt"));
+        if (!opts.length && kind2 !== "review") throw new UsageError(t("decision needs at least one --opt", "decision necesita al menos un --opt"));
         if (opts.length) input.options = opts;
       }
       const blocker = await client(io, args).openBlocker(project(io, args), nodeId(id), input);
@@ -2326,7 +2524,7 @@ async function runIn(argv, io) {
     }
     let name;
     let rest;
-    if (first === "node" || first === "edge" || first === "team") {
+    if (first === "node" || first === "edge" || first === "team" || first === "goal" || first === "request") {
       if (!second || second.startsWith("-")) {
         io.stdout(groupHelp(first));
         return second && !["--help", "-h"].includes(second) ? EXIT.usage : EXIT.ok;
@@ -2527,6 +2725,29 @@ function linkArg(args) {
     throw new UsageError(t(`--link must be an http(s) URL (the issue or PR one): \xAB${link}\xBB`, `--link debe ser una URL http(s) (la del issue o del PR): \xAB${link}\xBB`));
   }
   return link;
+}
+function kindArg(args) {
+  const k = flag(args, "kind");
+  if (k === void 0) return void 0;
+  const kinds = NODE_KINDS.join(", ");
+  if (!NODE_KINDS.includes(k)) throw new UsageError(t(`--kind must be ${kinds}`, `--kind debe ser ${kinds}`));
+  return k;
+}
+function originsArg(args) {
+  const out = [];
+  for (const [k, v] of args.seq) {
+    if (k === "from") {
+      out.push({ from: nodeId(v) });
+      continue;
+    }
+    if (k !== "why") continue;
+    const last = out[out.length - 1];
+    if (!last || last.why !== void 0) throw new UsageError(t("each --why goes right after its --from", "cada --why va justo despu\xE9s de su --from"));
+    const why = v.trim();
+    if ([...why].length > LIMITS.originWhy) throw new UsageError(t(`--why is at most ${LIMITS.originWhy} characters`, `--why va hasta ${LIMITS.originWhy} caracteres`));
+    if (why) last.why = why;
+  }
+  return out;
 }
 function statusArg(s) {
   if (s === "blocked") throw new UsageError(t("blocked is not set by hand: \xABdagyard block\xBB sets it", "blocked no se pone a mano: lo pone \xABdagyard block\xBB"));
