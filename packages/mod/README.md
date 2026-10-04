@@ -11,7 +11,8 @@ porque escribe en la misma API.
   «Darlo en el cielo» abre esa tarea con su ficha.
 - **Ver el cielo**: abre el proyecto del repo (o la tarea en la que estás trabajando).
 - **Para tomar**: lo pendiente, sin equipo y con todo lo que necesita ya listo. «Trabajar en esto» la
-  arranca y fija su `/goal` en la sesión.
+  arranca y fija su `/goal` en la sesión. Como todo lo que escribe («Hecha», «Soltarla»), pide confirmar
+  y no tiene atajo; los atajos que quedan solo miran (`s` otra, `m` ver todo, `o` el cielo).
 - **Menú** (`/dagyard` o «Ver todo»): todo lo anterior a la vez.
 - **Aviso**: cuando se abre algo nuevo que te espera, un toast en ≤20 s.
 
