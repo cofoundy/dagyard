@@ -250,6 +250,15 @@ describe('ningún camino borra un nodo (#90)', () => {
     }
   });
 
+  it('PUT: un request guardado conserva su cita si el cuerpo no la trae; si pasa a task, la pierde', async () => {
+    const pid = uniquePid('m');
+    await json(await put(pid, { name: 'P', nodes: [{ id: 'r', title: 'R', kind: 'request', quote: 'hazlo DAG', quoteBy: 'André' }] }), 200);
+    let s = await json<ProjectSnapshot>(await put(pid, { name: 'P', nodes: [{ id: 'r', title: 'R' }] }), 200);
+    expect(node(s, 'r')).toMatchObject({ kind: 'request', quote: 'hazlo DAG', quoteBy: 'André' });
+    s = await json<ProjectSnapshot>(await put(pid, { name: 'P', nodes: [{ id: 'r', title: 'R', kind: 'task' }] }), 200);
+    expect(node(s, 'r')).toMatchObject({ kind: 'task', quote: null, quoteBy: null });
+  });
+
   it('PUT que cambia etapas y deja huérfano a un nodo que no viene → 400; un «necesita» desde un goal guardado → 400', async () => {
     const pid = uniquePid('m');
     await json(await put(pid, { name: 'P', lang: 'es', nodes: [{ id: 'g', title: 'G', kind: 'goal' }, { id: 'a', title: 'A', stage: 'pruebas' }] }), 200);

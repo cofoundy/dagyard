@@ -433,11 +433,14 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     const inputs = g.nodes.map((n): NodeInput => {
       const r = preserve ? prevById.get(n.id ?? slugify(n.title)) : undefined;
       if (!r) return n;
+      const kind = n.kind ?? (r.kind as NodeKind);
+      // la cita guardada solo sigue si sigue siendo un pedido
+      const request = kind === 'request';
       return {
         ...n,
-        kind: n.kind ?? (r.kind as NodeInput['kind']),
-        ...(!('quote' in n) && { quote: (r.quote as string | null) ?? null }),
-        ...(!('quoteBy' in n) && { quoteBy: (r.quote_by as string | null) ?? null }),
+        kind,
+        ...(request && !('quote' in n) && { quote: (r.quote as string | null) ?? null }),
+        ...(request && !('quoteBy' in n) && { quoteBy: (r.quote_by as string | null) ?? null }),
       };
     });
     const nodes = inputs.map((n, i) => newNode(pid, n, stages, tx.now, `nodes[${i}].`));
