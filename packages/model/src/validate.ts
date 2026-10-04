@@ -9,6 +9,7 @@ import {
   NODE_STATUSES,
   type BlockerInput,
   type BlockerKind,
+  type IsoDate,
   type Lang,
   type MessageInput,
   type NodeInput,
@@ -22,6 +23,47 @@ import {
 import { findCycle } from './graph.js';
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; message: string };
+
+/**
+ * `PATCH /api/projects/:pid/nodes/:nid` (#75): además de `NodePatch`, `teamId` = el sitio de la fábrica que la
+ * toma (o null para soltarla). `startedAt`/`doneAt` los pone el servidor; el cliente no los escribe.
+ */
+export type NodePatchInput = NodePatch & { teamId?: string | null };
+
+/**
+ * `PUT /api/projects/:pid/teams/:tid` (#75): upsert parcial. Lo que falta no se toca; `nodeIds` reemplaza la
+ * lista entera. Las fechas llegan normalizadas a `toISOString()`, así el mismo instante escrito de otra forma
+ * no cuenta como un cambio.
+ */
+export interface TeamPatch {
+  name?: string;
+  nodeIds?: string[];
+  requestedAt?: IsoDate | null;
+  startedAt?: IsoDate | null;
+  closedAt?: IsoDate | null;
+  outcome?: string | null;
+}
+
+/** Bloqueante del cuerpo de `PUT /api/projects/:id`; `createdAt` (#75) conserva la hora real de la pregunta al recrear. */
+export type GraphBlockerInput = NonNullable<ProjectGraphInput['blockers']>[number] & { createdAt?: IsoDate };
+
+/** Cuántas tareas lista un equipo como máximo, y cuánto puede decir su `outcome` (el ledger trae frases enteras). */
+export const TEAM_LIMITS = { nodeIds: 50, outcome: LIMITS.note, perProject: LIMITS.nodesPerProject } as const;
+
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})$/;
+
+/** `2026-10-04T05:35:20Z` → `2026-10-04T05:35:20.000Z`; null si no es una fecha ISO 8601 con hora y zona. */
+export function normalizeIso(v: unknown): IsoDate | null {
+  if (typeof v !== 'string' || !ISO_RE.test(v.trim())) return null;
+  const ms = Date.parse(v.trim());
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/** «demo-viva» → «Demo viva»: el nombre de un equipo que llegó sin uno. */
+export function teamNameFromSlug(slug: string): string {
+  const s = slug.replace(/-+/g, ' ').trim();
+  return (s.charAt(0).toUpperCase() + s.slice(1)).slice(0, LIMITS.name) || slug;
+}
 
 class Invalid extends Error {}
 const fail = (message: string): never => {
@@ -106,6 +148,12 @@ function stringList(v: unknown, field: string, max: number, maxLen: number): str
   return v.map((x, i) => str(x, `${field}[${i}]`, maxLen)!);
 }
 
+function isoDate(v: unknown, field: string): IsoDate | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  return normalizeIso(v) ?? fail(`${field}: una fecha ISO 8601 con hora y zona, p. ej. 2026-10-04T05:35:20Z`);
+}
+
 function lang(v: unknown): Lang | undefined {
   if (v === undefined) return undefined;
   if (!LANGS.includes(v as Lang)) fail(`lang: uno de ${LANGS.join(', ')}`);
@@ -175,13 +223,14 @@ export function parseNodeInput(body: unknown): Parsed<NodeInput> {
   return wrap(() => nodeInput(obj(body, 'body'), ''));
 }
 
-export function parseNodePatch(body: unknown): Parsed<NodePatch> {
+export function parseNodePatch(body: unknown): Parsed<NodePatchInput> {
   return wrap(() => {
     const o = obj(body, 'body');
-    const allowed = ['stage', 'title', 'status', 'progress', 'team', 'goal', 'reportUrl', 'link'];
+    const allowed = ['stage', 'title', 'status', 'progress', 'team', 'goal', 'reportUrl', 'link', 'teamId'];
     const extra = Object.keys(o).filter((k) => !allowed.includes(k));
     if (extra.length) fail(`campos no editables: ${extra.join(', ')}`);
-    const p: NodePatch = {};
+    const p: NodePatchInput = {};
+    if (o.teamId !== undefined) p.teamId = o.teamId === null ? null : slug(o.teamId, 'teamId');
     if (o.stage !== undefined) p.stage = slug(o.stage, 'stage');
     if (o.title !== undefined) p.title = str(o.title, 'title', LIMITS.title);
     const s = status(o.status);
@@ -275,9 +324,11 @@ export function parseProjectGraphInput(body: unknown): Parsed<ProjectGraphInput>
     g.nodes = raw.map((x, i) => nodeInput(obj(x, `nodes[${i}]`), `nodes[${i}].`));
     if (o.blockers !== undefined) {
       if (!Array.isArray(o.blockers)) fail('blockers: se esperaba una lista');
-      g.blockers = (o.blockers as unknown[]).map((x, i) => {
+      g.blockers = (o.blockers as unknown[]).map((x, i): GraphBlockerInput => {
         const bo = obj(x, `blockers[${i}]`);
-        return { ...blockerInput(bo, `blockers[${i}].`), nodeId: slug(bo.nodeId, `blockers[${i}].nodeId`)! };
+        const b: GraphBlockerInput = { ...blockerInput(bo, `blockers[${i}].`), nodeId: slug(bo.nodeId, `blockers[${i}].nodeId`)! };
+        if (bo.createdAt !== undefined) b.createdAt = isoDate(bo.createdAt, `blockers[${i}].createdAt`)!;
+        return b;
       });
     }
     if (o.messages !== undefined) {
@@ -290,6 +341,32 @@ export function parseProjectGraphInput(body: unknown): Parsed<ProjectGraphInput>
     const problem = checkGraph(g);
     if (problem) fail(problem);
     return g;
+  });
+}
+
+/** `PUT /api/projects/:pid/teams/:tid` (#75): valida el upsert parcial de un equipo. `{}` vale (crea uno vacío). */
+export function parseTeamPatch(body: unknown): Parsed<TeamPatch> {
+  return wrap(() => {
+    const o = obj(body, 'body');
+    const allowed = ['name', 'nodeIds', 'requestedAt', 'startedAt', 'closedAt', 'outcome'];
+    const extra = Object.keys(o).filter((k) => !allowed.includes(k));
+    if (extra.length) fail(`campos no editables: ${extra.join(', ')}`);
+    const p: TeamPatch = {};
+    const name = str(o.name, 'name', LIMITS.name, { optional: true });
+    if (name !== undefined) p.name = name;
+    if (o.nodeIds !== undefined) {
+      if (!Array.isArray(o.nodeIds)) fail('nodeIds: se esperaba una lista');
+      const ids = (o.nodeIds as unknown[]).map((x, i) => slug(x, `nodeIds[${i}]`)!);
+      p.nodeIds = [...new Set(ids)];
+      if (p.nodeIds.length > TEAM_LIMITS.nodeIds) fail(`nodeIds: máximo ${TEAM_LIMITS.nodeIds}`);
+    }
+    for (const k of ['requestedAt', 'startedAt', 'closedAt'] as const) {
+      const d = isoDate(o[k], k);
+      if (d !== undefined) p[k] = d;
+    }
+    const outcome = nullableStr(o.outcome, 'outcome', TEAM_LIMITS.outcome);
+    if (outcome !== undefined) p.outcome = outcome;
+    return p;
   });
 }
 
