@@ -14068,6 +14068,8 @@ var ROUTES = {
    * bloqueante todavía `open` (entonces se vuelve a llamar).
    */
   wait: (projectId, blockerId) => `/api/projects/${p(projectId)}/blockers/${p(blockerId)}/wait`,
+  /** PUT: upsert parcial de un equipo de la fábrica (#75); sin cambios no emite nada. */
+  team: (projectId, teamId) => `/api/projects/${p(projectId)}/teams/${p(teamId)}`,
   /** POST: mensaje corto del agente al PM. */
   messages: (projectId, nodeId) => `/api/projects/${p(projectId)}/nodes/${p(nodeId)}/messages`
 };
@@ -14110,6 +14112,7 @@ var DagyardClient = class {
   addNode(projectId, node) {
     return this.json("POST", ROUTES.nodes(projectId), node);
   }
+  /** `teamId` (#75): el sitio que la toma; el servidor la suma a ese equipo. */
   updateNode(projectId, nodeId, patch) {
     return this.json("PATCH", ROUTES.node(projectId, nodeId), patch);
   }
@@ -14126,6 +14129,9 @@ var DagyardClient = class {
     if (res.status === 204) return null;
     const body = await res.json();
     return body.blocker.status === "resolved" ? body : null;
+  }
+  putTeam(projectId, teamId, patch) {
+    return this.json("PUT", ROUTES.team(projectId, teamId), patch);
   }
   postMessage(projectId, nodeId, input) {
     return this.json("POST", ROUTES.messages(projectId, nodeId), input);
@@ -14217,6 +14223,15 @@ var LIMITS = {
 };
 
 // ../model/dist/validate.js
+var TEAM_LIMITS = {
+  nodeIds: 50,
+  outcome: LIMITS.note,
+  perProject: LIMITS.nodesPerProject,
+  /** una fecha de equipo anterior a esta es un error de quien escribe (la fábrica es de 2026) */
+  earliest: "2020-01-01T00:00:00.000Z",
+  /** cuánto al futuro tolera una fecha de equipo (relojes desfasados), en ms */
+  future: 24 * 60 * 60 * 1e3
+};
 function slugify2(text2) {
   const s = text2.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, LIMITS.slug).replace(/-+$/g, "");
   return s || "x";

@@ -3,7 +3,7 @@
  * snapshot. La UI hace `snapshot = applyEvent(snapshot, ev)` por cada evento; si `needsRefetch`,
  * vuelve a pedir `GET /api/projects/:id`.
  */
-import type { DagEvent, ProjectSnapshot } from './types.js';
+import type { DagEvent, ProjectSnapshot, Team } from './types.js';
 
 /** Servidor → cliente. */
 export type ServerFrame =
@@ -19,6 +19,14 @@ export type ServerFrame =
 export type ClientFrame = { type: 'ping' };
 
 export const MESSAGES_IN_SNAPSHOT = 200;
+
+/**
+ * Orden de `ProjectSnapshot.teams` (#75): por `startedAt`, los que no arrancaron al final; a igualdad, como
+ * llegaron (sort estable). Devuelve una lista nueva.
+ */
+export function sortTeams(teams: readonly Team[]): Team[] {
+  return [...teams].sort((a, b) => (a.startedAt === b.startedAt ? 0 : a.startedAt === null ? 1 : b.startedAt === null ? -1 : a.startedAt < b.startedAt ? -1 : 1));
+}
 
 /** ¿Este evento exige recargar el snapshot entero? */
 export function needsRefetch(ev: DagEvent): boolean {
@@ -73,6 +81,13 @@ export function applyEvent(s: ProjectSnapshot, ev: DagEvent): ProjectSnapshot {
     case 'message.posted': {
       const m = ev.payload.message;
       if (!s.messages.some((x) => x.id === m.id)) next.messages = [...s.messages, m].slice(-MESSAGES_IN_SNAPSHOT);
+      break;
+    }
+    case 'team.updated': {
+      const t = ev.payload.team;
+      const teams = s.teams ?? [];
+      const i = teams.findIndex((x) => x.id === t.id);
+      next.teams = sortTeams(i < 0 ? [...teams, t] : teams.map((x, j) => (j === i ? t : x)));
       break;
     }
   }

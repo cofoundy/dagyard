@@ -8,6 +8,7 @@
 import {
   DEFAULT_LANG,
   REVIEW_OPTIONS,
+  TEAM_LIMITS,
   defaultStages,
   LIMITS,
   demoLang,
@@ -15,6 +16,8 @@ import {
   demoPulse,
   demoSignature,
   slugify,
+  teamDatesProblem,
+  teamNameFromSlug,
   wouldCreateCycle,
   type Blocker,
   type BlockerInput,
@@ -26,7 +29,7 @@ import {
   type Message,
   type MessageInput,
   type NodeInput,
-  type NodePatch,
+  type NodePatchInput,
   type Project,
   type ProjectGraphInput,
   type PulseState,
@@ -34,11 +37,13 @@ import {
   type Role,
   type Stage,
   type StageInput,
+  type Team,
+  type TeamPatch,
 } from '@dagyard/model';
 import { randomId } from './crypto.js';
 import type { Row } from './db.js';
 import { fail, notFound } from './http.js';
-import { toBlocker, toEdge, toNode, toProject } from './rows.js';
+import { toBlocker, toEdge, toNode, toProject, toTeam } from './rows.js';
 
 export type EventSpec = { [K in DagEventType]: { type: K; payload: Extract<DagEvent, { type: K }>['payload'] } }[DagEventType];
 
@@ -50,7 +55,7 @@ export type WriteOp =
   | { kind: 'patchProject'; pid: string; name?: string; lang?: Lang; stages?: StageInput[]; actor: Role }
   | { kind: 'deleteProject'; pid: string }
   | { kind: 'addNode'; pid: string; input: NodeInput; actor: Role }
-  | { kind: 'patchNode'; pid: string; nid: string; patch: NodePatch; actor: Role }
+  | { kind: 'patchNode'; pid: string; nid: string; patch: NodePatchInput; actor: Role }
   | { kind: 'removeNode'; pid: string; nid: string; actor: Role }
   | { kind: 'addEdge'; pid: string; from: string; to: string; actor: Role }
   | { kind: 'removeEdge'; pid: string; from: string; to: string; actor: Role }
@@ -67,6 +72,8 @@ export type WriteOp =
       sealed: string | null;
     }
   | { kind: 'postMessage'; pid: string; nid: string; input: MessageInput; actor: Role }
+  /** upsert parcial de un equipo de la fábrica (#75): sin cambios, ni escribe ni emite */
+  | { kind: 'putTeam'; pid: string; tid: string; patch: TeamPatch; actor: Role }
   /** un latido del pulso de la demo (#74): decide y aplica UN paso en la misma transacción. Solo ids demo */
   | { kind: 'demoBeat'; pid: string }
   /**
@@ -88,6 +95,7 @@ export interface WriteValues {
   openBlocker: Blocker;
   resolveBlocker: Blocker;
   postMessage: Message;
+  putTeam: Team;
   demoBeat: PulseStep;
   demoReseed: boolean;
 }
@@ -162,9 +170,10 @@ class Tx {
 
   insertNode(n: DagNode): void {
     this.all(
-      `INSERT INTO nodes (project_id, id, stage, title, status, progress, team, goal, report_url, link, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      n.projectId, n.id, n.stage, n.title, n.status, n.progress, n.team, n.goal, n.reportUrl, n.link, n.createdAt, n.updatedAt,
+      `INSERT INTO nodes (project_id, id, stage, title, status, progress, team, goal, report_url, link, started_at, done_at, team_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      n.projectId, n.id, n.stage, n.title, n.status, n.progress, n.team, n.goal, n.reportUrl, n.link,
+      n.startedAt ?? null, n.doneAt ?? null, n.teamId ?? null, n.createdAt, n.updatedAt,
     );
   }
   insertEdge(e: Edge): void {
@@ -193,18 +202,45 @@ class Tx {
       m.id, m.projectId, m.nodeId, m.from, m.text, m.reportUrl, m.createdAt,
     );
   }
-  /** Actualiza solo las columnas pedidas y devuelve el nodo tal como quedó. */
-  updateNode(pid: string, nid: string, cols: Partial<Record<'stage' | 'title' | 'status' | 'progress' | 'team' | 'goal' | 'report_url' | 'link', V>>, where = ''): DagNode | null {
+  /**
+   * Actualiza solo las columnas pedidas y devuelve el nodo tal como quedó. Si cambia `status`, aplica los tiempos
+   * del servidor (#75), por cualquier camino que llegue (PATCH, bloqueante, respuesta, pulso de la demo):
+   * `started_at` = la primera vez en `working`; `done_at` = al llegar a `done` (si ya lo estaba, se queda) y null
+   * al dejarlo. En el SET de SQLite, `status` y `done_at` del lado derecho son los valores de antes.
+   */
+  updateNode(pid: string, nid: string, cols: Partial<Record<'stage' | 'title' | 'status' | 'progress' | 'team' | 'goal' | 'report_url' | 'link' | 'team_id', V>>, where = ''): DagNode | null {
     const keys = Object.keys(cols) as Array<keyof typeof cols>;
-    const set = [...keys.map((k) => `${k} = ?`), 'updated_at = ?'].join(', ');
-    const r = this.one(
-      `UPDATE nodes SET ${set} WHERE project_id = ? AND id = ? ${where} RETURNING *`,
-      ...keys.map((k) => cols[k] as V),
-      this.now,
-      pid,
-      nid,
-    );
+    const sets = [...keys.map((k) => `${k} = ?`), 'updated_at = ?'];
+    const params: V[] = [...keys.map((k) => cols[k] as V), this.now];
+    if (cols.status !== undefined) {
+      sets.push(
+        "started_at = CASE WHEN ? = 'working' AND started_at IS NULL THEN ? ELSE started_at END",
+        "done_at = CASE WHEN ? <> 'done' THEN NULL WHEN status = 'done' AND done_at IS NOT NULL THEN done_at ELSE ? END",
+      );
+      params.push(cols.status, this.now, cols.status, this.now);
+    }
+    const r = this.one(`UPDATE nodes SET ${sets.join(', ')} WHERE project_id = ? AND id = ? ${where} RETURNING *`, ...params, pid, nid);
     return r ? toNode(r) : null;
+  }
+
+  team(pid: string, tid: string): Team | null {
+    const r = this.one('SELECT * FROM teams WHERE project_id = ? AND id = ?', pid, tid);
+    return r ? toTeam(r) : null;
+  }
+  /** Inserta o reescribe un equipo entero. */
+  saveTeam(t: Team): void {
+    this.all(
+      `INSERT INTO teams (project_id, id, name, node_ids, requested_at, started_at, closed_at, outcome, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (project_id, id) DO UPDATE SET name = excluded.name, node_ids = excluded.node_ids,
+         requested_at = excluded.requested_at, started_at = excluded.started_at, closed_at = excluded.closed_at,
+         outcome = excluded.outcome, updated_at = excluded.updated_at`,
+      t.projectId, t.id, t.name, JSON.stringify(t.nodeIds), t.requestedAt, t.startedAt, t.closedAt, t.outcome, t.updatedAt,
+    );
+  }
+  /** ¿Cabe un equipo nuevo en el proyecto? */
+  teamRoom(pid: string): boolean {
+    return Number(this.one('SELECT COUNT(*) AS n FROM teams WHERE project_id = ?', pid)!.n) < TEAM_LIMITS.perProject;
   }
   clearGraph(pid: string): void {
     for (const t of ['messages', 'blockers', 'edges', 'nodes']) this.all(`DELETE FROM ${t} WHERE project_id = ?`, pid);
@@ -241,6 +277,10 @@ function newNode(pid: string, input: NodeInput, stages: Stage[], now: string, at
     goal: input.goal ?? null,
     reportUrl: input.reportUrl ?? null,
     link: input.link ?? null,
+    // #75: una tarea que nace en marcha o lista nace con su hora; el cliente no la escribe
+    startedAt: status === 'working' ? now : null,
+    doneAt: status === 'done' ? now : null,
+    teamId: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -250,7 +290,8 @@ function newNode(pid: string, input: NodeInput, stages: Stage[], now: string, at
 const withDefaultOptions = <B extends BlockerInput>(b: B, lang: Lang): B =>
   b.kind === 'review' && !b.options?.length ? { ...b, options: [...REVIEW_OPTIONS[lang]] } : b;
 
-function newBlocker(pid: string, nodeId: string, input: BlockerInput, now: string): Blocker {
+/** `createdAt` (#75): la hora real de la pregunta que trae el cuerpo de un PUT; nunca en el futuro. */
+function newBlocker(pid: string, nodeId: string, input: BlockerInput & { createdAt?: string }, now: string): Blocker {
   return {
     id: randomId('b_'),
     projectId: pid,
@@ -263,7 +304,7 @@ function newBlocker(pid: string, nodeId: string, input: BlockerInput, now: strin
     resolution: null,
     resolvedBy: null,
     resolvedAt: null,
-    createdAt: now,
+    createdAt: input.createdAt !== undefined && input.createdAt < now ? input.createdAt : now,
   };
 }
 
@@ -356,6 +397,16 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
       // una tarea con un bloqueante abierto está bloqueada, la declare así o no
       if (blockedBy.has(node.id)) node.status = 'blocked';
     });
+    // #75: los tiempos son historia, no parte del archivo: una tarea que sigue (con el dueño o con un agente) conserva
+    // cuándo arrancó, cuándo quedó lista si sigue lista, y su equipo. Una que vuelve a `pending` no arrancó.
+    const prevTimes = new Map(tx.all('SELECT id, status, started_at, done_at, team_id FROM nodes WHERE project_id = ?', pid).map((r) => [r.id as string, r]));
+    for (const node of nodes) {
+      const p = prevTimes.get(node.id);
+      if (!p) continue;
+      node.startedAt = node.status === 'pending' ? null : ((p.started_at as string | null) ?? node.startedAt ?? null);
+      node.doneAt = node.status !== 'done' ? null : p.status === 'done' && p.done_at ? (p.done_at as string) : tx.now;
+      node.teamId = (p.team_id as string | null) ?? null;
+    }
     const edges: Edge[] = g.nodes.flatMap((n, i) => [...new Set(n.deps ?? [])].map((d) => ({ projectId: pid, from: d, to: nodes[i]!.id })));
     const project: Project = { id: pid, name: g.name, lang, stages, createdAt: prev?.createdAt ?? tx.now, updatedAt: tx.now };
     tx.all(
@@ -415,6 +466,8 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
   deleteProject(tx, { pid }) {
     tx.project(pid);
     tx.clearGraph(pid);
+    // los equipos no son parte del grafo (un PUT no los toca), pero se van con el proyecto (#75)
+    tx.all('DELETE FROM teams WHERE project_id = ?', pid);
     tx.all('DELETE FROM events WHERE project_id = ?', pid);
     // una clave del proyecto borrado no reproduce sus eventos en uno recreado con el mismo id (#71)
     tx.all('DELETE FROM idempotency WHERE project_id = ?', pid);
@@ -455,11 +508,16 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     if (patch.goal !== undefined) cols.goal = patch.goal;
     if (patch.reportUrl !== undefined) cols.report_url = patch.reportUrl;
     if (patch.link !== undefined) cols.link = patch.link;
+    if (patch.teamId !== undefined) cols.team_id = patch.teamId;
     const status = patch.status ?? prev.status;
     if (status === 'done') cols.progress = 1;
     else if (patch.status === 'working' && prev.status === 'pending') cols.progress = patch.progress ?? 0;
     const node = tx.updateNode(pid, nid, cols)!;
-    tx.emit(pid, actor, { type: 'node.updated', payload: { node } });
+    // cambiar de equipo (o soltarla) la saca del viejo; entra a la lista del nuevo, que nace con ella si no existe (#75)
+    const left = patch.teamId !== undefined && prev.teamId && prev.teamId !== patch.teamId ? leaveTeam(tx, pid, prev.teamId, nid) : null;
+    const joined = patch.teamId ? joinTeam(tx, pid, patch.teamId, nid) : null;
+    const teams = [left, joined].filter((t): t is Team => t !== null);
+    tx.emit(pid, actor, { type: 'node.updated', payload: { node } }, ...teams.map((team) => ({ type: 'team.updated' as const, payload: { team } })));
     return node;
   },
 
@@ -571,6 +629,35 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     return message;
   },
 
+  putTeam(tx, { pid, tid, patch, actor }) {
+    tx.project(pid);
+    const prev = tx.team(pid, tid);
+    if (!prev && !tx.teamRoom(pid)) fail('invalid', `teams: máximo ${TEAM_LIMITS.perProject} por proyecto`);
+    const pick = <K extends 'requestedAt' | 'startedAt' | 'closedAt' | 'outcome'>(k: K): Team[K] => (patch[k] !== undefined ? (patch[k] as Team[K]) : (prev?.[k] ?? null));
+    const team: Team = {
+      id: tid,
+      projectId: pid,
+      name: patch.name ?? prev?.name ?? teamNameFromSlug(tid),
+      nodeIds: [...(patch.nodeIds ?? prev?.nodeIds ?? [])],
+      requestedAt: pick('requestedAt'),
+      startedAt: pick('startedAt'),
+      closedAt: pick('closedAt'),
+      outcome: pick('outcome'),
+      updatedAt: tx.now,
+    };
+    // addNodeIds se suma sobre la lista vigente, leída en esta misma transacción: dos escritores no se pisan
+    for (const id of patch.addNodeIds ?? []) if (!team.nodeIds.includes(id)) team.nodeIds.push(id);
+    if (team.nodeIds.length > TEAM_LIMITS.nodeIds)
+      fail('conflict', `El equipo «${tid}» llegaría a ${team.nodeIds.length} tareas; el máximo es ${TEAM_LIMITS.nodeIds}`);
+    const problem = teamDatesProblem(team);
+    if (problem) fail('invalid', problem);
+    // idempotente: repetir el mismo upsert (p. ej. `import-ledger` otra vez) no escribe ni emite
+    if (prev && sameTeam(prev, team)) return prev;
+    tx.saveTeam(team);
+    tx.emit(pid, actor, { type: 'team.updated', payload: { team } });
+    return team;
+  },
+
   demoBeat(tx, { pid }) {
     const lang = demoLang(pid) ?? fail('forbidden', NOT_DEMO);
     tx.project(pid);
@@ -624,6 +711,45 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     return true;
   },
 };
+
+/** ¿Mismo equipo, salvo `updatedAt`? */
+function sameTeam(a: Team, b: Team): boolean {
+  return (
+    a.name === b.name &&
+    JSON.stringify(a.nodeIds) === JSON.stringify(b.nodeIds) &&
+    a.requestedAt === b.requestedAt &&
+    a.startedAt === b.startedAt &&
+    a.closedAt === b.closedAt &&
+    a.outcome === b.outcome
+  );
+}
+
+/**
+ * Suma la tarea a su equipo y devuelve el equipo si cambió (null si ya estaba). Un equipo que no existe nace aquí,
+ * arrancado ahora: el sitio empezó a trabajar sin pasar por `dagyard team start`. Si no cabe, `409` (revierte todo
+ * el PATCH): nunca se descarta en silencio.
+ */
+function joinTeam(tx: Tx, pid: string, tid: string, nid: string): Team | null {
+  const prev = tx.team(pid, tid);
+  if (prev?.nodeIds.includes(nid)) return null;
+  if (prev && prev.nodeIds.length >= TEAM_LIMITS.nodeIds)
+    fail('conflict', `El equipo «${tid}» ya lleva ${TEAM_LIMITS.nodeIds} tareas, el máximo; la tarea no cambió`);
+  if (!prev && !tx.teamRoom(pid)) fail('conflict', `El proyecto ya tiene ${TEAM_LIMITS.perProject} equipos, el máximo; la tarea no cambió`);
+  const team: Team = prev
+    ? { ...prev, nodeIds: [...prev.nodeIds, nid], updatedAt: tx.now }
+    : { id: tid, projectId: pid, name: teamNameFromSlug(tid), nodeIds: [nid], requestedAt: null, startedAt: tx.now, closedAt: null, outcome: null, updatedAt: tx.now };
+  tx.saveTeam(team);
+  return team;
+}
+
+/** Saca la tarea de un equipo; devuelve el equipo si cambió (null si no existe o no la tenía). */
+function leaveTeam(tx: Tx, pid: string, tid: string, nid: string): Team | null {
+  const prev = tx.team(pid, tid);
+  if (!prev?.nodeIds.includes(nid)) return null;
+  const team: Team = { ...prev, nodeIds: prev.nodeIds.filter((id) => id !== nid), updatedAt: tx.now };
+  tx.saveTeam(team);
+  return team;
+}
 
 /**
  * Clave de idempotencia (header `Idempotency-Key`) y huella del pedido que la trae (HMAC del método, la

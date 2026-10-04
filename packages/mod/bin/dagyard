@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
 // src/cli.ts
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { readFileSync as readFileSync3 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { basename as basename2, join as join3 } from "node:path";
 
 // src/i18n.ts
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -48,6 +51,8 @@ var ROUTES = {
    * bloqueante todavía `open` (entonces se vuelve a llamar).
    */
   wait: (projectId, blockerId) => `/api/projects/${p(projectId)}/blockers/${p(blockerId)}/wait`,
+  /** PUT: upsert parcial de un equipo de la fábrica (#75); sin cambios no emite nada. */
+  team: (projectId, teamId) => `/api/projects/${p(projectId)}/teams/${p(teamId)}`,
   /** POST: mensaje corto del agente al PM. */
   messages: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}/messages`
 };
@@ -90,6 +95,7 @@ var DagyardClient = class {
   addNode(projectId, node) {
     return this.json("POST", ROUTES.nodes(projectId), node);
   }
+  /** `teamId` (#75): el sitio que la toma; el servidor la suma a ese equipo. */
   updateNode(projectId, nodeId2, patch) {
     return this.json("PATCH", ROUTES.node(projectId, nodeId2), patch);
   }
@@ -106,6 +112,9 @@ var DagyardClient = class {
     if (res.status === 204) return null;
     const body = await res.json();
     return body.blocker.status === "resolved" ? body : null;
+  }
+  putTeam(projectId, teamId, patch) {
+    return this.json("PUT", ROUTES.team(projectId, teamId), patch);
   }
   postMessage(projectId, nodeId2, input) {
     return this.json("POST", ROUTES.messages(projectId, nodeId2), input);
@@ -439,6 +448,31 @@ function wouldCreateCycle(edges, from, to) {
 }
 
 // ../model/dist/validate.js
+var TEAM_LIMITS = {
+  nodeIds: 50,
+  outcome: LIMITS.note,
+  perProject: LIMITS.nodesPerProject,
+  /** una fecha de equipo anterior a esta es un error de quien escribe (la fábrica es de 2026) */
+  earliest: "2020-01-01T00:00:00.000Z",
+  /** cuánto al futuro tolera una fecha de equipo (relojes desfasados), en ms */
+  future: 24 * 60 * 60 * 1e3
+};
+var ISO_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-](\d{2}):?(\d{2}))$/;
+function normalizeIso(v) {
+  if (typeof v !== "string")
+    return null;
+  const m = ISO_RE.exec(v.trim());
+  if (!m)
+    return null;
+  const [y, mo, d, h, mi, se = "0", zh = "0", zm = "0"] = m.slice(1).map((x) => x ?? void 0);
+  const days = new Date(Date.UTC(Number(y), Number(mo), 0)).getUTCDate();
+  if (Number(mo) < 1 || Number(mo) > 12 || Number(d) < 1 || Number(d) > days)
+    return null;
+  if (Number(h) > 23 || Number(mi) > 59 || Number(se) > 59 || Number(zh) > 23 || Number(zm) > 59)
+    return null;
+  const ms = Date.parse(v.trim());
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
 var Invalid = class extends Error {
 };
 var fail = (message) => {
@@ -520,6 +554,13 @@ function stringList(v, field, max, maxLen) {
   if (v.length > max)
     return fail(`${field}: m\xE1ximo ${max}`);
   return v.map((x, i) => str(x, `${field}[${i}]`, maxLen));
+}
+function isoDate(v, field) {
+  if (v === void 0)
+    return void 0;
+  if (v === null)
+    return null;
+  return normalizeIso(v) ?? fail(`${field}: una fecha ISO 8601 con hora y zona, p. ej. 2026-10-04T05:35:20Z`);
 }
 function lang2(v) {
   if (v === void 0)
@@ -634,7 +675,10 @@ function parseProjectGraphInput(body) {
         fail("blockers: se esperaba una lista");
       g.blockers = o.blockers.map((x, i) => {
         const bo = obj(x, `blockers[${i}]`);
-        return { ...blockerInput(bo, `blockers[${i}].`), nodeId: slug(bo.nodeId, `blockers[${i}].nodeId`) };
+        const b = { ...blockerInput(bo, `blockers[${i}].`), nodeId: slug(bo.nodeId, `blockers[${i}].nodeId`) };
+        if (bo.createdAt !== void 0)
+          b.createdAt = isoDate(bo.createdAt, `blockers[${i}].createdAt`);
+        return b;
       });
     }
     if (o.messages !== void 0) {
@@ -688,6 +732,83 @@ var STAGE_NAMES = {
   en: DEFAULT_STAGES_BY_LANG.en.map((s) => s.name),
   es: DEFAULT_STAGES.map((s) => s.name)
 };
+
+// src/ledger.ts
+function parseLedger(text) {
+  const trimmed = text.trim();
+  let raw;
+  let invalid = 0;
+  if (trimmed.startsWith("[")) {
+    raw = JSON.parse(trimmed);
+  } else {
+    raw = [];
+    for (const line of trimmed.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        raw.push(JSON.parse(line));
+      } catch {
+        invalid++;
+      }
+    }
+  }
+  const rows = [];
+  for (const r of raw) {
+    if (legible(r)) rows.push(r);
+    else invalid++;
+  }
+  return { rows, invalid };
+}
+function legible(r) {
+  if (typeof r !== "object" || r === null || Array.isArray(r)) return false;
+  const o = r;
+  if (typeof o.site !== "string" || !o.site.trim() || o.site.trim().length > LIMITS.slug) return false;
+  if (typeof o.event !== "string" || typeof o.ts !== "string") return false;
+  if (o.issues === void 0) return true;
+  if (!Array.isArray(o.issues)) return false;
+  return o.issues.every((x) => (typeof x === "string" || typeof x === "number" && Number.isFinite(x)) && `gh-${String(x).trim()}`.length <= LIMITS.slug);
+}
+function teamsFromLedger(rows, repo) {
+  const anyRepo = rows.some((r) => typeof r.repo === "string");
+  const mine = rows.map((r, i) => ({ r, i, at: normalizeIso(r.ts) })).filter(({ r, at }) => at !== null && (anyRepo ? r.repo === repo : true)).sort((a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : a.i - b.i);
+  const skipped = rows.length - mine.length;
+  const byId = /* @__PURE__ */ new Map();
+  for (const { r, at } of mine) {
+    const id = isSlug(r.site) ? r.site : slugify(r.site);
+    let t2 = byId.get(id);
+    if (!t2) byId.set(id, t2 = { id, nodeIds: [], requestedAt: null, startedAt: null, closedAt: null, outcome: null });
+    const reopen = () => {
+      t2.closedAt = null;
+      t2.outcome = null;
+    };
+    if (r.event === "requested") {
+      t2.requestedAt ??= at;
+      if (t2.closedAt) reopen();
+      for (const issue of r.issues ?? []) {
+        const n = String(issue).trim().replace(/^#/, "");
+        const nid = `gh-${n}`;
+        if (/^\d+$/.test(n) && !t2.nodeIds.includes(nid) && t2.nodeIds.length < TEAM_LIMITS.nodeIds) t2.nodeIds.push(nid);
+      }
+    } else if (r.event === "started") {
+      t2.startedAt ??= at;
+      if (t2.closedAt) reopen();
+    } else if (r.event === "closed") {
+      t2.closedAt = at;
+      const outcome = typeof r.outcome === "string" ? r.outcome.trim() : "";
+      t2.outcome = outcome ? [...outcome].slice(0, TEAM_LIMITS.outcome).join("") : null;
+    }
+  }
+  const teams = [...byId.values()];
+  const key = (t2) => t2.startedAt ?? t2.requestedAt ?? "";
+  teams.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
+  return { teams, skipped };
+}
+function teamPatchFromLedger(l, current2) {
+  const patch = {};
+  const extra2 = l.nodeIds.filter((id) => !current2?.nodeIds.includes(id));
+  if (extra2.length) patch.addNodeIds = extra2;
+  for (const k of ["requestedAt", "startedAt", "closedAt", "outcome"]) if (l[k] !== null && l[k] !== current2?.[k]) patch[k] = l[k];
+  return current2 && !Object.keys(patch).length ? null : patch;
+}
 
 // src/tasks/import.ts
 import { readdirSync, readFileSync as readFileSync2 } from "node:fs";
@@ -1649,15 +1770,22 @@ Estados: pending, working, done (blocked lo pone dagyard block).
     }
   },
   "node start": {
-    usage: ['dagyard node start <node> [--team "\u2026"]', 'dagyard node start <nodo> [--team "\u2026"]'],
+    usage: ['dagyard node start <node> [--team "\u2026"] [--site <site>]', 'dagyard node start <nodo> [--team "\u2026"] [--site <sitio>]'],
     summary: ["marks a task In progress", "marca una tarea En progreso"],
-    help: ["Shortcut: dagyard start <node>.", "Atajo: dagyard start <nodo>."],
-    flags: ["team", ...GLOBAL_FLAGS],
+    help: [
+      `Shortcut: dagyard start <node>. --site (or $COFOUNDY_AGENT) is the factory site that takes it: the server
+adds the task to that team, and creates the team if it does not exist yet.`,
+      `Atajo: dagyard start <nodo>. --site (o $COFOUNDY_AGENT) es el sitio de la f\xE1brica que la toma: el servidor
+suma la tarea a ese equipo, y crea el equipo si todav\xEDa no existe.`
+    ],
+    flags: ["team", "site", ...GLOBAL_FLAGS],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
       const patch = { status: "working" };
       const team = optional(args, "team", LIMITS.name);
       if (team !== void 0) patch.team = team;
+      const site = optional(args, "site") || io.env.COFOUNDY_AGENT?.trim();
+      if (site) patch.teamId = siteId(site);
       await client(io, args).updateNode(project(io, args), nodeId(id), patch);
       io.stdout(`${nodeId(id)}
 `);
@@ -1989,6 +2117,142 @@ caracteres solo avisan.
       return EXIT.ok;
     }
   },
+  "team start": {
+    usage: [
+      'dagyard team start <site> [--name "\u2026"] [--issues 45,46] [--at <iso date>]',
+      'dagyard team start <sitio> [--name "\u2026"] [--issues 45,46] [--at <fecha iso>]'
+    ],
+    summary: ["a factory site starts: its team appears on the timeline", "arranca un sitio de la f\xE1brica: su equipo aparece en la l\xEDnea de tiempo"],
+    help: [
+      `<site> is the site's slug (the one in the factory ledger). --name is its human name (\xABTimeline\xBB); without it
+the server derives one from the slug. --issues adds gh-<n> tasks to the team (repeat it or use commas).
+The start time is now (or --at); starting it again keeps the first one and reopens it if it was closed.`,
+      `<sitio> es el slug del sitio (el del ledger de la f\xE1brica). --name es su nombre humano (\xABTiempo\xBB); sin \xE9l
+el servidor lo saca del slug. --issues suma tareas gh-<n> al equipo (se repite o va con comas).
+La hora de arranque es ahora (o --at); volver a arrancarlo conserva la primera y lo reabre si estaba cerrado.`
+    ],
+    flags: ["name", "issues", "at", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [raw] = need(args, [["site", "sitio"]]);
+      const tid = siteId(raw);
+      const proj = project(io, args);
+      const api = client(io, args);
+      const at = atArg(args);
+      const issues = issuesArg(args);
+      const current2 = await currentTeam(api, proj, tid);
+      const patch = {};
+      const name = optional(args, "name", LIMITS.name);
+      if (name) patch.name = name;
+      const add = issues.filter((nid) => !current2?.nodeIds.includes(nid));
+      if (add.length) patch.addNodeIds = add;
+      if (at || !current2?.startedAt) patch.startedAt = at ?? (/* @__PURE__ */ new Date()).toISOString();
+      if (current2?.closedAt) {
+        patch.closedAt = null;
+        patch.outcome = null;
+      }
+      const team = await api.putTeam(proj, tid, patch);
+      io.stdout(`${team?.id ?? tid}
+`);
+      return EXIT.ok;
+    }
+  },
+  "team close": {
+    usage: [
+      "dagyard team close <site> --outcome <merged|pr-open|stopped> [--at <iso date>]",
+      "dagyard team close <sitio> --outcome <merged|pr-open|stopped> [--at <fecha iso>]"
+    ],
+    summary: ["a factory site closes, with how it ended", "cierra un sitio de la f\xE1brica, con c\xF3mo termin\xF3"],
+    help: [
+      `--outcome is how it ended: merged, pr-open or stopped (or a short note). The close time is now (or --at);
+closing it again with the same outcome changes nothing.`,
+      `--outcome es c\xF3mo termin\xF3: merged, pr-open o stopped (o una nota corta). La hora de cierre es ahora (o --at);
+volver a cerrarlo con el mismo desenlace no cambia nada.`
+    ],
+    flags: ["outcome", "at", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [raw] = need(args, [["site", "sitio"]]);
+      const tid = siteId(raw);
+      const outcome = required(args, "outcome", TEAM_LIMITS.outcome);
+      const at = atArg(args);
+      const proj = project(io, args);
+      const api = client(io, args);
+      const current2 = await currentTeam(api, proj, tid);
+      const patch = { outcome };
+      if (at) patch.closedAt = at;
+      else if (!(current2?.closedAt && current2.outcome === outcome)) patch.closedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const team = await api.putTeam(proj, tid, patch);
+      io.stdout(`${team?.id ?? tid}
+`);
+      return EXIT.ok;
+    }
+  },
+  "import-ledger": {
+    usage: [
+      "dagyard import-ledger [<sites.jsonl>] [--repo <repo>] [--dry-run] [--json]",
+      "dagyard import-ledger [<sites.jsonl>] [--repo <repo>] [--dry-run] [--json]"
+    ],
+    summary: ["brings the factory's history in as teams, with its dates", "trae la historia de la f\xE1brica como equipos, con sus fechas"],
+    help: [
+      `By default it reads ~/cofoundy/.coordination/factory/sites.jsonl (JSONL, or a JSON array) and keeps the rows of
+--repo (by default the repo of the current folder, from its origin remote). Each site becomes a team: requested,
+started and closed with the site's own dates, its issues as gh-<n> tasks. The ledger wins on the dates it knows and
+never erases what it does not know. Idempotent: running it again sends nothing. --dry-run reads but writes nothing.`,
+      `Por defecto lee ~/cofoundy/.coordination/factory/sites.jsonl (JSONL, o un array JSON) y se queda con las filas de
+--repo (por defecto el repo de la carpeta actual, por su remoto origin). Cada sitio es un equipo: pedido, arrancado
+y cerrado con las fechas del sitio, sus issues como tareas gh-<n>. El ledger manda en las fechas que conoce y nunca
+borra lo que no conoce. Idempotente: correrlo otra vez no manda nada. --dry-run lee pero no escribe nada.`
+    ],
+    flags: ["repo", ...GLOBAL_FLAGS],
+    bools: ["dry-run", "json"],
+    async run({ io, args }) {
+      if (args.positionals.length > 1) throw new UsageError(extra(args.positionals[1]));
+      const file = args.positionals[0] ?? join3(io.env.HOME || homedir2(), "cofoundy", ".coordination", "factory", "sites.jsonl");
+      let parsed;
+      try {
+        parsed = parseLedger(readFileSync3(file, "utf8"));
+      } catch (err) {
+        const why = err instanceof Error ? err.message : String(err);
+        throw new UsageError(t(`could not read the ledger ${file}: ${why}`, `no pude leer el ledger ${file}: ${why}`));
+      }
+      const needsRepo = parsed.rows.some((r) => typeof r.repo === "string");
+      const repo = optional(args, "repo") || (needsRepo ? repoOf(io.cwd ?? process.cwd()) : null);
+      if (needsRepo && !repo) {
+        throw new UsageError(t("missing --repo: I could not tell the repo of the current folder", "falta --repo: no pude saber el repo de la carpeta actual"));
+      }
+      const { teams, skipped } = teamsFromLedger(parsed.rows, repo);
+      const proj = project(io, args);
+      const api = client(io, args);
+      const snap = await api.snapshot(proj);
+      const current2 = new Map((snap.teams ?? []).map((tm) => [tm.id, tm]));
+      const plan = teams.map((l) => {
+        const patch = teamPatchFromLedger(l, current2.get(l.id));
+        const isNew = !current2.has(l.id);
+        const name = isNew ? nameFromTasks(l, snap.nodes) : void 0;
+        if (patch && name) patch.name = name;
+        const action = isNew ? "created" : patch ? "updated" : "unchanged";
+        return { id: l.id, action, patch };
+      });
+      const dry = args.bools.has("dry-run");
+      if (!dry)
+        for (const p2 of plan) {
+          if (!p2.patch) continue;
+          try {
+            await api.putTeam(proj, p2.id, p2.patch);
+          } catch (err) {
+            if (!(err instanceof ApiRequestError)) throw err;
+            p2.action = "failed";
+            p2.error = `${err.code}: ${err.message}`;
+          }
+        }
+      const report = { file, repo, project: proj, dryRun: dry, skipped, invalid: parsed.invalid, teams: plan };
+      io.stdout(args.bools.has("json") ? `${JSON.stringify(report, null, 2)}
+` : formatLedger(report));
+      const failed = plan.filter((p2) => p2.action === "failed");
+      for (const p2 of failed) io.stderr(`dagyard: ${p2.id}: ${p2.error}
+`);
+      return failed.length ? EXIT.api : EXIT.ok;
+    }
+  },
   sync: {
     usage: [
       "dagyard sync --github <owner/repo> [--label <l>] [--stage <stage>] [--all] [--dry-run] [--json]",
@@ -2062,7 +2326,7 @@ async function runIn(argv, io) {
     }
     let name;
     let rest;
-    if (first === "node" || first === "edge") {
+    if (first === "node" || first === "edge" || first === "team") {
       if (!second || second.startsWith("-")) {
         io.stdout(groupHelp(first));
         return second && !["--help", "-h"].includes(second) ? EXIT.usage : EXIT.ok;
@@ -2165,6 +2429,72 @@ function need(args, names) {
   }
   if (names.length === 0 && args.positionals.length) throw new UsageError(extra(args.positionals[0]));
   return args.positionals;
+}
+function siteId(raw) {
+  const v = raw.trim();
+  if (isSlug(v)) return v;
+  if (!/[a-z0-9]/i.test(raw.normalize("NFD"))) throw new UsageError(t(`\xAB${raw}\xBB is not a usable site id`, `\xAB${raw}\xBB no sirve como id de sitio`));
+  return slugify(raw.trim());
+}
+function atArg(args) {
+  const raw = optional(args, "at");
+  if (raw === void 0) return void 0;
+  const at = normalizeIso(raw);
+  if (!at) throw new UsageError(t(`--at is an ISO 8601 date with time and zone (2026-10-04T05:35:20Z): \xAB${raw}\xBB`, `--at va como fecha ISO 8601 con hora y zona (2026-10-04T05:35:20Z): \xAB${raw}\xBB`));
+  return at;
+}
+function issuesArg(args) {
+  const out = [];
+  for (const part of (args.flags.issues ?? []).flatMap((v) => v.split(","))) {
+    const n = part.trim().replace(/^(?:gh-|#)/i, "");
+    if (!n) continue;
+    if (!/^\d+$/.test(n)) throw new UsageError(t(`--issues takes issue numbers: \xAB${part.trim()}\xBB`, `--issues lleva n\xFAmeros de issue: \xAB${part.trim()}\xBB`));
+    if (!out.includes(`gh-${n}`)) out.push(`gh-${n}`);
+  }
+  return out;
+}
+async function currentTeam(api, proj, tid) {
+  return (await api.snapshot(proj)).teams?.find((tm) => tm.id === tid);
+}
+function repoOf(cwd) {
+  const git = (...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  try {
+    const m = /([^/:]+?)(?:\.git)?\/?$/.exec(git("remote", "get-url", "origin"));
+    if (m) return m[1];
+  } catch {
+  }
+  try {
+    return basename2(git("rev-parse", "--show-toplevel")) || null;
+  } catch {
+    return null;
+  }
+}
+function nameFromTasks(l, nodes) {
+  for (const id of l.nodeIds) {
+    const team = nodes.find((n) => n.id === id)?.team?.trim();
+    if (team && !/^(f[áa]brica|factory)$/i.test(team)) return team;
+  }
+  return void 0;
+}
+function formatLedger(r) {
+  const count = (a) => r.teams.filter((x) => x.action === a).length;
+  const head = r.dryRun ? t("(dry run, nothing sent) ", "(simulaci\xF3n, no envi\xE9 nada) ") : "";
+  const of = r.repo ? t(` of ${r.repo}`, ` de ${r.repo}`) : "";
+  const lines = [
+    head + t(
+      `${plural(r.teams.length, ["team", "teams"], ["equipo", "equipos"])} in the ledger${of} \u2192 ${r.project}: ${count("created")} new, ${count("updated")} updated, ${count("unchanged")} unchanged`,
+      `${plural(r.teams.length, ["team", "teams"], ["equipo", "equipos"])} en el ledger${of} \u2192 ${r.project}: ${count("created")} nuevos, ${count("updated")} actualizados, ${count("unchanged")} sin cambios`
+    )
+  ];
+  for (const x of r.teams) {
+    if (x.action === "created") lines.push(`  + ${x.id}${x.patch?.name ? ` \xAB${x.patch.name}\xBB` : ""}`);
+    else if (x.action === "updated") lines.push(`  ~ ${x.id} (${Object.keys(x.patch ?? {}).join(", ")})`);
+  }
+  for (const x of r.teams) if (x.action === "failed") lines.push(`  ! ${x.id}`);
+  if (count("failed")) lines.push(t(`  ${count("failed")} rejected by the server (see stderr)`, `  ${count("failed")} rechazados por el servidor (mira stderr)`));
+  if (r.invalid) lines.push(t(`  ${r.invalid} unreadable rows skipped`, `  ${r.invalid} filas ilegibles ignoradas`));
+  return `${lines.join("\n")}
+`;
 }
 function extra(arg) {
   return t(`unexpected \xAB${arg}\xBB`, `sobra \xAB${arg}\xBB`);

@@ -120,7 +120,7 @@ conserva el suyo. Un proyecto guardado antes del campo (`dagyard`, las demos sem
 (la demo inglesa, `en`) y nadie lo reescribe: cambia solo si un POST, PUT o PATCH manda `lang`. El idioma
 cambia los nombres de las etapas por defecto, nunca sus ids.
 
-`ProjectSnapshot` = `{ project, nodes, edges, blockers, messages, seq }`: nodos, aristas y bloqueantes
+`ProjectSnapshot` = `{ project, nodes, edges, blockers, messages, teams, seq }`: nodos, aristas y bloqueantes
 completos (abiertos y resueltos, sin valores de acceso), los últimos 200 mensajes en orden cronológico y
 el `seq` del último evento. Con ese `seq` la UI abre el WebSocket.
 
@@ -160,7 +160,7 @@ a igualdad, el más antiguo (`nextStartable()` del modelo). `goalLine` es `/goal
 | Método y ruta | Body | Respuesta |
 |---|---|---|
 | `POST /api/projects/:pid/nodes` | `NodeInput` (`stage`, `title`, `id?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `deps?`) | `201 DagNode`. Emite `node.added` + un `edge.added` por cada dep |
-| `PATCH /api/projects/:pid/nodes/:nid` | `NodePatch` (`stage?`, `title?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`) | `200 DagNode`. Emite `node.updated` |
+| `PATCH /api/projects/:pid/nodes/:nid` | `NodePatch` (`stage?`, `title?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `teamId?`) | `200 DagNode`. Emite `node.updated`. Un `teamId` de un equipo que no existe lo crea (arrancado ahora, nombre desde el slug) |
 | `DELETE /api/projects/:pid/nodes/:nid` | — | `204`. Borra sus aristas, bloqueantes y mensajes. `409` si quien llama es `agent` y el nodo tiene ≥1 bloqueante (abierto o resuelto). Emite `node.removed` |
 | `POST /api/projects/:pid/edges` | `{"from", "to"}` | `201 Edge`; `400 cycle` si cierra un ciclo; `409` si ya existe. Emite `edge.added` |
 | `DELETE /api/projects/:pid/edges?from=<id>&to=<id>` | — | `204`. Emite `edge.removed` |
@@ -176,8 +176,24 @@ Reglas del servidor al escribir un nodo:
   salvo que mandes otro.
 - `status: "blocked"` no se pone a mano: lo pone abrir un bloqueante. Un `PATCH` con `blocked` → `400`.
   Mientras haya un bloqueante abierto, un `PATCH` de `status` → `409`.
+- `startedAt` y `doneAt` los pone el servidor, nunca el cliente (#75): `startedAt` la primera vez que la
+  tarea pasa a `working` (vuelve a `null` si regresa a `pending`), `doneAt` al pasar a `done` (se limpia si
+  deja de estarlo). El `PUT` del grafo los conserva, junto con `teamId`, en las tareas que siguen.
 - El CLI mapea `start` → `PATCH {"status": "working"}`, `progress <n>` → `PATCH {"progress": n}` y
   `done` → `PATCH {"status": "done"}`.
+
+### Equipos de la fábrica (#75)
+
+| Método y ruta | Body | Respuesta |
+|---|---|---|
+| `PUT /api/projects/:pid/teams/:tid` | `TeamPatch` (`name?`, `nodeIds?`, `requestedAt?`, `startedAt?`, `closedAt?`, `outcome?`) | `200 Team`. Upsert parcial de un sitio de `/factory`; `tid` = slug (minúsculas, números y guiones, máx. 64). Las fechas son las del sitio, no las de la escritura, para poder traer la historia después (`dagyard import-ledger`). Sin cambios no escribe ni emite nada (idempotente); si cambia algo, emite `team.updated` |
+
+Un equipo es lo que la vista en el tiempo dibuja como un carril. El CLI: `dagyard team start <sitio> --name
+<Nombre> [--issues 45,46]`, `dagyard team close <sitio> --outcome merged|pr-open|stopped`, `dagyard start
+gh-<n>` (manda `teamId` = `$COFOUNDY_AGENT` o `--site`) y `dagyard import-ledger [<sites.jsonl>]`.
+
+En el `PUT` del grafo, cada bloqueante del body acepta `createdAt` opcional (una fecha futura queda en
+ahora): así recrear un proyecto no pierde la hora real de sus preguntas.
 
 ### Bloqueantes
 

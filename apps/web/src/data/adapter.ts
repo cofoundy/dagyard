@@ -152,6 +152,7 @@ export function toEvent(e: WireEvent): DagEvent | null {
       return { seq: e.seq, type: 'message.posted', message: toMessage(e.payload.message) };
     case 'project.replaced':
     case 'project.updated':
+    case 'team.updated': // #75: hasta que la UI tenga equipos, recarga el snapshot
       return null;
   }
 }
