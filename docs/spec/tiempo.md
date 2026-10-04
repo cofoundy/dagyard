@@ -5,7 +5,12 @@
 > desplegando, also no se xq siempre lo pones como matriz». Diseño: `design/tiempo/handoff.md`
 > (prototipos A, B y C; la elección de André queda en el bloqueante de `gh-75`).
 
-## Qué ve el PM
+> **Estado (2026-10-04 18:30 -05).** Entra a `main` solo la base: equipos, tiempos por tarea e
+> `import-ledger`. La vista «Timeline» de abajo **quedó descartada**: André rechazó los prototipos A, B y C
+> (`design/tiempo/`) y pidió una sola vista, el DAG que crece en el tiempo (intención §1 Mensajes 10 y 11,
+> D12). Su modelo lo define `docs/spec/modelo.md` (#90) y la vista sigue en #75 sobre esa base.
+
+## Qué ve el PM (descartado, se conserva como registro)
 
 Además de la vista por etapas («Plan»), el proyecto tiene una vista **Timeline**: el día de la fábrica
 en el tiempo. Cada equipo (un sitio de `/factory`) aparece a la hora en que arrancó, con las tareas que
@@ -46,7 +51,7 @@ Dagyard (`/?p=<proyecto>&v=timeline`), ya no `harvest.py` → Basalt.
   `~/cofoundy/.coordination/factory/sites.jsonl`, repo = el del cwd) como equipos con sus fechas;
   `issues: ["75"]` → `nodeIds: ["gh-75"]`. Idempotente: correrlo dos veces no emite eventos la segunda.
 
-## Web
+## Web (descartado: lo reemplaza la vista del DAG)
 
 La variante elegida en `gh-75` (por defecto A, «Team lanes»), portada desde `design/tiempo/` según su
 `handoff.md`: el modelo puro `apps/web/src/data/timeline.ts` (desde `shared/timeline.js`), la escena de
