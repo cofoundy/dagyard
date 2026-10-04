@@ -1,0 +1,691 @@
+{
+ "stages": [
+  {
+   "id": "para-empezar",
+   "name": "Para empezar"
+  },
+  {
+   "id": "despues",
+   "name": "Después"
+  },
+  {
+   "id": "luego",
+   "name": "Luego"
+  },
+  {
+   "id": "al-final",
+   "name": "Al final"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "l1",
+   "stage": "para-empezar",
+   "title": "Shared-cart backend",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "l2",
+   "stage": "para-empezar",
+   "title": "Drawer-style preferences modal + account migration",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "l3",
+   "stage": "despues",
+   "title": "Store switcher dropdown + navbar kill",
+   "status": "pending",
+   "deps": [
+    "l1",
+    "l2"
+   ]
+  },
+  {
+   "id": "t-297",
+   "stage": "para-empezar",
+   "title": "Enterrar el checkout de 3 pasos",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-314-a",
+   "stage": "para-empezar",
+   "title": "La rama reservar-vs-pagar, en el canal que llega a todo cliente",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-314-b",
+   "stage": "para-empezar",
+   "title": "La guía de envíos: el criterio completo, con ejemplos",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-314-c",
+   "stage": "para-empezar",
+   "title": "Sembrar la tienda demo, por API real",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-440",
+   "stage": "para-empezar",
+   "title": "El emisor de eventos de pedido",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-441-1",
+   "stage": "para-empezar",
+   "title": "Avisos base",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-441-2",
+   "stage": "para-empezar",
+   "title": "Suite falsificable + tareas programadas",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-458",
+   "stage": "para-empezar",
+   "title": "Costo por tienda y por repartidor",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-460a",
+   "stage": "para-empezar",
+   "title": "Discriminador red-vs-código + reintento acotado",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-460b",
+   "stage": "para-empezar",
+   "title": "Aviso de catálogo↔vitrina",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-460c",
+   "stage": "despues",
+   "title": "Zona C: la prueba distingue roto-de-verdad, y el rollback se gana",
+   "status": "pending",
+   "deps": [
+    "t-460a"
+   ]
+  },
+  {
+   "id": "t-467",
+   "stage": "para-empezar",
+   "title": "stock_check_failed dice cuál producto fue",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-476",
+   "stage": "para-empezar",
+   "title": "ProductCard como contexto de variantes abiertas",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-477",
+   "stage": "para-empezar",
+   "title": "Un --strict que reprueba se tiene que notar",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-495",
+   "stage": "despues",
+   "title": "Mercadito sync --prune: borrar del catálogo lo que no está en el ERP",
+   "status": "pending",
+   "deps": [
+    "t-499"
+   ]
+  },
+  {
+   "id": "t-496",
+   "stage": "para-empezar",
+   "title": "El control de stock del almacén pasa a lotes, y el aviso de error dice la verdad hoy",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-499",
+   "stage": "para-empezar",
+   "title": "La sonda: un cambio de precios deja de ser invisible en la vitrina",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-501",
+   "stage": "para-empezar",
+   "title": "Mercadito coupons revoke code no revoca nada — un slice de más, en silencio y con exit 0",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-505",
+   "stage": "para-empezar",
+   "title": "Checkout afirma 'pago completo' sobre un cobro sin envío — cierra la brecha entre lo que dice y lo que cobra",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-506",
+   "stage": "para-empezar",
+   "title": "La plantilla de 'mercadito init' fija mercadito-cli@^0.6.0 — en 0.x eso resuelve a 0.6.0 exacto",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-508",
+   "stage": "para-empezar",
+   "title": "Mover: las ofertas siguen al producto — el cambio va por el único escritor, nunca crudo",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-509",
+   "stage": "para-empezar",
+   "title": "Fast-follow: restore product-page image caching after the redesign",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-512",
+   "stage": "para-empezar",
+   "title": "Cross-store move must not drop the wholesale price floor",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-515",
+   "stage": "despues",
+   "title": "API move_product must check the destination",
+   "status": "pending",
+   "deps": [
+    "t-512"
+   ]
+  },
+  {
+   "id": "t-518",
+   "stage": "para-empezar",
+   "title": "Mercadito login --wait exit-code contract",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-528",
+   "stage": "para-empezar",
+   "title": "El checkout real deja de comerse los avisos de stock",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-530",
+   "stage": "para-empezar",
+   "title": "El control de entregas deja de cobrarle el retraso a quien no lo causó",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-539",
+   "stage": "para-empezar",
+   "title": "Un 404 al borrar es el objetivo cumplido, no un fallo",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-544",
+   "stage": "para-empezar",
+   "title": "El control de entregas, honesto sobre el empaque",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-572",
+   "stage": "para-empezar",
+   "title": "El buscador rechaza la negación en vez de contestar mal",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-575",
+   "stage": "para-empezar",
+   "title": "El alcance de los descuentos se compara contra la caja real, no se comenta",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-592",
+   "stage": "para-empezar",
+   "title": "La plantilla de recibo llega al canal por el que una tienda escribe sus notas",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-599",
+   "stage": "despues",
+   "title": "El cliente puede dejar una nota en su pedido",
+   "status": "pending",
+   "deps": [
+    "t-600"
+   ]
+  },
+  {
+   "id": "t-600",
+   "stage": "para-empezar",
+   "title": "El carrito deja de ofrecer un cupón que ya se usó",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-601",
+   "stage": "para-empezar",
+   "title": "Los reembolsos se revisan con el mismo criterio que los otros dos canales",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-606-instrument",
+   "stage": "para-empezar",
+   "title": "El instrumento falsificable de M1 + M2, rojo por construcción",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-606-m1",
+   "stage": "despues",
+   "title": "El control de precios negativos corre en el core, que es el único escritor",
+   "status": "pending",
+   "deps": [
+    "t-606-instrument"
+   ]
+  },
+  {
+   "id": "t-606-m2",
+   "stage": "despues",
+   "title": "upload?type=photo escribe al catálogo y su \"revisión\" es el tamaño",
+   "status": "pending",
+   "deps": [
+    "t-606-instrument"
+   ]
+  },
+  {
+   "id": "t-616",
+   "stage": "para-empezar",
+   "title": "La limpieza de carritos decide por fecha, no estado",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-617",
+   "stage": "para-empezar",
+   "title": "Determinismo por día: aislar el cierre de caja por sucursal",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-624",
+   "stage": "para-empezar",
+   "title": "El generador de cupones deja de escribir un archivo versionado del árbol",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-625",
+   "stage": "despues",
+   "title": "Las pruebas dejan de destruir un pedido de ejemplo",
+   "status": "pending",
+   "deps": [
+    "t-627"
+   ]
+  },
+  {
+   "id": "t-627",
+   "stage": "para-empezar",
+   "title": "La prueba de envíos deja de usar una dirección fija de ejemplo",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-630",
+   "stage": "despues",
+   "title": "Reconciliar la lista de monedas, aplicarla en el checkout, y cerrar el caso",
+   "status": "pending",
+   "deps": [
+    "t-637"
+   ]
+  },
+  {
+   "id": "t-635",
+   "stage": "para-empezar",
+   "title": "Las etiquetas dejan de mostrar precios crudos: formato derivado por moneda",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-637",
+   "stage": "para-empezar",
+   "title": "validatePostalCode deja de aceptar un código con letras raras",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-640",
+   "stage": "para-empezar",
+   "title": "El generador deja de cosechar prosa",
+   "status": "done",
+   "deps": []
+  },
+  {
+   "id": "t-641",
+   "stage": "despues",
+   "title": "Los --tax-* salen del sugeridor, y el desempate se escribe",
+   "status": "done",
+   "deps": [
+    "t-640"
+   ]
+  },
+  {
+   "id": "t-646",
+   "stage": "para-empezar",
+   "title": "The price decider becomes derived",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-647",
+   "stage": "despues",
+   "title": "The discount scope: measure, then instrument",
+   "status": "pending",
+   "deps": [
+    "t-646"
+   ]
+  },
+  {
+   "id": "t-650",
+   "stage": "despues",
+   "title": "Declare the size-precedence tiebreak suggestSize has been deciding by file order",
+   "status": "pending",
+   "deps": [
+    "t-652"
+   ]
+  },
+  {
+   "id": "t-652",
+   "stage": "para-empezar",
+   "title": "Declare the --shelf-* vocabulary the style guide prescribes",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-653",
+   "stage": "para-empezar",
+   "title": "Mostrar el stock exacto solo a quien inició sesión",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-657",
+   "stage": "para-empezar",
+   "title": "El resto del inventario: medir las mermas del almacén antes de tocar nada",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-659",
+   "stage": "para-empezar",
+   "title": "El conteo de ventas, verificado en los dos lugares que cierran la caja",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-662",
+   "stage": "para-empezar",
+   "title": "El orden de categorías deja de ser una lista escrita a mano",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-665",
+   "stage": "para-empezar",
+   "title": "La reserva de stock del carrito es condicional",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-666",
+   "stage": "para-empezar",
+   "title": "El conteo de variantes por talla es una cota inferior estructural",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-674",
+   "stage": "para-empezar",
+   "title": "La premisa está refutada; lo que queda vivo es el instrumento",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-684",
+   "stage": "para-empezar",
+   "title": "La revisión visual pasa a ocurrir en el PR, contra la tienda de pruebas",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-701",
+   "stage": "para-empezar",
+   "title": "Store-level shipping zones",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-702",
+   "stage": "para-empezar",
+   "title": "Create store",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-703",
+   "stage": "para-empezar",
+   "title": "Seed starter catalog statements",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-704",
+   "stage": "despues",
+   "title": "Onboard if first visit + personal store id for",
+   "status": "pending",
+   "deps": [
+    "t-702",
+    "t-703"
+   ]
+  },
+  {
+   "id": "t-705",
+   "stage": "luego",
+   "title": "First-visit wiring — welcome screen + catalog layout backstop",
+   "status": "pending",
+   "deps": [
+    "t-704"
+   ]
+  },
+  {
+   "id": "t-706",
+   "stage": "despues",
+   "title": "Crear, cambiar, pausar y listar",
+   "status": "pending",
+   "deps": [
+    "t-701"
+   ]
+  },
+  {
+   "id": "t-707",
+   "stage": "luego",
+   "title": "Shipping routes + DTOs + client fns",
+   "status": "pending",
+   "deps": [
+    "t-706"
+   ]
+  },
+  {
+   "id": "t-708",
+   "stage": "al-final",
+   "title": "Shipping UI — zones page + ZonesPanel + nav tab + one-time delivery preview",
+   "status": "pending",
+   "deps": [
+    "t-707"
+   ]
+  },
+  {
+   "id": "t-709",
+   "stage": "luego",
+   "title": "Store first-run reflection of the seeded catalog",
+   "status": "pending",
+   "deps": [
+    "t-704"
+   ]
+  },
+  {
+   "id": "t-710",
+   "stage": "al-final",
+   "title": "Live verify — courier self-signup zone-binding + address_verified decision",
+   "status": "pending",
+   "deps": [
+    "t-705"
+   ]
+  },
+  {
+   "id": "t-801",
+   "stage": "para-empezar",
+   "title": "Ordenar el catálogo por tienda + búsqueda por barrio",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-802",
+   "stage": "para-empezar",
+   "title": "307 ping-pong + checkout por tienda",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-803",
+   "stage": "para-empezar",
+   "title": "Reserved-list unify + store-create guard + purga duplicados",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-804",
+   "stage": "despues",
+   "title": "El primitivo único de navegación",
+   "status": "pending",
+   "deps": [
+    "t-801",
+    "t-803"
+   ]
+  },
+  {
+   "id": "t-805",
+   "stage": "luego",
+   "title": "ProductTopBar deja de parsear + menú canónico + Compartir y Guardar en uno",
+   "status": "pending",
+   "deps": [
+    "t-804"
+   ]
+  },
+  {
+   "id": "t-806",
+   "stage": "luego",
+   "title": "Todos los enlaces de producto → builders canónicos",
+   "status": "pending",
+   "deps": [
+    "t-804"
+   ]
+  },
+  {
+   "id": "t-807",
+   "stage": "luego",
+   "title": "Inicio dinámico por tienda + ficha de producto + acceso rápido",
+   "status": "pending",
+   "deps": [
+    "t-804"
+   ]
+  },
+  {
+   "id": "t-901",
+   "stage": "para-empezar",
+   "title": "El recibo deja de poder mentir sobre qué total cobró",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-902",
+   "stage": "para-empezar",
+   "title": "El linter del catálogo cuenta contenido, no archivos",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-903",
+   "stage": "despues",
+   "title": "El catálogo no puede enseñar un producto que no existe",
+   "status": "pending",
+   "deps": [
+    "t-902"
+   ]
+  },
+  {
+   "id": "t-dp01",
+   "stage": "para-empezar",
+   "title": "Llave cliente×tienda",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-dp02",
+   "stage": "despues",
+   "title": "Invariante carrito-protegido",
+   "status": "pending",
+   "deps": [
+    "t-dp01"
+   ]
+  },
+  {
+   "id": "t-dp03",
+   "stage": "para-empezar",
+   "title": "Search filters endpoint",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-pg01",
+   "stage": "para-empezar",
+   "title": "Sonda de lectura: medir el índice de búsqueda real",
+   "status": "pending",
+   "deps": []
+  },
+  {
+   "id": "t-pg02",
+   "stage": "para-empezar",
+   "title": "El filtro de envíos gratis es más grueso que el radio real",
+   "status": "pending",
+   "deps": []
+  }
+ ]
+}

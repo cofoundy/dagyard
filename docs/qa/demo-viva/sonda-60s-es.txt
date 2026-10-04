@@ -1,0 +1,25 @@
+0.7s hello seq=680
+2.6s #681 node.updated landing working 0%
+6.5s #682 node.updated landing working 9%
+9.6s #683 node.updated buscador working 59%
+13.3s #684 node.updated registro done 100%
+13.3s #685 message.posted «Registro listo. Ya se puede entrar con Google o con correo.»
+16.6s #686 node.updated whatsapp working 0%
+19.7s #687 node.updated buscador working 76%
+19.7s #688 message.posted «Los resultados ahora cargan en menos de un segundo.»
+23.5s #689 node.updated landing working 22%
+27.4s #690 node.updated buscador working 92%
+31.0s #691 node.updated buscador done 100%
+31.0s #692 message.posted «Buscador listo, con filtros y disponibilidad real.»
+34.2s #693 node.updated reservas working 0%
+37.7s #694 node.updated landing working 37%
+37.7s #695 message.posted «El texto de la página ya está escrito.»
+40.9s #696 node.updated reservas working 13%
+44.6s #697 node.updated landing working 51%
+47.6s #698 node.updated landing working 68%
+47.6s #699 message.posted «La lista de espera ya guarda los correos.»
+50.8s #700 node.updated reservas working 28%
+54.9s #701 node.updated landing working 79%
+57.8s #702 node.updated reservas working 37%
+57.8s #703 message.posted «El calendario del proveedor ya muestra los horarios libres.»
+TOTAL 23 eventos en 60s {"node.updated":17,"message.posted":6} | bloqueantes abiertos: 3

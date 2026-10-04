@@ -1,0 +1,30 @@
+API https://dagyard.cofoundy-dev.workers.dev · UI https://dagyard.cofoundy-dev.workers.dev · 30 corridas · meta ≤3000 ms · loadavg 9.2 10.4 10.7 en 12 núcleos
+corrida 1 msg : total 581 ms · cli 759 · ws 580 · nodo 705 · dom 1
+corrida 1 done: total 605 ms · cli 641 · ws 604 · nodo 599 · dom 1
+corrida 2 msg : total 609 ms · cli 645 · ws 608 · nodo 602 · dom 1
+corrida 2 done: total 631 ms · cli 673 · ws 630 · nodo 626 · dom 1
+corrida 3 msg : total 771 ms · cli 807 · ws 770 · nodo 766 · dom 1
+corrida 3 done: total 640 ms · cli 677 · ws 639 · nodo 634 · dom 1
+corrida 4 msg : total 730 ms · cli 764 · ws 730 · nodo 724 · dom 0
+corrida 4 done: total 642 ms · cli 687 · ws 641 · nodo 641 · dom 1
+corrida 5 msg : total 701 ms · cli 741 · ws 700 · nodo 701 · dom 1
+corrida 5 done: total 606 ms · cli 653 · ws 605 · nodo 601 · dom 1
+corrida 6 msg : total 810 ms · cli 851 · ws 810 · nodo 805 · dom 0
+corrida 6 done: total 710 ms · cli 744 · ws 710 · nodo 703 · dom 0
+corrida 7 msg : total 630 ms · cli 664 · ws 629 · nodo 624 · dom 1
+corrida 7 done: total 626 ms · cli 663 · ws 625 · nodo 621 · dom 1
+corrida 8 msg : total 593 ms · cli 664 · ws 593 · nodo 587 · dom 0
+corrida 8 done: total 676 ms · cli 712 · ws 675 · nodo 670 · dom 1
+corrida 9 msg : total 605 ms · cli 644 · ws 605 · nodo 598 · dom 0
+corrida 9 done: total 1201 ms · cli 1322 · ws 1200 · nodo 1245 · dom 1
+corrida 10 msg : total 745 ms · cli 787 · ws 745 · nodo 739 · dom 0
+corrida 10 done: total 591 ms · cli 653 · ws 591 · nodo 587 · dom 0
+corrida 11 msg : total 903 ms · cli 821 · ws 902 · nodo null · dom 1 · la página abrió 2 sockets
+corrida 11 done: total 608 ms · cli 733 · ws 607 · nodo null · dom 1 · la página abrió 2 sockets
+corrida 12 msg : total 2666 ms · cli 801 · ws 2666 · nodo null · dom 0 · la página abrió 4 sockets
+corrida 12 done: total 632 ms · cli 674 · ws 631 · nodo null · dom 1 · la página abrió 4 sockets
+corrida 13 msg : total 603 ms · cli 641 · ws 603 · nodo null · dom 0 · la página abrió 4 sockets
+Command failed: agent-browser --session dagyard-qa-realtime eval window.__qaopen.length
+✗ Evaluation error: TypeError: Cannot read properties of undefined (reading 'length')
+    at <anonymous>:1:17
+

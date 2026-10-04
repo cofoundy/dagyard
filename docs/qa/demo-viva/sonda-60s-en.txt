@@ -1,0 +1,23 @@
+0.8s hello seq=1
+4.0s #2 node.updated perfil-d working 67%
+8.3s #3 node.updated registro working 77%
+11.5s #4 node.updated perfil-d working 76%
+11.5s #5 message.posted «Added star reviews below the gallery.»
+15.1s #6 node.updated perfil-d working 91%
+19.0s #7 node.updated perfil-d working 99%
+23.2s #8 node.updated buscador working 43%
+23.2s #9 message.posted «Availability now shows up in the results.»
+27.1s #10 node.updated perfil-d done 100%
+27.1s #11 message.posted «Provider profile is done: gallery, reviews and opening hours.»
+30.2s #12 node.updated landing working 0%
+34.1s #13 node.updated registro working 86%
+37.6s #14 node.updated buscador working 52%
+40.8s #15 node.updated buscador working 69%
+40.8s #16 message.posted «Results now load in under a second.»
+45.1s #17 node.updated registro working 98%
+48.5s #18 node.updated registro done 100%
+48.5s #19 message.posted «Sign-up is done. People can log in with Google or email.»
+51.9s #20 node.updated whatsapp working 0%
+56.0s #21 node.updated buscador working 80%
+59.2s #22 node.updated buscador working 91%
+TOTAL 21 eventos en 60s {"node.updated":16,"message.posted":5} | bloqueantes abiertos: 3

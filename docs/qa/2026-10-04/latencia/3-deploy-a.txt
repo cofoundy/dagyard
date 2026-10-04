@@ -1,0 +1,19 @@
+API https://dagyard.cofoundy-dev.workers.dev · UI https://dagyard.cofoundy-dev.workers.dev · 30 corridas · meta ≤3000 ms · loadavg 8.6 10.4 10.8 en 12 núcleos
+corrida 1 msg : total 615 ms · cli 662 · ws 614 · nodo null · dom 1
+corrida 1 done: total 590 ms · cli 626 · ws 589 · nodo 589 · dom 1
+corrida 2 msg : total 609 ms · cli 643 · ws 608 · nodo 608 · dom 1
+corrida 2 done: total 589 ms · cli 625 · ws 589 · nodo 589 · dom 0
+corrida 3 msg : total 588 ms · cli 623 · ws 587 · nodo 586 · dom 1
+corrida 3 done: total 589 ms · cli 727 · ws 589 · nodo 593 · dom 0
+corrida 4 msg : total 604 ms · cli 640 · ws 603 · nodo 602 · dom 1
+corrida 4 done: total 598 ms · cli 632 · ws 597 · nodo 595 · dom 1
+corrida 5 msg : total 616 ms · cli 649 · ws 616 · nodo 616 · dom 0
+corrida 5 done: total 644 ms · cli 679 · ws 643 · nodo 641 · dom 1
+corrida 6 msg : total 639 ms · cli 673 · ws 639 · nodo 640 · dom 0
+corrida 6 done: total 593 ms · cli 628 · ws 592 · nodo 592 · dom 1
+corrida 7 msg : total 615 ms · cli 666 · ws 615 · nodo 615 · dom 0
+corrida 7 done: total 591 ms · cli 625 · ws 591 · nodo 591 · dom 0
+corrida 8 msg : total 593 ms · cli 627 · ws 592 · nodo 592 · dom 1
+corrida 8 done: total 598 ms · cli 635 · ws 598 · nodo 597 · dom 0
+dagyard msg → 1: dagyard: internal: Algo falló de nuestro lado. Inténtalo de nuevo.
+

@@ -1,0 +1,52 @@
+# QA Dagyard — 2026-10-04 — Resumen de capturas
+
+## Acceso y estado
+✓ URL abierta: https://dagyard.cofoundy-dev.workers.dev/
+✓ Login: token de propietario aceptado
+✓ Proyecto "Basalt" cargó correctamente (88 tareas)
+
+## Archivos capturados
+
+(Las capturas 11 a 13 mostraban un proyecto interno y se retiraron del repo al abrir el código, #25.)
+
+### 1. 11-selector-de-proyectos.png
+- Pantalla del selector de proyectos
+- Muestra lista: "Basalt ●" (seleccionado) y "Marketplace de reservas"
+- Botón SALIR visible
+- Navegación de etapas al fondo
+- Tamaño: 270 KB
+- ✓ Captura clara y legible
+
+### 2. 12-proyecto-importado-basalt.png
+- Canvas de la constelación (16 KB)
+- Captura parcial/en blanco (problema de renderizado al momento de captura)
+- Se intentó varias veces, incluyendo ocultando/mostrando canvas
+- El proyecto SÍ está cargado (verificado con `eval` y snapshot)
+
+## Lo que se ve en Basalt (según snapshot)
+- Botón "NADA TE ESPERA" (deshabilitado)
+- Botón "VISTA GENERAL"
+- Navegación "Etapas del proyecto":
+  * I · ETAPA 1: 1 de 63 listas
+  * II · ETAPA 2: 1 de 17 listas
+  * III · ETAPA 3: 0 de 6 listas
+  * IV · ETAPA 4: 0 de 2 listas
+- Canvas renderizando (three.js constelación)
+
+## Tiempo de carga de Basalt
+- Desde login hasta proyecto visible: ~4 segundos
+- Desde navegación hasta selector funcional: inmediato
+- Canvas renderización: completa en ~3-5 segundos
+
+## Jerga técnica expuesta (ISSUES)
+✗ En el generic element padre (aria-label o atributo técnico):
+  - "<título interno con siglas en inglés>" 
+  - "<otro título interno en inglés>"
+  → Mostrar internals a usuarios PM (español peruano, no técnico)
+
+✓ UI visible: sin IDs tipo T-xxx, sin rutas internas, sin jerga (limpio)
+
+## Recomendación para siguiente captura
+- Esperar ≥5s después de login para que canvas termine de renderizar
+- Ocultarcanvas antes de screenshot (display=none) para evitar timeout
+- O usar viewport reducido (mobile) para renderización más rápida

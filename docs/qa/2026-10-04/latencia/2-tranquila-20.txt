@@ -1,0 +1,50 @@
+API https://dagyard.cofoundy-dev.workers.dev · UI https://dagyard.cofoundy-dev.workers.dev · 20 corridas · meta ≤3000 ms · loadavg 3.4 7.2 9.4 en 12 núcleos
+corrida 1 msg : total 529 ms · cli 640 · ws 526 · nodo 601 · dom 3
+corrida 1 done: total 587 ms · cli 632 · ws 586 · nodo 586 · dom 1
+corrida 2 msg : total 597 ms · cli 638 · ws 596 · nodo 597 · dom 1
+corrida 2 done: total 595 ms · cli 639 · ws 594 · nodo 594 · dom 1
+corrida 3 msg : total 597 ms · cli 636 · ws 596 · nodo 596 · dom 1
+corrida 3 done: total 596 ms · cli 637 · ws 595 · nodo 595 · dom 1
+corrida 4 msg : total 587 ms · cli 625 · ws 586 · nodo 586 · dom 1
+corrida 4 done: total 594 ms · cli 639 · ws 593 · nodo 594 · dom 1
+corrida 5 msg : total 587 ms · cli 625 · ws 587 · nodo 587 · dom 0
+corrida 5 done: total 588 ms · cli 627 · ws 586 · nodo 589 · dom 2
+corrida 6 msg : total 599 ms · cli 636 · ws 598 · nodo 598 · dom 1
+corrida 6 done: total 587 ms · cli 630 · ws 586 · nodo 586 · dom 1
+corrida 7 msg : total 591 ms · cli 629 · ws 590 · nodo 590 · dom 1
+corrida 7 done: total 593 ms · cli 633 · ws 593 · nodo 593 · dom 0
+corrida 8 msg : total 586 ms · cli 624 · ws 586 · nodo 586 · dom 0
+corrida 8 done: total 603 ms · cli 641 · ws 602 · nodo 602 · dom 1
+corrida 9 msg : total 593 ms · cli 629 · ws 593 · nodo 593 · dom 0
+corrida 9 done: total 588 ms · cli 631 · ws 587 · nodo 588 · dom 1
+corrida 10 msg : total 594 ms · cli 633 · ws 594 · nodo 594 · dom 0
+corrida 10 done: total 583 ms · cli 625 · ws 582 · nodo 583 · dom 1
+corrida 11 msg : total 593 ms · cli 635 · ws 592 · nodo 592 · dom 1
+corrida 11 done: total 597 ms · cli 641 · ws 596 · nodo 596 · dom 1
+corrida 12 msg : total 590 ms · cli 629 · ws 590 · nodo 590 · dom 0
+corrida 12 done: total 590 ms · cli 627 · ws 590 · nodo 590 · dom 0
+corrida 13 msg : total 593 ms · cli 635 · ws 593 · nodo 593 · dom 0
+corrida 13 done: total 596 ms · cli 640 · ws 595 · nodo 595 · dom 1
+corrida 14 msg : total 586 ms · cli 629 · ws 586 · nodo 586 · dom 0
+corrida 14 done: total 590 ms · cli 632 · ws 589 · nodo 589 · dom 1
+corrida 15 msg : total 593 ms · cli 630 · ws 592 · nodo 592 · dom 1
+corrida 15 done: total 594 ms · cli 633 · ws 594 · nodo 594 · dom 0
+corrida 16 msg : total 588 ms · cli 628 · ws 588 · nodo 588 · dom 0
+corrida 16 done: total 589 ms · cli 630 · ws 588 · nodo 589 · dom 1
+corrida 17 msg : total 602 ms · cli 645 · ws 601 · nodo 601 · dom 1
+corrida 17 done: total 598 ms · cli 639 · ws 597 · nodo 597 · dom 1
+corrida 18 msg : total 595 ms · cli 636 · ws 595 · nodo 595 · dom 0
+corrida 18 done: total 604 ms · cli 649 · ws 604 · nodo 604 · dom 0
+corrida 19 msg : total 589 ms · cli 627 · ws 589 · nodo 589 · dom 0
+corrida 19 done: total 593 ms · cli 637 · ws 591 · nodo 592 · dom 2
+corrida 20 msg : total 664 ms · cli 670 · ws 663 · nodo 663 · dom 1
+corrida 20 done: total 592 ms · cli 636 · ws 592 · nodo 591 · dom 0
+msg  p50 593 ms · máx 664 ms
+done p50 593 ms · máx 604 ms
+todo p50 593 ms · máx 664 ms
+  cli  p50 633 ms · máx 670 ms
+  ws   p50 592 ms · máx 663 ms
+  nodo p50 592 ms · máx 663 ms
+  dom  p50 1 ms · máx 3 ms
+loadavg 3.6 6.8 9.2 en 12 núcleos
+OK: las 40 mediciones ≤3000 ms

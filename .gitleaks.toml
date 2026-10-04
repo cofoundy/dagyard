@@ -1,0 +1,7 @@
+# Reglas por defecto de gitleaks, más un falso positivo conocido.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Constante falsa de apps/worker/test/blockers.test.ts: el test comprueba que nunca sale"
+regexes = ['''sk_live_NO-DEBE-SALIR-123''']
