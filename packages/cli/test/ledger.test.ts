@@ -23,6 +23,10 @@ let nodes: DagNode[] = [];
 /** cada escritura que llegó, y cuántas cambiaron algo (las que en el Worker emiten un evento) */
 let writes: Array<{ method: string; path: string; body: Record<string, unknown> }> = [];
 let events = 0;
+/** se corre justo después de servir un snapshot: otro escritor que se cuela entre la lectura y la escritura */
+let afterGet: (() => void) | null = null;
+/** equipos que el servidor rechaza con 400 */
+let rejected = new Set<string>();
 
 function reply(res: ServerResponse, status: number, body?: unknown) {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -37,16 +41,21 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   const parts = new URL(req.url ?? '/', 'http://x').pathname.split('/').filter(Boolean);
   const [, , pid, kind, id] = parts;
   if (req.method === 'GET' && parts.length === 3) {
-    return reply(res, 200, { project: { id: pid }, nodes, edges: [], blockers: [], messages: [], teams: [...teams.values()], seq: events });
+    reply(res, 200, { project: { id: pid }, nodes, edges: [], blockers: [], messages: [], teams: [...teams.values()], seq: events });
+    afterGet?.();
+    return;
   }
   writes.push({ method: req.method ?? '', path: parts.join('/'), body });
   if (req.method === 'PUT' && kind === 'teams') {
+    if (rejected.has(id!)) return reply(res, 400, { error: { code: 'invalid', message: `startedAt: el equipo ${id} no pasa` } });
     const prev = teams.get(id!);
+    const added = ((body.nodeIds as string[]) ?? prev?.nodeIds ?? []).slice();
+    for (const n of (body.addNodeIds as string[]) ?? []) if (!added.includes(n)) added.push(n);
     const next: Team = {
       id: id!,
       projectId: pid!,
       name: (body.name as string) ?? prev?.name ?? teamNameFromSlug(id!),
-      nodeIds: (body.nodeIds as string[]) ?? prev?.nodeIds ?? [],
+      nodeIds: added,
       requestedAt: 'requestedAt' in body ? (body.requestedAt as string | null) : (prev?.requestedAt ?? null),
       startedAt: 'startedAt' in body ? (body.startedAt as string | null) : (prev?.startedAt ?? null),
       closedAt: 'closedAt' in body ? (body.closedAt as string | null) : (prev?.closedAt ?? null),
@@ -75,6 +84,8 @@ beforeEach(() => {
   nodes = [];
   writes = [];
   events = 0;
+  afterGet = null;
+  rejected = new Set();
 });
 
 async function cli(argv: string[], env: Record<string, string> = {}, cwd = mkdtempSync(join(tmpdir(), 'dagyard-cwd-'))) {
@@ -140,7 +151,7 @@ describe('ledger → equipos (puro)', () => {
     expect(teamPatchFromLedger(l!, current)).toBeNull();
     expect(teamPatchFromLedger(l!, { ...current, startedAt: '2026-10-04T05:40:00.000Z', nodeIds: ['gh-2', 'gh-9'] })).toEqual({ startedAt: l!.startedAt });
     expect(teamPatchFromLedger({ ...l!, closedAt: null, outcome: null }, current)).toBeNull();
-    expect(teamPatchFromLedger({ ...l!, nodeIds: ['gh-2', 'gh-7'] }, current)).toEqual({ nodeIds: ['gh-2', 'gh-7'] });
+    expect(teamPatchFromLedger({ ...l!, nodeIds: ['gh-2', 'gh-7'] }, current)).toEqual({ addNodeIds: ['gh-7'] });
   });
 });
 
@@ -156,7 +167,7 @@ describe('dagyard import-ledger', () => {
     // el nombre sale del team de sus tareas; «Fábrica» no cuenta y entonces lo pone el servidor
     expect(teams.get('nucleo')!.name).toBe('Núcleo');
     expect(teams.get('dogfood')!.name).toBe('Dogfood');
-    expect(writes[0]).toMatchObject({ method: 'PUT', path: 'api/projects/dagyard/teams/nucleo', body: { name: 'Núcleo', nodeIds: ['gh-2'], startedAt: '2026-10-04T05:36:46.000Z' } });
+    expect(writes[0]).toMatchObject({ method: 'PUT', path: 'api/projects/dagyard/teams/nucleo', body: { name: 'Núcleo', addNodeIds: ['gh-2'], startedAt: '2026-10-04T05:36:46.000Z' } });
     expect(writes.find((w) => w.path.endsWith('/tiempo'))!.body).not.toHaveProperty('closedAt');
 
     writes = [];
@@ -229,10 +240,10 @@ describe('dagyard team start | close', () => {
     expect(writes.at(-1)).toEqual({
       method: 'PUT',
       path: 'api/projects/dagyard/teams/tiempo',
-      body: { name: 'Tiempo', nodeIds: ['gh-75', 'gh-80'], startedAt: '2026-10-04T19:07:42.000Z' },
+      body: { name: 'Tiempo', addNodeIds: ['gh-75', 'gh-80'], startedAt: '2026-10-04T19:07:42.000Z' },
     });
     await cli(['team', 'start', 'tiempo', '--issues', '81']);
-    expect(writes.at(-1)!.body).toEqual({ nodeIds: ['gh-75', 'gh-80', 'gh-81'] });
+    expect(writes.at(-1)!.body).toEqual({ addNodeIds: ['gh-81'] });
     expect(teams.get('tiempo')!.startedAt).toBe('2026-10-04T19:07:42.000Z');
   });
 
@@ -275,5 +286,70 @@ describe('dagyard start manda el sitio como teamId', () => {
     expect(writes.at(-1)!.body).toEqual({ status: 'working', team: 'Demo', teamId: 'demo-viva' });
     await cli(['start', 'gh-75']);
     expect(writes.at(-1)!.body).toEqual({ status: 'working' });
+  });
+});
+
+/* ------------------------------------------------------------------ revisión adversarial */
+
+describe('revisión adversarial (#75)', () => {
+  it('team start --issues manda addNodeIds: otro escritor entre la lectura y la escritura no se pierde', async () => {
+    await cli(['team', 'start', 'tiempo', '--issues', '75']);
+    afterGet = () => {
+      const t = teams.get('tiempo')!;
+      teams.set('tiempo', { ...t, nodeIds: [...t.nodeIds, 'gh-99'] });
+      afterGet = null;
+    };
+    const r = await cli(['team', 'start', 'tiempo', '--issues', '81']);
+    expect(r.code, r.stderr).toBe(0);
+    expect(writes.at(-1)!.body).toEqual({ addNodeIds: ['gh-81'] });
+    expect(teams.get('tiempo')!.nodeIds).toEqual(['gh-75', 'gh-99', 'gh-81']);
+  });
+
+  it('import-ledger suma con addNodeIds, nunca la lista leída antes', async () => {
+    await cli(['import-ledger', FIXTURE]);
+    expect(writes.every((w) => !('nodeIds' in w.body))).toBe(true);
+    const rows = JSON.parse(readFileSync(FIXTURE, 'utf8')) as LedgerRow[];
+    rows.push({ site: 'tiempo', event: 'requested', ts: '2026-10-04T20:00:00Z', issues: ['76'] });
+    const file = join(mkdtempSync(join(tmpdir(), 'ledger-')), 'sites.json');
+    writeFileSync(file, JSON.stringify(rows));
+    afterGet = () => {
+      const t = teams.get('tiempo')!;
+      teams.set('tiempo', { ...t, nodeIds: [...t.nodeIds, 'gh-99'] });
+      afterGet = null;
+    };
+    writes = [];
+    await cli(['import-ledger', file]);
+    expect(writes).toEqual([{ method: 'PUT', path: 'api/projects/dagyard/teams/tiempo', body: { addNodeIds: ['gh-76'] } }]);
+    expect(teams.get('tiempo')!.nodeIds).toEqual(['gh-75', 'gh-99', 'gh-76']);
+  });
+
+  it('un ledger hostil: issues que no son lista de strings o números, o ids de más de 64 → filas ilegibles, y sigue', () => {
+    const rows = [
+      { site: 'a', event: 'requested', ts: '2026-10-04T01:00:00Z', issues: '75' },
+      { site: 'b', event: 'requested', ts: '2026-10-04T01:00:00Z', issues: [{ n: 1 }] },
+      { site: 'c', event: 'requested', ts: '2026-10-04T01:00:00Z', issues: ['9'.repeat(70)] },
+      { site: 'x'.repeat(65), event: 'started', ts: '2026-10-04T01:00:00Z' },
+      { site: 'd', event: 'requested', ts: '2026-10-04T01:00:00Z', issues: [7, '8'] },
+    ];
+    const { rows: ok, invalid } = parseLedger(rows.map((r) => JSON.stringify(r)).join('\n'));
+    expect(invalid).toBe(4);
+    expect(teamsFromLedger(ok, null).teams).toEqual([
+      { id: 'd', nodeIds: ['gh-7', 'gh-8'], requestedAt: '2026-10-04T01:00:00.000Z', startedAt: null, closedAt: null, outcome: null },
+    ]);
+  });
+
+  it('un 400 de un equipo no corta el import: los demás se mandan y el error se reporta', async () => {
+    rejected = new Set(['cielo', 'demo']);
+    const r = await cli(['import-ledger', FIXTURE]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain('cielo');
+    expect(r.stderr).toContain('demo');
+    expect(teams.size).toBe(22);
+    expect(r.stdout).toContain('22 nuevos');
+    rejected = new Set();
+    writes = [];
+    const again = await cli(['import-ledger', FIXTURE]);
+    expect(again.code).toBe(0);
+    expect(writes.map((w) => w.path.split('/').pop()).sort()).toEqual(['cielo', 'demo']);
   });
 });

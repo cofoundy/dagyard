@@ -92,3 +92,27 @@ describe('equipos (#75)', () => {
     expect(sortTeams([team('cielo', at), team('x', null), team('cli', at)]).map((t) => t.id)).toEqual(['cielo', 'cli', 'x']);
   });
 });
+
+describe('revisión adversarial (#75)', () => {
+  it('normalizeIso rechaza fechas imposibles que V8 corre al mes siguiente', () => {
+    for (const bad of ['2026-02-30T00:00:00Z', '2026-02-29T10:00:00Z', '2026-04-31T10:00:00Z', '2026-10-04T24:00:00Z', '2026-10-04T23:60:00Z', '2026-10-04T23:00:61Z'])
+      expect(normalizeIso(bad), bad).toBeNull();
+    expect(normalizeIso('2024-02-29T10:00:00Z')).toBe('2024-02-29T10:00:00.000Z');
+  });
+
+  it('parseTeamPatch: fechas entre 2020 y mañana; closedAt no antes de startedAt; addNodeIds', () => {
+    const soon = new Date(Date.now() + 12 * 3600e3).toISOString();
+    const late = new Date(Date.now() + 25 * 3600e3).toISOString();
+    expect(parseTeamPatch({ startedAt: soon }).ok).toBe(true);
+    for (const bad of [
+      { startedAt: '2019-12-31T23:59:59Z' },
+      { closedAt: late },
+      { requestedAt: '2026-02-30T00:00:00Z' },
+      { startedAt: '2026-10-04T10:00:00Z', closedAt: '2026-10-04T09:59:59Z' },
+      { addNodeIds: ['No Vale'] },
+      { addNodeIds: Array.from({ length: 51 }, (_, i) => `n${i}`) },
+    ])
+      expect(parseTeamPatch(bad).ok, JSON.stringify(bad)).toBe(false);
+    expect(parseTeamPatch({ addNodeIds: ['gh-1', 'gh-1', 'gh-2'] })).toEqual({ ok: true, value: { addNodeIds: ['gh-1', 'gh-2'] } });
+  });
+});

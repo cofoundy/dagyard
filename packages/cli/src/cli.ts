@@ -508,9 +508,9 @@ La hora de arranque es ahora (o --at); volver a arrancarlo conserva la primera y
       const patch: TeamPatch = {};
       const name = optional(args, 'name', LIMITS.name);
       if (name) patch.name = name;
-      const ids = [...(current?.nodeIds ?? [])];
-      for (const nid of issues) if (!ids.includes(nid)) ids.push(nid);
-      if (ids.length !== (current?.nodeIds.length ?? 0)) patch.nodeIds = ids;
+      // se suman en el servidor, sobre la lista vigente: otro escritor entre la lectura y esta escritura no se pierde
+      const add = issues.filter((nid) => !current?.nodeIds.includes(nid));
+      if (add.length) patch.addNodeIds = add;
       if (at || !current?.startedAt) patch.startedAt = at ?? new Date().toISOString();
       if (current?.closedAt) {
         patch.closedAt = null;
@@ -588,18 +588,32 @@ borra lo que no conoce. Idempotente: correrlo otra vez no manda nada. --dry-run 
       const api = client(io, args);
       const snap = await api.snapshot(proj);
       const current = new Map((snap.teams ?? []).map((tm) => [tm.id, tm]));
-      const plan = teams.map((l) => {
+      const plan = teams.map((l): { id: string; action: LedgerAction; patch: TeamPatch | null; error?: string } => {
         const patch: TeamPatch | null = teamPatchFromLedger(l, current.get(l.id));
         const isNew = !current.has(l.id);
         const name = isNew ? nameFromTasks(l, snap.nodes) : undefined;
         if (patch && name) patch.name = name;
-        return { id: l.id, action: isNew ? ('created' as const) : patch ? ('updated' as const) : ('unchanged' as const), patch };
+        const action: LedgerAction = isNew ? 'created' : patch ? 'updated' : 'unchanged';
+        return { id: l.id, action, patch };
       });
       const dry = args.bools.has('dry-run');
-      if (!dry) for (const p of plan) if (p.patch) await api.putTeam(proj, p.id, p.patch);
+      // un equipo que el servidor rechaza no corta el resto: se reporta al final y el exit es 1
+      if (!dry)
+        for (const p of plan) {
+          if (!p.patch) continue;
+          try {
+            await api.putTeam(proj, p.id, p.patch);
+          } catch (err) {
+            if (!(err instanceof ApiRequestError)) throw err;
+            p.action = 'failed';
+            p.error = `${err.code}: ${err.message}`;
+          }
+        }
       const report = { file, repo, project: proj, dryRun: dry, skipped, invalid: parsed.invalid, teams: plan };
       io.stdout(args.bools.has('json') ? `${JSON.stringify(report, null, 2)}\n` : formatLedger(report));
-      return EXIT.ok;
+      const failed = plan.filter((p) => p.action === 'failed');
+      for (const p of failed) io.stderr(`dagyard: ${p.id}: ${p.error}\n`);
+      return failed.length ? EXIT.api : EXIT.ok;
     },
   },
   sync: {
@@ -853,7 +867,7 @@ function nameFromTasks(l: LedgerTeam, nodes: readonly DagNode[]): string | undef
   return undefined;
 }
 
-type LedgerAction = 'created' | 'updated' | 'unchanged';
+type LedgerAction = 'created' | 'updated' | 'unchanged' | 'failed';
 
 function formatLedger(r: { repo: string | null; project: string; dryRun: boolean; invalid: number; teams: Array<{ id: string; action: LedgerAction; patch: TeamPatch | null }> }): string {
   const count = (a: LedgerAction) => r.teams.filter((x) => x.action === a).length;
@@ -870,6 +884,8 @@ function formatLedger(r: { repo: string | null; project: string; dryRun: boolean
     if (x.action === 'created') lines.push(`  + ${x.id}${x.patch?.name ? ` «${x.patch.name}»` : ''}`);
     else if (x.action === 'updated') lines.push(`  ~ ${x.id} (${Object.keys(x.patch ?? {}).join(', ')})`);
   }
+  for (const x of r.teams) if (x.action === 'failed') lines.push(`  ! ${x.id}`);
+  if (count('failed')) lines.push(t(`  ${count('failed')} rejected by the server (see stderr)`, `  ${count('failed')} rechazados por el servidor (mira stderr)`));
   if (r.invalid) lines.push(t(`  ${r.invalid} unreadable rows skipped`, `  ${r.invalid} filas ilegibles ignoradas`));
   return `${lines.join('\n')}\n`;
 }

@@ -5,14 +5,14 @@
  * Cada fila es un evento de un sitio: `requested` (con `issues`), `started`, `closed` (con `outcome`); el resto
  * (`bitacora_reserved`, `identified`…) no cambia el equipo. Las fechas son las del sitio.
  */
-import { TEAM_LIMITS, isSlug, normalizeIso, slugify, type IsoDate, type Team } from '@dagyard/model';
+import { LIMITS, TEAM_LIMITS, isSlug, normalizeIso, slugify, type IsoDate, type Team, type TeamPatch } from '@dagyard/model';
 
 export interface LedgerRow {
   site: string;
   event: string;
   ts: string;
   repo?: string;
-  issues?: unknown[];
+  issues?: Array<string | number>;
   outcome?: string;
 }
 
@@ -46,14 +46,24 @@ export function parseLedger(text: string): { rows: LedgerRow[]; invalid: number 
   }
   const rows: LedgerRow[] = [];
   for (const r of raw) {
-    const o = r as Partial<LedgerRow> | null;
-    if (!o || typeof o.site !== 'string' || typeof o.event !== 'string' || typeof o.ts !== 'string') {
-      invalid++;
-      continue;
-    }
-    rows.push(o as LedgerRow);
+    if (legible(r)) rows.push(r);
+    else invalid++;
   }
   return { rows, invalid };
+}
+
+/**
+ * Una fila que se puede usar: `site`, `event` y `ts` de texto, el sitio de hasta 64 caracteres, e `issues` (si
+ * viene) una lista de textos o números cuyo id `gh-<n>` cabe en 64. Una fila hostil se cuenta y se sigue.
+ */
+function legible(r: unknown): r is LedgerRow {
+  if (typeof r !== 'object' || r === null || Array.isArray(r)) return false;
+  const o = r as Record<string, unknown>;
+  if (typeof o.site !== 'string' || !o.site.trim() || o.site.trim().length > LIMITS.slug) return false;
+  if (typeof o.event !== 'string' || typeof o.ts !== 'string') return false;
+  if (o.issues === undefined) return true;
+  if (!Array.isArray(o.issues)) return false;
+  return o.issues.every((x) => (typeof x === 'string' || (typeof x === 'number' && Number.isFinite(x))) && `gh-${String(x).trim()}`.length <= LIMITS.slug);
 }
 
 /**
@@ -108,16 +118,12 @@ export function teamsFromLedger(rows: readonly LedgerRow[], repo: string | null)
  * manda en las fechas y el desenlace que conoce; lo que no conoce (null) no borra lo que el servidor ya tiene. Las
  * tareas se suman a las que el equipo ya lleva (un `dagyard start` pudo agregar otras).
  */
-export function teamPatchFromLedger(l: LedgerTeam, current: Team | undefined): Partial<Omit<LedgerTeam, 'id'>> | null {
-  if (!current) {
-    const patch: Partial<Omit<LedgerTeam, 'id'>> = { nodeIds: l.nodeIds };
-    for (const k of ['requestedAt', 'startedAt', 'closedAt', 'outcome'] as const) if (l[k] !== null) patch[k] = l[k];
-    return patch;
-  }
-  const patch: Partial<Omit<LedgerTeam, 'id'>> = {};
-  const extra = l.nodeIds.filter((id) => !current.nodeIds.includes(id));
-  if (extra.length) patch.nodeIds = [...current.nodeIds, ...extra].slice(0, TEAM_LIMITS.nodeIds);
-  if (patch.nodeIds && patch.nodeIds.length === current.nodeIds.length) delete patch.nodeIds;
-  for (const k of ['requestedAt', 'startedAt', 'closedAt', 'outcome'] as const) if (l[k] !== null && l[k] !== current[k]) patch[k] = l[k];
-  return Object.keys(patch).length ? patch : null;
+export function teamPatchFromLedger(l: LedgerTeam, current: Team | undefined): TeamPatch | null {
+  const patch: TeamPatch = {};
+  // las tareas van como `addNodeIds`: el servidor las suma a la lista vigente en la misma transacción, así un
+  // `dagyard start` que se cuela entre la lectura y esta escritura no se pierde
+  const extra = l.nodeIds.filter((id) => !current?.nodeIds.includes(id));
+  if (extra.length) patch.addNodeIds = extra;
+  for (const k of ['requestedAt', 'startedAt', 'closedAt', 'outcome'] as const) if (l[k] !== null && l[k] !== current?.[k]) patch[k] = l[k];
+  return current && !Object.keys(patch).length ? null : patch;
 }

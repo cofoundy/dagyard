@@ -277,9 +277,9 @@ describe('PATCH con teamId (#75): la tarea entra a su equipo', () => {
     const s = await snap(pid);
     expect(s.teams).toEqual([expect.objectContaining({ id: 'tiempo', nodeIds: ['a', 'b'], startedAt: born.startedAt })]);
 
-    // soltarla: la tarea queda sin equipo; el equipo conserva su historia
+    // soltarla: la tarea queda sin equipo y sale de su lista (revisión de #75)
     expect(await json<DagNode>(await patchNode(pid, 'a', { teamId: null }), 200)).toMatchObject({ teamId: null });
-    expect((await snap(pid)).teams![0]!.nodeIds).toEqual(['a', 'b']);
+    expect((await snap(pid)).teams![0]!.nodeIds).toEqual(['b']);
     await json(await patchNode(pid, 'a', { teamId: 'No Vale' }), 400);
   });
 
@@ -361,5 +361,62 @@ describe('import-ledger sobre una copia de design/tiempo/data/sites.json (#75)',
     expect(s.teams!.find((t) => t.id === 'endurecer')!.nodeIds).toEqual(['gh-12', 'gh-13', 'gh-14']);
     expect(s.teams!.filter((t) => t.closedAt !== null)).toHaveLength(21);
     expect(s.teams!.find((t) => t.id === 'tiempo')).toMatchObject({ closedAt: null, outcome: null });
+  });
+});
+
+/* ------------------------------------------------------------------ revisión adversarial */
+
+describe('revisión adversarial (#75)', () => {
+  it('addNodeIds se suma dentro de la transacción: dos escritores a la vez no se pisan', async () => {
+    const pid = await project();
+    await json(await putTeam(pid, 'tiempo', { nodeIds: ['gh-75'] }), 200);
+    const ids = Array.from({ length: 8 }, (_, i) => `gh-${100 + i}`);
+    await Promise.all(ids.map((id) => putTeam(pid, 'tiempo', { addNodeIds: [id, 'gh-75'] }).then((r) => json(r, 200))));
+    const t = (await snap(pid)).teams![0]!;
+    expect(t.nodeIds[0]).toBe('gh-75');
+    expect([...t.nodeIds].sort()).toEqual(['gh-75', ...ids].sort());
+    const seq = await seqOf(pid);
+    await json(await putTeam(pid, 'tiempo', { addNodeIds: ['gh-75', 'gh-100'] }), 200);
+    expect(await seqOf(pid)).toBe(seq);
+    // pasar el tope: 409, sin tocar nada
+    await json(await putTeam(pid, 'tiempo', { addNodeIds: Array.from({ length: 45 }, (_, i) => `gh-${200 + i}`) }), 409);
+    expect((await snap(pid)).teams![0]!.nodeIds).toHaveLength(9);
+  });
+
+  it('fechas: imposibles, antes de 2020, más de un día en el futuro o un cierre antes del arranque → 400', async () => {
+    const pid = await project();
+    await json(await putTeam(pid, 'x', { startedAt: '2026-10-04T10:00:00Z' }), 200);
+    const late = new Date(Date.now() + 25 * 3600e3).toISOString();
+    for (const body of [{ requestedAt: '2026-02-30T10:00:00Z' }, { startedAt: '2019-06-01T00:00:00Z' }, { closedAt: late }, { closedAt: '2026-10-04T09:00:00Z' }])
+      await json(await putTeam(pid, 'x', body), 400);
+    // con un arranque nuevo en el mismo cuerpo, el cierre se compara contra ese
+    await json(await putTeam(pid, 'x', { startedAt: '2026-10-04T08:00:00Z', closedAt: '2026-10-04T09:00:00Z' }), 200);
+    await json(await putTeam(pid, 'x', { startedAt: '2026-10-04T09:30:00Z' }), 400);
+  });
+
+  it('cambiar teamId (o ponerlo en null) saca la tarea del equipo viejo', async () => {
+    const pid = await project();
+    await json(await patchNode(pid, 'a', { status: 'working', teamId: 'uno' }), 200);
+    await json(await patchNode(pid, 'b', { status: 'working', teamId: 'uno' }), 200);
+    const seq = await seqOf(pid);
+    await json(await patchNode(pid, 'a', { teamId: 'dos' }), 200);
+    const ev = await eventsSince(pid, seq);
+    expect(ev.map((e) => e.type)).toEqual(['node.updated', 'team.updated', 'team.updated']);
+    let teams = (await snap(pid)).teams!;
+    expect(teams.find((t) => t.id === 'uno')!.nodeIds).toEqual(['b']);
+    expect(teams.find((t) => t.id === 'dos')!.nodeIds).toEqual(['a']);
+    await json(await patchNode(pid, 'a', { teamId: null }), 200);
+    teams = (await snap(pid)).teams!;
+    expect(teams.find((t) => t.id === 'dos')!.nodeIds).toEqual([]);
+    expect(node(await snap(pid), 'a').teamId).toBeNull();
+  });
+
+  it('entrar a un equipo con el tope lleno responde 409 y no toca la tarea', async () => {
+    const pid = await project();
+    await json(await putTeam(pid, 'lleno', { nodeIds: Array.from({ length: 50 }, (_, i) => `gh-${i}`) }), 200);
+    const seq = await seqOf(pid);
+    await json(await patchNode(pid, 'a', { status: 'working', teamId: 'lleno' }), 409);
+    expect(await seqOf(pid)).toBe(seq);
+    expect(node(await snap(pid), 'a')).toMatchObject({ status: 'pending', teamId: null });
   });
 });
