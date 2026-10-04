@@ -81,6 +81,13 @@ Usa la API granular (nunca reemplaza el grafo), así cada cambio llega en vivo y
   del cuerpo. Si el nodo ya tiene esa pregunta, abierta o contestada, no la vuelve a hacer.
 - **Idempotente.** Correrlo dos veces seguidas: la segunda no crea ni cambia nada.
 
+## La migración al modelo D12 (#90)
+
+`node apps/worker/scripts/migrate-d12.mjs <url> [--dry-run]` (clave de `DAGYARD_KEY` o `~/.config/dagyard/agent-key`)
+agrega al proyecto el objetivo vivo, los pedidos de André con su cita y un «nació de» para cada tarea, desde
+`apps/worker/scripts/migrate-d12.data.json`. Idempotente (la segunda corrida no escribe nada) y nunca borra; avisa
+qué ids no existen y qué tareas siguen sin «nació de».
+
 ## Verifica
 
 ```bash
