@@ -4,8 +4,11 @@ Una banda sobre el prompt con lo que le toca a esta sesión, un menú para respo
 y un aviso cuando algo nuevo te espera. Todo lo que haces aquí se ve al instante en el cielo (la web),
 porque escribe en la misma API.
 
-- **Te espera**: una decisión o una revisión se responden desde la banda o el menú. Un acceso se da
-  en el cielo: su valor nunca pasa por la terminal. «Darlo en el cielo» abre esa tarea con su ficha.
+- **Te espera**: una decisión o una revisión se responden desde la banda o el menú, en dos pasos:
+  marcas la opción y confirmas con «Sí, elegir» («Cancelar» la deja como estaba). Resolver no se
+  deshace, así que ninguna tecla suelta elige: las opciones no tienen atajo y un dígito en el prompt
+  vacío se queda en el prompt. Un acceso se da en el cielo: su valor nunca pasa por la terminal.
+  «Darlo en el cielo» abre esa tarea con su ficha.
 - **Ver el cielo**: abre el proyecto del repo (o la tarea en la que estás trabajando).
 - **Para tomar**: lo pendiente, sin equipo y con todo lo que necesita ya listo. «Trabajar en esto» la
   arranca y fija su `/goal` en la sesión.
@@ -13,22 +16,49 @@ porque escribe en la misma API.
 - **Aviso**: cuando se abre algo nuevo que te espera, un toast en ≤20 s.
 
 ![La banda sobre el prompt](docs/band.png)
+![Elegir una opción pide confirmarla; el foco empieza en «Cancelar»](docs/confirm.png)
 ![El menú abierto con /dagyard en una terminal de 120 columnas](docs/menu.png)
 ![El aviso de un bloqueante nuevo, arriba a la derecha](docs/toast.png)
 
 ## Instalación (un paso)
 
-Desde la raíz de tu clon del repo:
+Sin clonar nada:
 
 ```bash
-claude plugin marketplace add "$PWD/packages/mod" && claude plugin install dagyard@dagyard
+claude plugin marketplace add cofoundy/dagyard && claude plugin install dagyard@dagyard
 ```
 
-Queda instalado para todas tus sesiones y se lee desde esta carpeta: un `git pull` del repo lo
-actualiza (en una sesión abierta, `/reload-plugins`). Para probarlo sin instalar:
-`claude --plugin-dir "$PWD/packages/mod"`.
+Desde un clon del repo, en su raíz (queda leyendo esa carpeta: un `git pull` lo actualiza; en una sesión
+abierta, `/reload-plugins`):
+
+```bash
+claude plugin marketplace add "$PWD" && claude plugin install dagyard@dagyard
+```
+
+Queda instalado para todas tus sesiones. Para probarlo sin instalar: `claude --plugin-dir "$PWD/packages/mod"`.
 
 Quitarlo: `claude plugin uninstall dagyard@dagyard && claude plugin marketplace remove dagyard`.
+
+### El CLI viene incluido
+
+Mientras el plugin está activo, `dagyard` está en el PATH de los comandos que corre el agente (`bin/dagyard`,
+el bundle de `packages/cli`, sin dependencias, Node ≥22). Se llama con el comando primero y las opciones
+después: `dagyard msg pagos "listo el cobro" --project mi-proyecto`.
+
+### El canal (opcional, apagado por defecto)
+
+Un segundo plugin del mismo marketplace, `dagyard-channel`, lleva a la sesión la respuesta del dueño a tu
+bloqueante sin que el agente espere con `dagyard wait`, y le da la tool `reply` para dejar un mensaje en su
+nodo. Instalarlo es la decisión: corre un proceso MCP por sesión, así que solo lo instala quien lo usa.
+
+```bash
+claude plugin install dagyard-channel@dagyard
+claude --dangerously-load-development-channels plugin:dagyard-channel@dagyard
+```
+
+El flag hace falta porque es un canal propio, fuera de la lista de canales aprobados (research preview);
+Claude Code pide confirmarlo al arrancar. Lee el proyecto igual que el CLI (entorno, `.dagyard.json`,
+`~/.config/dagyard`). Detalle: [`packages/channel/README.md`](../channel/README.md).
 
 ## A qué proyecto mira
 
@@ -57,7 +87,11 @@ los atajos de teclado son los mismos en los dos idiomas.
 ```bash
 claude plugin validate packages/mod   # manifiesto y módulo, como los lee el motor
 claude plugin test packages/mod       # hooks/*.test.ts(x)
+node scripts/plugin-bundle.mjs        # tras cambiar packages/cli o packages/channel: regenera los bin/
 ```
+
+Los `bin/` de los dos plugins van commiteados (un plugin instalado desde git no corre build); el CI corre
+`node scripts/plugin-bundle.mjs --check` y falla si no son el build de hoy.
 
 `hooks/view.ts` calcula la vista desde el snapshot (puro); `hooks/register.tsx` es todo lo que toca
 el motor: la banda (`AbovePrompt`), el menú (`Pane` `dagyard-menu`), el comando y el sondeo cada

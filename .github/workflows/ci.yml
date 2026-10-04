@@ -24,3 +24,5 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # los bin/ de los plugins de Claude Code van commiteados: tienen que ser el build de hoy (#91)
+      - run: node scripts/plugin-bundle.mjs --check

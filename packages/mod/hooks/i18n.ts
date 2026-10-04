@@ -57,6 +57,10 @@ export type Strings = {
   oneLine: string
   send: string
   cancel: string
+  /** elegir una opción de una decisión o una revisión pide confirmar (#89) */
+  confirmPick: (option: string) => string
+  cannotUndo: string
+  yesChoose: string
   startableSection: (n: number) => string
   nothingStartable: string
   showBand: string
@@ -105,6 +109,9 @@ const EN: Strings = {
   oneLine: 'in one line',
   send: 'send',
   cancel: 'Cancel',
+  confirmPick: option => `Choose «${option}»?`,
+  cannotUndo: 'It cannot be undone.',
+  yesChoose: 'Yes, choose',
   startableSection: n => `READY TO TAKE (${n})`,
   nothingStartable: 'Nothing unblocked left to take.',
   showBand: 'Show the bar',
@@ -153,6 +160,9 @@ const ES: Strings = {
   oneLine: 'en una línea',
   send: 'enviar',
   cancel: 'Cancelar',
+  confirmPick: option => `¿Eliges «${option}»?`,
+  cannotUndo: 'No se puede deshacer.',
+  yesChoose: 'Sí, elegir',
   startableSection: n => `PARA TOMAR (${n})`,
   nothingStartable: 'Nada desbloqueado sin tomar.',
   showBand: 'Mostrar la banda',

@@ -1,7 +1,7 @@
 {
   "name": "dagyard",
-  "version": "0.2.0",
-  "description": "Dagyard en Claude Code: lo que te espera y lo que está para tomar sobre el prompt, el menú /dagyard y un aviso cuando algo nuevo te espera",
+  "version": "0.3.0",
+  "description": "Dagyard en Claude Code: lo que te espera y lo que está para tomar sobre el prompt, el menú /dagyard, un aviso cuando algo nuevo te espera, y el CLI dagyard en el PATH",
   "author": { "name": "Cofoundy", "email": "info@cofoundy.dev" },
   "repository": "https://github.com/cofoundy/dagyard"
 }
