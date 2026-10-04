@@ -6,8 +6,11 @@
 import {
   countNodes,
   isSlug,
+  LIMITS,
   nextStartable,
   parseBlockerInput,
+  parseCloseInput,
+  parseEdgeInput,
   parseMessageInput,
   parseNodeInput,
   parseNodePatch,
@@ -280,27 +283,43 @@ app.patch('/api/projects/:pid/nodes/:nid', async (c) => {
   return c.json(await run(c, { kind: 'patchNode', pid, nid: c.req.param('nid'), patch, actor: c.get('role') }));
 });
 
-app.delete('/api/projects/:pid/nodes/:nid', async (c) => {
+/** Cierra con motivo (#90): lista, reemplazada, descartada o «aprendimos». Emite `node.updated`. */
+app.post('/api/projects/:pid/nodes/:nid/close', async (c) => {
   const pid = pidParam(c);
-  await run(c, { kind: 'removeNode', pid, nid: c.req.param('nid'), actor: c.get('role') });
-  return c.body(null, 204);
+  const input = ok(parseCloseInput(await body(c)));
+  return c.json(await run(c, { kind: 'closeNode', pid, nid: c.req.param('nid'), input, actor: c.get('role') }));
 });
 
+/**
+ * Descartar (#90): cierra como `dropped` con el motivo opcional de `?why=`. Nunca borra la fila. Solo el dueño: la
+ * fábrica descarta cerrando con motivo (`close`).
+ */
+app.delete('/api/projects/:pid/nodes/:nid', async (c) => {
+  requireOwner(c, 'Descartar una tarea');
+  const pid = pidParam(c);
+  const why = c.req.query('why')?.trim() || null;
+  if (why && [...why].length > LIMITS.closedReason) fail('invalid', `why: máximo ${LIMITS.closedReason} caracteres`);
+  const node = await run(c, { kind: 'closeNode', pid, nid: c.req.param('nid'), input: { as: 'dropped', why }, actor: c.get('role'), whyOptional: true });
+  return c.json(node);
+});
+
+/** `{from, to, kind?, why?}`: sin `kind`, «necesita»; `kind: 'origin'` = «nació de» (#90). */
 app.post('/api/projects/:pid/edges', async (c) => {
   const pid = pidParam(c);
-  const b = (await body(c)) as { from?: unknown; to?: unknown } | null;
-  const from = b?.from;
-  const to = b?.to;
-  if (!isSlug(from) || !isSlug(to)) return fail('invalid', 'from y to: ids de tareas');
-  return c.json(await run(c, { kind: 'addEdge', pid, from, to, actor: c.get('role') }), 201);
+  const e = ok(parseEdgeInput(await body(c)));
+  return c.json(await run(c, { kind: 'addEdge', pid, from: e.from, to: e.to, edgeKind: e.kind ?? 'requires', why: e.why ?? null, actor: c.get('role') }), 201);
 });
 
+/** `?from&to[&kind=origin]`. Quitar un «nació de» es solo del dueño: es el porqué (#90). */
 app.delete('/api/projects/:pid/edges', async (c) => {
   const pid = pidParam(c);
   const from = c.req.query('from');
   const to = c.req.query('to');
+  const kind = c.req.query('kind') ?? 'requires';
   if (!isSlug(from) || !isSlug(to)) return fail('invalid', 'from y to: ids de tareas');
-  await run(c, { kind: 'removeEdge', pid, from, to, actor: c.get('role') });
+  if (kind !== 'requires' && kind !== 'origin') return fail('invalid', 'kind: requires u origin');
+  if (kind === 'origin') requireOwner(c, 'Quitar un «nació de»');
+  await run(c, { kind: 'removeEdge', pid, from, to, edgeKind: kind, actor: c.get('role') });
   return c.body(null, 204);
 });
 

@@ -41,7 +41,7 @@ describe('migración v7 (#75): tabla teams, tiempos por tarea y backfill desde e
     const stub = env.STORE.get(env.STORE.idFromName(`mig-${crypto.randomUUID()}`));
     const rows = await runInDurableObject(stub, (_i, state) => {
       const sql = state.storage.sql;
-      for (const t of ['teams', 'events', 'messages', 'blockers', 'edges', 'nodes', 'idempotency', 'sessions', 'projects', '_schema'])
+      for (const t of ['teams', 'events', 'messages', 'blockers', 'origins', 'edges', 'nodes', 'idempotency', 'sessions', 'projects', '_schema'])
         sql.exec(`DROP TABLE IF EXISTS ${t}`);
       migrate(sql, 6);
       const T = (m: number) => `2026-10-04T10:${String(m).padStart(2, '0')}:00.000Z`;

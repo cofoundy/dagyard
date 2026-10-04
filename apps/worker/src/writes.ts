@@ -15,21 +15,30 @@ import {
   demoProject,
   demoPulse,
   demoSignature,
+  findCycle,
+  isDemoProject,
+  neverDone,
+  nodeKind,
   slugify,
   teamDatesProblem,
   teamNameFromSlug,
   wouldCreateCycle,
   type Blocker,
   type BlockerInput,
+  type CloseAs,
+  type CloseInput,
   type DagEvent,
   type DagEventType,
   type DagNode,
   type Edge,
+  type EdgeKind,
   type Lang,
   type Message,
   type MessageInput,
   type NodeInput,
+  type NodeKind,
   type NodePatchInput,
+  type Origin,
   type Project,
   type ProjectGraphInput,
   type PulseState,
@@ -43,7 +52,7 @@ import {
 import { randomId } from './crypto.js';
 import type { Row } from './db.js';
 import { fail, notFound } from './http.js';
-import { toBlocker, toEdge, toNode, toProject, toTeam } from './rows.js';
+import { toBlocker, toEdge, toNode, toOrigin, toProject, toTeam } from './rows.js';
 
 export type EventSpec = { [K in DagEventType]: { type: K; payload: Extract<DagEvent, { type: K }>['payload'] } }[DagEventType];
 
@@ -56,9 +65,14 @@ export type WriteOp =
   | { kind: 'deleteProject'; pid: string }
   | { kind: 'addNode'; pid: string; input: NodeInput; actor: Role }
   | { kind: 'patchNode'; pid: string; nid: string; patch: NodePatchInput; actor: Role }
-  | { kind: 'removeNode'; pid: string; nid: string; actor: Role }
-  | { kind: 'addEdge'; pid: string; from: string; to: string; actor: Role }
-  | { kind: 'removeEdge'; pid: string; from: string; to: string; actor: Role }
+  /**
+   * cierra con motivo (#90): `POST …/close`, y `DELETE` del dueño (descartar = `dropped`, porqué opcional:
+   * `whyOptional`). Nunca borra la fila
+   */
+  | { kind: 'closeNode'; pid: string; nid: string; input: CloseInput; actor: Role; whyOptional?: boolean }
+  /** `edgeKind` (#90): «necesita» (`requires`, default) o «nació de» (`origin`, con su `why`) */
+  | { kind: 'addEdge'; pid: string; from: string; to: string; edgeKind?: EdgeKind; why?: string | null; actor: Role }
+  | { kind: 'removeEdge'; pid: string; from: string; to: string; edgeKind?: EdgeKind; actor: Role }
   | { kind: 'openBlocker'; pid: string; nid: string; input: BlockerInput; actor: Role }
   | {
       kind: 'resolveBlocker';
@@ -89,8 +103,8 @@ export interface WriteValues {
   deleteProject: null;
   addNode: DagNode;
   patchNode: DagNode;
-  removeNode: null;
-  addEdge: Edge;
+  closeNode: DagNode;
+  addEdge: Edge | Origin;
   removeEdge: null;
   openBlocker: Blocker;
   resolveBlocker: Blocker;
@@ -150,11 +164,18 @@ class Tx {
     const r = this.one('SELECT * FROM nodes WHERE project_id = ? AND id = ?', pid, nid);
     return r ? toNode(r) : notFound(`La tarea «${nid}»`);
   }
+  /** El tipo de un nodo que existe. */
+  kindOf(pid: string, nid: string): NodeKind {
+    return nodeKind({ kind: (this.one('SELECT kind FROM nodes WHERE project_id = ? AND id = ?', pid, nid)?.kind as NodeKind | undefined) ?? null });
+  }
   nodeIds(pid: string): Set<string> {
     return new Set(this.all('SELECT id FROM nodes WHERE project_id = ?', pid).map((r) => r.id as string));
   }
   edges(pid: string): Edge[] {
     return this.all('SELECT * FROM edges WHERE project_id = ? ORDER BY rowid', pid).map(toEdge);
+  }
+  origins(pid: string): Origin[] {
+    return this.all('SELECT * FROM origins WHERE project_id = ? ORDER BY rowid', pid).map(toOrigin);
   }
   openBlockers(pid: string, nid: string): number {
     return Number(this.one("SELECT COUNT(*) AS n FROM blockers WHERE project_id = ? AND node_id = ? AND status = 'open'", pid, nid)!.n);
@@ -170,14 +191,25 @@ class Tx {
 
   insertNode(n: DagNode): void {
     this.all(
-      `INSERT INTO nodes (project_id, id, stage, title, status, progress, team, goal, report_url, link, started_at, done_at, team_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO nodes (project_id, id, stage, title, status, progress, team, goal, report_url, link, started_at, done_at, team_id,
+         kind, born_at, quote, quote_by, closed_as, closed_reason, replaced_by, closed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       n.projectId, n.id, n.stage, n.title, n.status, n.progress, n.team, n.goal, n.reportUrl, n.link,
-      n.startedAt ?? null, n.doneAt ?? null, n.teamId ?? null, n.createdAt, n.updatedAt,
+      n.startedAt ?? null, n.doneAt ?? null, n.teamId ?? null,
+      nodeKind(n), n.bornAt ?? n.createdAt, n.quote ?? null, n.quoteBy ?? null, n.closedAs ?? null, n.closedReason ?? null, n.replacedBy ?? null, n.closedAt ?? null,
+      n.createdAt, n.updatedAt,
     );
+  }
+  /** Reinserta una fila tal cual estaba (todas sus columnas): un nodo que un PUT no trae, con su rowid nuevo (#90). */
+  restoreRow(table: 'nodes', r: Row): void {
+    const cols = Object.keys(r);
+    this.all(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, ...cols.map((c) => r[c] as V));
   }
   insertEdge(e: Edge): void {
     this.all('INSERT INTO edges (project_id, from_id, to_id) VALUES (?, ?, ?)', e.projectId, e.from, e.to);
+  }
+  insertOrigin(o: Origin): void {
+    this.all('INSERT INTO origins (project_id, from_id, to_id, why, created_at) VALUES (?, ?, ?, ?, ?)', o.projectId, o.from, o.to, o.why, o.createdAt);
   }
   insertBlocker(b: Blocker): void {
     this.all(
@@ -207,8 +239,17 @@ class Tx {
    * del servidor (#75), por cualquier camino que llegue (PATCH, bloqueante, respuesta, pulso de la demo):
    * `started_at` = la primera vez en `working`; `done_at` = al llegar a `done` (si ya lo estaba, se queda) y null
    * al dejarlo. En el SET de SQLite, `status` y `done_at` del lado derecho son los valores de antes.
+   * #90, también por cualquier camino: llegar a `done` cierra como `done` (si ya estaba cerrado, conserva su cierre) y
+   * dejarlo reabre (limpia los cuatro campos de cierre; el log guarda el cierre anterior). `close` cierra con un
+   * motivo explícito (va con `status: 'done'`).
    */
-  updateNode(pid: string, nid: string, cols: Partial<Record<'stage' | 'title' | 'status' | 'progress' | 'team' | 'goal' | 'report_url' | 'link' | 'team_id', V>>, where = ''): DagNode | null {
+  updateNode(
+    pid: string,
+    nid: string,
+    cols: Partial<Record<'stage' | 'title' | 'status' | 'progress' | 'team' | 'goal' | 'report_url' | 'link' | 'team_id' | 'kind' | 'quote' | 'quote_by', V>>,
+    where = '',
+    close?: { as: CloseAs; reason: string | null; by: string | null },
+  ): DagNode | null {
     const keys = Object.keys(cols) as Array<keyof typeof cols>;
     const sets = [...keys.map((k) => `${k} = ?`), 'updated_at = ?'];
     const params: V[] = [...keys.map((k) => cols[k] as V), this.now];
@@ -218,6 +259,20 @@ class Tx {
         "done_at = CASE WHEN ? <> 'done' THEN NULL WHEN status = 'done' AND done_at IS NOT NULL THEN done_at ELSE ? END",
       );
       params.push(cols.status, this.now, cols.status, this.now);
+      if (close) {
+        sets.push('closed_as = ?', 'closed_reason = ?', 'replaced_by = ?', 'closed_at = ?');
+        params.push(close.as, close.reason, close.by, this.now);
+      } else {
+        // «sigue cerrado» = ya estaba `done` con su motivo: entonces cada campo de cierre se queda como estaba
+        const still = "status = 'done' AND closed_as IS NOT NULL";
+        sets.push(
+          `closed_as = CASE WHEN ? <> 'done' THEN NULL WHEN ${still} THEN closed_as ELSE 'done' END`,
+          `closed_reason = CASE WHEN ? <> 'done' THEN NULL WHEN ${still} THEN closed_reason ELSE NULL END`,
+          `replaced_by = CASE WHEN ? <> 'done' THEN NULL WHEN ${still} THEN replaced_by ELSE NULL END`,
+          `closed_at = CASE WHEN ? <> 'done' THEN NULL WHEN ${still} THEN closed_at ELSE ? END`,
+        );
+        params.push(cols.status, cols.status, cols.status, cols.status, this.now);
+      }
     }
     const r = this.one(`UPDATE nodes SET ${sets.join(', ')} WHERE project_id = ? AND id = ? ${where} RETURNING *`, ...params, pid, nid);
     return r ? toNode(r) : null;
@@ -242,8 +297,9 @@ class Tx {
   teamRoom(pid: string): boolean {
     return Number(this.one('SELECT COUNT(*) AS n FROM teams WHERE project_id = ?', pid)!.n) < TEAM_LIMITS.perProject;
   }
+  /** Solo la re-siembra de una demo y el borrado del proyecto entero (#90: ningún camino de nodo borra su fila). */
   clearGraph(pid: string): void {
-    for (const t of ['messages', 'blockers', 'edges', 'nodes']) this.all(`DELETE FROM ${t} WHERE project_id = ?`, pid);
+    for (const t of ['messages', 'blockers', 'origins', 'edges', 'nodes']) this.all(`DELETE FROM ${t} WHERE project_id = ?`, pid);
   }
 
   emit(pid: string, actor: Role, ...specs: EventSpec[]): void {
@@ -262,14 +318,22 @@ class Tx {
   }
 }
 
-/** Nodo nuevo con las reglas del servidor: `done` → progress 1. */
+/**
+ * Nodo nuevo con las reglas del servidor: `done` → progress 1 (y cerrado como `done`, #90). Sin etapa, la primera
+ * del proyecto; un `goal` o `stream` nace `working` (está vivo); `bornAt` nunca en el futuro (se recorta a ahora).
+ */
 function newNode(pid: string, input: NodeInput, stages: Stage[], now: string, at = ''): DagNode {
-  if (!stages.some((s) => s.id === input.stage)) fail('invalid', `${at}stage: «${input.stage}» no es una etapa del proyecto`);
-  const status = input.status ?? 'pending';
+  const stage = input.stage ?? stages[0]?.id ?? fail('invalid', `${at}stage: el proyecto no tiene etapas`);
+  if (!stages.some((s) => s.id === stage)) fail('invalid', `${at}stage: «${stage}» no es una etapa del proyecto`);
+  const kind = input.kind ?? 'task';
+  const status = input.status ?? (neverDone(kind) ? 'working' : 'pending');
+  if (status === 'done' && neverDone(kind)) fail('invalid', `${at}status: ${neverClosesDone(kind)}`);
+  if (kind === 'request' && !input.quote) fail('invalid', `${at}quote: un pedido (request) lleva la cita literal de la persona`);
+  if (kind !== 'request' && (input.quote || input.quoteBy)) fail('invalid', `${at}quote: solo un pedido (request) lleva cita`);
   return {
     id: input.id ?? slugify(input.title),
     projectId: pid,
-    stage: input.stage,
+    stage,
     title: input.title,
     status,
     progress: status === 'done' ? 1 : (input.progress ?? 0),
@@ -281,10 +345,24 @@ function newNode(pid: string, input: NodeInput, stages: Stage[], now: string, at
     startedAt: status === 'working' ? now : null,
     doneAt: status === 'done' ? now : null,
     teamId: null,
+    kind,
+    bornAt: input.bornAt !== undefined && input.bornAt < now ? input.bornAt : now,
+    quote: kind === 'request' ? (input.quote ?? null) : null,
+    quoteBy: kind === 'request' ? (input.quoteBy ?? null) : null,
+    closedAs: status === 'done' ? 'done' : null,
+    closedReason: null,
+    replacedBy: null,
+    closedAt: status === 'done' ? now : null,
     createdAt: now,
     updatedAt: now,
   };
 }
+
+const neverClosesDone = (kind: string) => `un ${kind} no se cierra como «done»; ciérralo con otro motivo (replaced, dropped o learned)`;
+/** El 400 de un «necesita» desde un nodo que nunca se cierra. */
+const neverNeeded = (id: string, kind: string) => `«${id}» es un ${kind}: nunca se cierra, así que nada puede necesitarlo (usa una arista «nació de»)`;
+/** El motivo de un nodo que un PUT ya no trae y queda descartado (#90), en el idioma del proyecto. */
+const NOT_IN_IMPORT: Record<Lang, string> = { en: 'not in the import', es: 'no está en el import' };
 
 /** Una revisión sin opciones recibe las del idioma del proyecto (#77). */
 const withDefaultOptions = <B extends BlockerInput>(b: B, lang: Lang): B =>
@@ -344,27 +422,60 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     const graphBlockers = (g.blockers ?? []).map((b) => withDefaultOptions(b, lang));
     // el PUT de un agente sobre un proyecto existente conserva lo que no le toca reescribir; el dueño recrea todo
     const keep = prev !== null && actor !== 'owner';
-    const nodes = g.nodes.map((n, i) => newNode(pid, n, stages, tx.now, `nodes[${i}].`));
+    // #90: en un proyecto existente que no es demo, ningún nodo desaparece. Uno que el cuerpo no trae queda con sus
+    // aristas, orígenes, preguntas y mensajes (cerrado como `dropped` si estaba abierto). La demo es una fixture que
+    // vuelve a su guion: ahí sí se recrea entera.
+    const preserve = prev !== null && !isDemoProject(pid);
+    const prevNodes = prev ? tx.all('SELECT * FROM nodes WHERE project_id = ? ORDER BY rowid', pid) : [];
+    const prevById = new Map(prevNodes.map((r) => [r.id as string, r]));
+    // un nodo que sigue y cuyo cuerpo no trae `kind`, `quote`, `quoteBy` o `bornAt` conserva los guardados (como
+    // `link`): un import no los conoce y no debe volver tarea a un objetivo
+    const inputs = g.nodes.map((n): NodeInput => {
+      const r = preserve ? prevById.get(n.id ?? slugify(n.title)) : undefined;
+      if (!r) return n;
+      return {
+        ...n,
+        kind: n.kind ?? (r.kind as NodeInput['kind']),
+        ...(!('quote' in n) && { quote: (r.quote as string | null) ?? null }),
+        ...(!('quoteBy' in n) && { quoteBy: (r.quote_by as string | null) ?? null }),
+      };
+    });
+    const nodes = inputs.map((n, i) => newNode(pid, n, stages, tx.now, `nodes[${i}].`));
     const byId = new Map(nodes.map((n) => [n.id, n]));
+    // los nodos que el cuerpo no trae (solo con `preserve`): siguen en el grafo
+    const absent = preserve ? prevNodes.filter((r) => !byId.has(r.id as string)) : [];
+    const absentIds = new Set(absent.map((r) => r.id as string));
+    if (nodes.length + absent.length > LIMITS.nodesPerProject)
+      fail('invalid', `nodes: con las ${absent.length} tareas que el cuerpo no trae (no se borran) serían más de ${LIMITS.nodesPerProject}`);
+    const stageIds = new Set(stages.map((s) => s.id));
+    const lost = absent.find((r) => !stageIds.has(r.stage as string));
+    if (lost) fail('invalid', `stages: la tarea «${lost.title}» (no viene en el cuerpo, pero sigue en el grafo) usa la etapa «${lost.stage}»; muévela antes de quitarla`);
     // una tarea que sigue conserva su antigüedad (`next` desempata por `createdAt`) y su `link` si el body no
     // trae la clave: un import no la manda y no debe borrar lo que puso `sync`; `null` explícito sí lo borra
-    if (keep) {
+    if (keep || preserve) {
       const sent = new Map(g.nodes.map((n, i) => [nodes[i]!.id, 'link' in n]));
-      for (const r of tx.all('SELECT id, created_at, link FROM nodes WHERE project_id = ?', pid)) {
+      const bornSent = new Map(g.nodes.map((n, i) => [nodes[i]!.id, n.bornAt !== undefined]));
+      for (const r of prevNodes) {
         const node = byId.get(r.id as string);
         if (!node) continue;
         node.createdAt = r.created_at as string;
-        if (!sent.get(node.id)) node.link = (r.link as string | null) ?? null;
+        if (preserve && !bornSent.get(node.id)) node.bornAt = (r.born_at as string | null) ?? node.createdAt;
+        if (keep && !sent.get(node.id)) node.link = (r.link as string | null) ?? null;
       }
     }
     // resolver es solo del dueño: el PUT de un agente conserva cada bloqueante (abierto o respondido) con su
-    // id, su respuesta y su valor, así un `wait` en curso los sigue encontrando. Quitar su tarea → 409.
-    const kept = keep ? tx.all('SELECT * FROM blockers WHERE project_id = ? ORDER BY rowid', pid) : [];
+    // id, su respuesta y su valor, así un `wait` en curso los sigue encontrando. Los de un nodo que el cuerpo no trae
+    // se conservan siempre (#90: el nodo sigue). Sin `preserve` (la demo), quitar su tarea → 409.
+    const kept = keep
+      ? tx.all('SELECT * FROM blockers WHERE project_id = ? ORDER BY rowid', pid)
+      : preserve
+        ? tx.all('SELECT * FROM blockers WHERE project_id = ? ORDER BY rowid', pid).filter((b) => absentIds.has(b.node_id as string))
+        : [];
     // los mensajes de las tareas que siguen se conservan con su id y su fecha; los de una tarea quitada se van
-    const keptMessages = keep
-      ? tx.all('SELECT * FROM messages WHERE project_id = ? ORDER BY rowid', pid).filter((m) => byId.has(m.node_id as string))
+    const keptMessages = keep || preserve
+      ? tx.all('SELECT * FROM messages WHERE project_id = ? ORDER BY rowid', pid).filter((m) => (keep && byId.has(m.node_id as string)) || absentIds.has(m.node_id as string))
       : [];
-    const orphan = kept.find((b) => !byId.has(b.node_id as string));
+    const orphan = kept.find((b) => !byId.has(b.node_id as string) && !absentIds.has(b.node_id as string));
     if (orphan) {
       const nid = orphan.node_id as string;
       const h = held(tx.heldBlockers(pid, nid));
@@ -399,24 +510,65 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     });
     // #75: los tiempos son historia, no parte del archivo: una tarea que sigue (con el dueño o con un agente) conserva
     // cuándo arrancó, cuándo quedó lista si sigue lista, y su equipo. Una que vuelve a `pending` no arrancó.
-    const prevTimes = new Map(tx.all('SELECT id, status, started_at, done_at, team_id FROM nodes WHERE project_id = ?', pid).map((r) => [r.id as string, r]));
+    // #90: igual el cierre: una que sigue cerrada conserva su motivo; una que deja `done` se reabre.
+    const prevTimes = new Map(prevNodes.map((r) => [r.id as string, r]));
     for (const node of nodes) {
       const p = prevTimes.get(node.id);
       if (!p) continue;
       node.startedAt = node.status === 'pending' ? null : ((p.started_at as string | null) ?? node.startedAt ?? null);
       node.doneAt = node.status !== 'done' ? null : p.status === 'done' && p.done_at ? (p.done_at as string) : tx.now;
       node.teamId = (p.team_id as string | null) ?? null;
+      if (node.status === 'done' && p.status === 'done' && p.closed_as) {
+        node.closedAs = p.closed_as as CloseAs;
+        node.closedReason = (p.closed_reason as string | null) ?? null;
+        node.replacedBy = (p.replaced_by as string | null) ?? null;
+        node.closedAt = (p.closed_at as string | null) ?? node.closedAt ?? null;
+      }
     }
+    const kindOf = new Map<string, string>([...absent.map((r) => [r.id as string, r.kind as string] as const), ...nodes.map((n) => [n.id, nodeKind(n)] as const)]);
     const edges: Edge[] = g.nodes.flatMap((n, i) => [...new Set(n.deps ?? [])].map((d) => ({ projectId: pid, from: d, to: nodes[i]!.id })));
+    for (const e of edges) {
+      const k = kindOf.get(e.from)!;
+      if (neverDone(k as NodeKind)) fail('invalid', `nodes: ${neverNeeded(e.from, k)}`);
+    }
+    // las aristas «necesita» que llegan a un nodo del cuerpo salen de sus `deps`; las que llegan a uno que no viene se
+    // quedan (no arman ciclos: las que salen de él hacia el cuerpo ya no están)
+    const keptEdges = absent.length ? tx.edges(pid).filter((e) => absentIds.has(e.to)) : [];
+    // «nació de»: los existentes se conservan y se suman los del cuerpo (#90)
+    const prevOrigins = preserve ? tx.origins(pid) : [];
+    const originKey = (from: string, to: string) => `${from}\u0000${to}`;
+    const have = new Set(prevOrigins.map((o) => originKey(o.from, o.to)));
+    const newOrigins: Origin[] = [];
+    g.nodes.forEach((n, i) => {
+      for (const o of n.origins ?? []) {
+        const k = originKey(o.from, nodes[i]!.id);
+        if (have.has(k)) continue;
+        have.add(k);
+        newOrigins.push({ projectId: pid, from: o.from, to: nodes[i]!.id, why: o.why ?? null, createdAt: tx.now });
+      }
+    });
+    const allIds = [...nodes.map((n) => n.id), ...absentIds];
+    const ocyc = findCycle(allIds, [...prevOrigins, ...newOrigins]);
+    if (ocyc) fail('cycle', `ciclo en «nació de»: ${ocyc.join(' → ')}`);
+    // los que no vienen y siguen abiertos se descartan, salvo que esperen una respuesta del dueño (siguen esperándola)
+    const openAsked = new Set(keptOpen.map((b) => b.node_id as string));
+    const absentRows = absent.map((r) =>
+      r.status === 'done' || openAsked.has(r.id as string)
+        ? r
+        : { ...r, status: 'done', done_at: tx.now, closed_as: 'dropped', closed_reason: NOT_IN_IMPORT[lang], replaced_by: null, closed_at: tx.now, updated_at: tx.now },
+    );
     const project: Project = { id: pid, name: g.name, lang, stages, createdAt: prev?.createdAt ?? tx.now, updatedAt: tx.now };
     tx.all(
       `INSERT INTO projects (id, name, lang, stages, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET name = excluded.name, lang = excluded.lang, stages = excluded.stages, updated_at = excluded.updated_at`,
       pid, project.name, langCol, JSON.stringify(stages), project.createdAt, tx.now,
     );
+    // se reescribe el grafo en la misma transacción; los nodos que no vienen vuelven tal cual (o descartados)
     tx.clearGraph(pid);
     for (const n of nodes) tx.insertNode(n);
-    for (const e of edges) tx.insertEdge(e);
+    for (const r of absentRows) tx.restoreRow('nodes', r);
+    for (const e of [...edges, ...keptEdges]) tx.insertEdge(e);
+    for (const o of [...prevOrigins, ...newOrigins]) tx.insertOrigin(o);
     for (const b of kept) tx.restoreBlocker(b);
     for (const b of fresh) tx.insertBlocker(newBlocker(pid, b.nodeId, b, tx.now));
     // uno del body igual a uno conservado no se duplica: re-importar el mismo archivo es idempotente. Sin `from`,
@@ -484,10 +636,24 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     if (ids.has(node.id)) fail('conflict', `Ya existe una tarea «${node.id}»`);
     const deps = [...new Set(input.deps ?? [])];
     for (const d of deps) if (!ids.has(d)) fail('invalid', `deps: «${d}» no existe`);
+    for (const d of deps) {
+      const k = tx.kindOf(pid, d);
+      if (neverDone(k)) fail('invalid', `deps: ${neverNeeded(d, k)}`);
+    }
+    for (const o of input.origins ?? []) if (!ids.has(o.from)) fail('invalid', `origins: «${o.from}» no existe`);
     const edges: Edge[] = deps.map((d) => ({ projectId: pid, from: d, to: node.id }));
+    // un nodo nuevo solo recibe orígenes: no puede cerrar un ciclo de «nació de»
+    const origins: Origin[] = (input.origins ?? []).map((o) => ({ projectId: pid, from: o.from, to: node.id, why: o.why ?? null, createdAt: tx.now }));
     tx.insertNode(node);
     for (const e of edges) tx.insertEdge(e);
-    tx.emit(pid, actor, { type: 'node.added', payload: { node } }, ...edges.map((edge) => ({ type: 'edge.added' as const, payload: { edge } })));
+    for (const o of origins) tx.insertOrigin(o);
+    tx.emit(
+      pid,
+      actor,
+      { type: 'node.added', payload: { node } },
+      ...edges.map((edge) => ({ type: 'edge.added' as const, payload: { edge } })),
+      ...origins.map((origin) => ({ type: 'origin.added' as const, payload: { origin } })),
+    );
     return node;
   },
 
@@ -499,7 +665,23 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
       fail('conflict', 'La tarea tiene un bloqueante abierto: resuélvelo antes de cambiar su estado');
     if (patch.stage !== undefined && !project.stages.some((s) => s.id === patch.stage))
       fail('invalid', `stage: «${patch.stage}» no es una etapa del proyecto`);
+    // #90: el tipo y la cita se validan contra lo guardado
+    const kind = patch.kind ?? nodeKind(prev);
+    const status = patch.status ?? prev.status;
+    if (neverDone(kind) && patch.status === 'done') fail('invalid', `status: ${neverClosesDone(kind)}`);
+    if (neverDone(kind) && patch.kind !== undefined && status === 'done' && prev.closedAs === 'done')
+      fail('invalid', `kind: la tarea está cerrada como «done» y un ${kind} no se cierra así; reábrela antes de cambiarle el tipo`);
+    if (neverDone(kind) && patch.kind !== undefined && tx.edges(pid).some((e) => e.from === nid))
+      fail('invalid', `kind: otras tareas necesitan a «${nid}»; un ${kind} nunca se cierra y las bloquearía para siempre`);
+    if (kind === 'request') {
+      if (!(patch.quote !== undefined ? patch.quote : prev.quote)) fail('invalid', 'quote: un pedido (request) lleva la cita literal de la persona');
+    } else if (patch.quote || patch.quoteBy) fail('invalid', 'quote: solo un pedido (request) lleva cita');
     const cols: Parameters<Tx['updateNode']>[2] = {};
+    if (patch.kind !== undefined) cols.kind = patch.kind;
+    if (patch.quote !== undefined) cols.quote = patch.quote;
+    if (patch.quoteBy !== undefined) cols.quote_by = patch.quoteBy;
+    // dejar de ser un pedido deja la cita en el log, no en el nodo
+    if (kind !== 'request' && prev.quote) Object.assign(cols, { quote: null, quote_by: null });
     if (patch.stage !== undefined) cols.stage = patch.stage;
     if (patch.title !== undefined) cols.title = patch.title;
     if (patch.status !== undefined) cols.status = patch.status;
@@ -509,7 +691,6 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     if (patch.reportUrl !== undefined) cols.report_url = patch.reportUrl;
     if (patch.link !== undefined) cols.link = patch.link;
     if (patch.teamId !== undefined) cols.team_id = patch.teamId;
-    const status = patch.status ?? prev.status;
     if (status === 'done') cols.progress = 1;
     else if (patch.status === 'working' && prev.status === 'pending') cols.progress = patch.progress ?? 0;
     const node = tx.updateNode(pid, nid, cols)!;
@@ -521,24 +702,54 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     return node;
   },
 
-  removeNode(tx, { pid, nid, actor }) {
-    const node = tx.node(pid, nid);
-    // resolver es solo del dueño: un agente no hace desaparecer ni sus preguntas abiertas ni sus respuestas
-    const h = actor !== 'owner' ? tx.heldBlockers(pid, nid) : { open: 0, resolved: 0 };
-    if (h.open + h.resolved > 0) {
-      const { what, them } = held(h);
-      fail('conflict', `La tarea «${node.title}» tiene ${what}; borrarla ${them} haría desaparecer. Pídele al dueño que la borre él`);
+  closeNode(tx, { pid, nid, input, actor, whyOptional }) {
+    tx.project(pid);
+    const prev = tx.node(pid, nid);
+    const kind = nodeKind(prev);
+    if (prev.status === 'done') fail('conflict', `La tarea «${prev.title}» ya está cerrada (${prev.closedAs ?? 'done'}); para volver a cerrarla, reábrela primero`);
+    if (tx.openBlockers(pid, nid) > 0) fail('conflict', 'La tarea tiene un bloqueante abierto: resuélvelo antes de cerrarla');
+    if (input.as === 'done' && neverDone(kind)) fail('invalid', `as: ${neverClosesDone(kind)}`);
+    const why = input.why ?? null;
+    if (input.as !== 'done' && !why && !whyOptional) fail('invalid', `why: cerrar como «${input.as}» necesita su porqué`);
+    let by: string | null = null;
+    if (input.as === 'replaced') {
+      by = input.by!;
+      if (by === nid) fail('invalid', 'by: una tarea no se reemplaza a sí misma');
+      if (!tx.nodeIds(pid).has(by)) fail('invalid', `by: «${by}» no existe`);
+      // la cadena de reemplazos no puede volver a esta tarea (lo arrancable la sigue hasta el final)
+      const replacedBy = new Map(tx.all('SELECT id, replaced_by FROM nodes WHERE project_id = ? AND replaced_by IS NOT NULL', pid).map((r) => [r.id as string, r.replaced_by as string]));
+      const seen = new Set<string>();
+      for (let n: string | undefined = by; n && !seen.has(n); n = replacedBy.get(n)) {
+        if (n === nid) fail('cycle', `«${by}» ya está reemplazada (en cadena) por «${nid}»: ese reemplazo cerraría un ciclo`);
+        seen.add(n);
+      }
     }
-    for (const [t, col] of [['messages', 'node_id'], ['blockers', 'node_id'], ['edges', 'from_id'], ['edges', 'to_id'], ['nodes', 'id']] as const)
-      tx.all(`DELETE FROM ${t} WHERE project_id = ? AND ${col} = ?`, pid, node.id);
-    tx.emit(pid, actor, { type: 'node.removed', payload: { nodeId: node.id } });
-    return null;
+    // una tarea lista exige evidencia: un porqué o un informe (el del cuerpo o el que ya tenía)
+    if (input.as === 'done' && kind === 'task' && !why && !input.reportUrl && !prev.reportUrl)
+      fail('invalid', 'why o reportUrl: cerrar una tarea como lista necesita evidencia (qué quedó, o el informe)');
+    const cols: Parameters<Tx['updateNode']>[2] = { status: 'done' };
+    if (input.as === 'done') cols.progress = 1;
+    if (input.reportUrl) cols.report_url = input.reportUrl;
+    const node = tx.updateNode(pid, nid, cols, '', { as: input.as, reason: why, by })!;
+    tx.emit(pid, actor, { type: 'node.updated', payload: { node } });
+    return node;
   },
 
-  addEdge(tx, { pid, from, to, actor }) {
+  addEdge(tx, { pid, from, to, edgeKind = 'requires', why, actor }) {
     tx.project(pid);
     const ids = tx.nodeIds(pid);
     for (const id of [from, to]) if (!ids.has(id)) notFound(`La tarea «${id}»`);
+    if (edgeKind === 'origin') {
+      const origins = tx.origins(pid);
+      if (origins.some((o) => o.from === from && o.to === to)) fail('conflict', 'Ese «nació de» ya existe');
+      if (wouldCreateCycle(origins, from, to)) fail('cycle', `«${from}» ya nació (en cadena) de «${to}»: ese «nació de» cerraría un ciclo`);
+      const origin: Origin = { projectId: pid, from, to, why: why ?? null, createdAt: tx.now };
+      tx.insertOrigin(origin);
+      tx.emit(pid, actor, { type: 'origin.added', payload: { origin } });
+      return origin;
+    }
+    const k = tx.kindOf(pid, from);
+    if (neverDone(k)) fail('invalid', neverNeeded(from, k));
     const edges = tx.edges(pid);
     if (edges.some((e) => e.from === from && e.to === to)) fail('conflict', 'Esa dependencia ya existe');
     if (wouldCreateCycle(edges, from, to)) fail('cycle', `«${from}» ya depende de «${to}»: esa dependencia cerraría un ciclo`);
@@ -548,8 +759,14 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     return edge;
   },
 
-  removeEdge(tx, { pid, from, to, actor }) {
+  removeEdge(tx, { pid, from, to, edgeKind = 'requires', actor }) {
     tx.project(pid);
+    if (edgeKind === 'origin') {
+      const gone = tx.one('DELETE FROM origins WHERE project_id = ? AND from_id = ? AND to_id = ? RETURNING from_id', pid, from, to);
+      if (!gone) notFound('Ese «nació de»');
+      tx.emit(pid, actor, { type: 'origin.removed', payload: { origin: { projectId: pid, from, to } } });
+      return null;
+    }
     const gone = tx.one('DELETE FROM edges WHERE project_id = ? AND from_id = ? AND to_id = ? RETURNING from_id', pid, from, to);
     if (!gone) notFound('Esa dependencia');
     const edge: Edge = { projectId: pid, from, to };
