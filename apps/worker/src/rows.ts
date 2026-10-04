@@ -1,5 +1,5 @@
 /** Filas de SQLite → tipos del contrato. */
-import { LANGS, LEGACY_LANG, demoLang, type Blocker, type BlockerResolution, type DagEvent, type DagEventType, type DagNode, type Edge, type Lang, type Message, type Project, type Role } from '@dagyard/model';
+import { LANGS, LEGACY_LANG, demoLang, type Blocker, type BlockerResolution, type DagEvent, type DagEventType, type DagNode, type Edge, type Lang, type Message, type Project, type Role, type Team } from '@dagyard/model';
 import type { Row } from './db.js';
 
 const s = (v: unknown) => v as string;
@@ -26,9 +26,28 @@ export const toNode = (r: Row): DagNode => ({
   goal: ns(r.goal),
   reportUrl: ns(r.report_url),
   link: ns(r.link),
+  // #75: siempre presentes (null si no se sabe); los pone el servidor en las transiciones de estado
+  startedAt: ns(r.started_at),
+  doneAt: ns(r.done_at),
+  teamId: ns(r.team_id),
   createdAt: s(r.created_at),
   updatedAt: s(r.updated_at),
 });
+
+export const toTeam = (r: Row): Team => ({
+  id: s(r.id),
+  projectId: s(r.project_id),
+  name: s(r.name),
+  nodeIds: JSON.parse(s(r.node_ids)) as string[],
+  requestedAt: ns(r.requested_at),
+  startedAt: ns(r.started_at),
+  closedAt: ns(r.closed_at),
+  outcome: ns(r.outcome),
+  updatedAt: s(r.updated_at),
+});
+
+/** Orden de `ProjectSnapshot.teams`: por `startedAt`, los que no arrancaron al final (como `sortTeams` del modelo). */
+export const TEAMS_ORDER = 'ORDER BY started_at IS NULL, started_at, rowid';
 
 export const toEdge = (r: Row): Edge => ({ projectId: s(r.project_id), from: s(r.from_id), to: s(r.to_id) });
 
