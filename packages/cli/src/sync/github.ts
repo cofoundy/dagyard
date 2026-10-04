@@ -137,13 +137,15 @@ export function closingRefs(text: string): number[] {
 }
 
 /**
- * Del cuerpo de un issue: `partOf` = «Parte de #n» (este issue es una parte de la épica n) y
- * `dependsOn` = «depende de #n», «blocked by #n», «bloqueado por #n».
+ * Del cuerpo de un issue: `partOf` = «Parte de #n» (este issue es una parte de la épica n),
+ * `dependsOn` = «depende de #n», «blocked by #n», «bloqueado por #n», y `bornFrom` (#90) = «sale de la revisión de #n»,
+ * «nace de #n» o «born from #n» (este issue nació de n: no es una dependencia).
  */
-export function dependencyRefs(text: string): { partOf: number[]; dependsOn: number[] } {
+export function dependencyRefs(text: string): { partOf: number[]; dependsOn: number[]; bornFrom: number[] } {
   return {
     partOf: refsAfter(text, 'parte de|part of'),
     dependsOn: refsAfter(text, 'depende de|depends on|blocked by|bloquead[oa] por'),
+    bornFrom: refsAfter(text, 'sale de la revisi[oó]n de|nace de|born from'),
   };
 }
 

@@ -66,10 +66,10 @@ describe('el CLI habla el idioma del entorno (#73)', () => {
     expect(en.code).toBe(EXIT.ok);
     expect(es.code).toBe(EXIT.ok);
     expect(en.stdout).toContain('Usage: dagyard <command> [options]');
-    expect(en.stdout).toContain('adds a task to the plan');
-    expect(en.stdout).not.toMatch(/Comandos|agrega una tarea/);
+    expect(en.stdout).toContain('adds a node to the plan');
+    expect(en.stdout).not.toMatch(/Comandos|agrega un nodo/);
     expect(es.stdout).toContain('Uso: dagyard <comando> [opciones]');
-    expect(es.stdout).toContain('agrega una tarea al plan');
+    expect(es.stdout).toContain('agrega un nodo al plan');
     const commands = (s: string) => s.split('\n').filter((l) => /^ {2}\S/.test(l)).map((l) => l.trim().split(/\s{2,}/)[0]);
     expect(commands(en.stdout)).toEqual(commands(es.stdout));
   });

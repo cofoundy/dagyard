@@ -34,6 +34,8 @@ let stages: Stage[];
 let projectLang: 'en' | 'es' | undefined;
 let nodes: Map<string, DagNode>;
 let edges: Edge[];
+/** «nació de» (#90): from → to */
+let origins: Edge[];
 let blockers: Blocker[];
 
 function node(id: string, extra: Partial<DagNode> = {}): DagNode {
@@ -88,6 +90,7 @@ const fakeFetch: typeof fetch = async (input, init) => {
       project: { id: pid, name: 'Dagyard', stages, ...(projectLang ? { lang: projectLang } : {}), createdAt: AT, updatedAt: AT },
       nodes: [...nodes.values()],
       edges,
+      origins,
       blockers,
       messages: [],
       seq: 1,
@@ -116,6 +119,15 @@ const fakeFetch: typeof fetch = async (input, init) => {
     }
     Object.assign(n, patch);
     return json(200, n);
+  }
+  if (method === 'POST' && kind === 'edges' && (body as { kind?: string }).kind === 'origin') {
+    const { from, to } = body as { from: string; to: string };
+    if (!nodes.has(from) || !nodes.has(to)) return err(404, 'not_found', 'nodo');
+    if (origins.some((e) => e.from === from && e.to === to)) return err(409, 'conflict', 'ya existe');
+    if (wouldCreateCycle(origins, from, to)) return err(400, 'cycle', 'cerraría un ciclo');
+    const o = { projectId: 'dagyard', from, to };
+    origins.push(o);
+    return json(201, { ...o, why: null, createdAt: AT });
   }
   if (method === 'POST' && kind === 'edges') {
     const { from, to } = body as { from: string; to: string };
@@ -177,6 +189,7 @@ beforeEach(() => {
   ];
   nodes = new Map();
   edges = [];
+  origins = [];
   blockers = [];
   ghIssues = [];
   ghPulls = [];
@@ -763,7 +776,41 @@ describe('referencias', () => {
     expect(dependencyRefs('Parte de #44. Depende de #3 y #4, blocked by #5; bloqueado por #6')).toEqual({
       partOf: [44],
       dependsOn: [3, 4, 5, 6],
+      bornFrom: [],
     });
+  });
+
+  it('dependencyRefs (#90): «sale de la revisión de», «nace de» y «born from» son «nació de», no dependencias', () => {
+    expect(dependencyRefs('Sale de la revisión de #75. Nace de #61 y #62; born from #9. Sale de la revision de #8')).toEqual({
+      partOf: [],
+      dependsOn: [],
+      bornFrom: [75, 61, 62, 9, 8],
+    });
+  });
+});
+
+describe('sync: «nació de» (#90)', () => {
+  it('crea la arista «nació de» desde gh-n (no un «necesita»), sin repetirla al volver a sincronizar', async () => {
+    ghIssues = [issue(75, 'Tiempo'), issue(80, 'Ajustes', { body: 'Sale de la revisión de #75. Parte de #90.' }), issue(90, 'Épica')];
+    let r = await sync();
+    expect(r.code).toBe(EXIT.ok);
+    expect(origins.map((o) => [o.from, o.to])).toEqual([['gh-75', 'gh-80']]);
+    expect(edges.map((e) => [e.from, e.to])).toEqual([['gh-80', 'gh-90']]);
+    expect(calls.filter((c) => c.method === 'POST' && c.path.endsWith('/edges')).map((c) => c.body)).toContainEqual({ from: 'gh-75', to: 'gh-80', kind: 'origin' });
+    calls = [];
+    r = await sync();
+    expect(calls.filter((c) => c.method === 'POST')).toEqual([]);
+  });
+
+  it('en --dry-run no escribe y avisa si cerraría un ciclo', async () => {
+    nodes.set('gh-1', node('gh-1', { link: ghUrl(1) }));
+    nodes.set('gh-2', node('gh-2', { link: ghUrl(2) }));
+    origins.push({ projectId: 'dagyard', from: 'gh-2', to: 'gh-1' });
+    ghIssues = [issue(1, 'Uno'), issue(2, 'Dos', { body: 'Nace de #1' })];
+    const r = await sync(['--dry-run']);
+    expect(r.code).toBe(EXIT.ok);
+    expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
+    expect(r.stdout).toMatch(/cerraría un ciclo/);
   });
 });
 
