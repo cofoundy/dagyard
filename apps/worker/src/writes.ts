@@ -16,6 +16,7 @@ import {
   demoPulse,
   demoSignature,
   slugify,
+  teamDatesProblem,
   teamNameFromSlug,
   wouldCreateCycle,
   type Blocker,
@@ -512,9 +513,11 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     if (status === 'done') cols.progress = 1;
     else if (patch.status === 'working' && prev.status === 'pending') cols.progress = patch.progress ?? 0;
     const node = tx.updateNode(pid, nid, cols)!;
-    // la tarea entra a la lista de su equipo (#75); si el equipo no existe todavía, nace con ella
-    const team = patch.teamId ? joinTeam(tx, pid, patch.teamId, nid) : null;
-    tx.emit(pid, actor, { type: 'node.updated', payload: { node } }, ...(team ? [{ type: 'team.updated' as const, payload: { team } }] : []));
+    // cambiar de equipo (o soltarla) la saca del viejo; entra a la lista del nuevo, que nace con ella si no existe (#75)
+    const left = patch.teamId !== undefined && prev.teamId && prev.teamId !== patch.teamId ? leaveTeam(tx, pid, prev.teamId, nid) : null;
+    const joined = patch.teamId ? joinTeam(tx, pid, patch.teamId, nid) : null;
+    const teams = [left, joined].filter((t): t is Team => t !== null);
+    tx.emit(pid, actor, { type: 'node.updated', payload: { node } }, ...teams.map((team) => ({ type: 'team.updated' as const, payload: { team } })));
     return node;
   },
 
@@ -635,13 +638,19 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
       id: tid,
       projectId: pid,
       name: patch.name ?? prev?.name ?? teamNameFromSlug(tid),
-      nodeIds: patch.nodeIds ?? prev?.nodeIds ?? [],
+      nodeIds: [...(patch.nodeIds ?? prev?.nodeIds ?? [])],
       requestedAt: pick('requestedAt'),
       startedAt: pick('startedAt'),
       closedAt: pick('closedAt'),
       outcome: pick('outcome'),
       updatedAt: tx.now,
     };
+    // addNodeIds se suma sobre la lista vigente, leída en esta misma transacción: dos escritores no se pisan
+    for (const id of patch.addNodeIds ?? []) if (!team.nodeIds.includes(id)) team.nodeIds.push(id);
+    if (team.nodeIds.length > TEAM_LIMITS.nodeIds)
+      fail('conflict', `El equipo «${tid}» llegaría a ${team.nodeIds.length} tareas; el máximo es ${TEAM_LIMITS.nodeIds}`);
+    const problem = teamDatesProblem(team);
+    if (problem) fail('invalid', problem);
     // idempotente: repetir el mismo upsert (p. ej. `import-ledger` otra vez) no escribe ni emite
     if (prev && sameTeam(prev, team)) return prev;
     tx.saveTeam(team);
@@ -716,16 +725,28 @@ function sameTeam(a: Team, b: Team): boolean {
 }
 
 /**
- * Suma la tarea a su equipo y devuelve el equipo si cambió (null si ya estaba, o si no cabe). Un equipo que no
- * existe nace aquí, arrancado ahora: el sitio empezó a trabajar sin pasar por `dagyard team start`.
+ * Suma la tarea a su equipo y devuelve el equipo si cambió (null si ya estaba). Un equipo que no existe nace aquí,
+ * arrancado ahora: el sitio empezó a trabajar sin pasar por `dagyard team start`. Si no cabe, `409` (revierte todo
+ * el PATCH): nunca se descarta en silencio.
  */
 function joinTeam(tx: Tx, pid: string, tid: string, nid: string): Team | null {
   const prev = tx.team(pid, tid);
-  if (prev && (prev.nodeIds.includes(nid) || prev.nodeIds.length >= TEAM_LIMITS.nodeIds)) return null;
-  if (!prev && !tx.teamRoom(pid)) return null;
+  if (prev?.nodeIds.includes(nid)) return null;
+  if (prev && prev.nodeIds.length >= TEAM_LIMITS.nodeIds)
+    fail('conflict', `El equipo «${tid}» ya lleva ${TEAM_LIMITS.nodeIds} tareas, el máximo; la tarea no cambió`);
+  if (!prev && !tx.teamRoom(pid)) fail('conflict', `El proyecto ya tiene ${TEAM_LIMITS.perProject} equipos, el máximo; la tarea no cambió`);
   const team: Team = prev
     ? { ...prev, nodeIds: [...prev.nodeIds, nid], updatedAt: tx.now }
     : { id: tid, projectId: pid, name: teamNameFromSlug(tid), nodeIds: [nid], requestedAt: null, startedAt: tx.now, closedAt: null, outcome: null, updatedAt: tx.now };
+  tx.saveTeam(team);
+  return team;
+}
+
+/** Saca la tarea de un equipo; devuelve el equipo si cambió (null si no existe o no la tenía). */
+function leaveTeam(tx: Tx, pid: string, tid: string, nid: string): Team | null {
+  const prev = tx.team(pid, tid);
+  if (!prev?.nodeIds.includes(nid)) return null;
+  const team: Team = { ...prev, nodeIds: prev.nodeIds.filter((id) => id !== nid), updatedAt: tx.now };
   tx.saveTeam(team);
   return team;
 }
