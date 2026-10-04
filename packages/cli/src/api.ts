@@ -12,9 +12,11 @@ import type {
   MessageInput,
   NextResult,
   NodeInput,
-  NodePatch,
+  NodePatchInput,
   ProjectGraphInput,
   ProjectSnapshot,
+  Team,
+  TeamPatch,
 } from '@dagyard/model';
 import { t } from './i18n.js';
 
@@ -44,6 +46,8 @@ export const ROUTES = {
    */
   wait: (projectId: string, blockerId: string) =>
     `/api/projects/${p(projectId)}/blockers/${p(blockerId)}/wait`,
+  /** PUT: upsert parcial de un equipo de la fábrica (#75); sin cambios no emite nada. */
+  team: (projectId: string, teamId: string) => `/api/projects/${p(projectId)}/teams/${p(teamId)}`,
   /** POST: mensaje corto del agente al PM. */
   messages: (projectId: string, nodeId: string) =>
     `/api/projects/${p(projectId)}/nodes/${p(nodeId)}/messages`,
@@ -115,7 +119,8 @@ export class DagyardClient {
     return this.json('POST', ROUTES.nodes(projectId), node);
   }
 
-  updateNode(projectId: string, nodeId: string, patch: NodePatch): Promise<DagNode> {
+  /** `teamId` (#75): el sitio que la toma; el servidor la suma a ese equipo. */
+  updateNode(projectId: string, nodeId: string, patch: NodePatchInput): Promise<DagNode> {
     return this.json('PATCH', ROUTES.node(projectId, nodeId), patch);
   }
 
@@ -134,6 +139,10 @@ export class DagyardClient {
     if (res.status === 204) return null;
     const body = (await res.json()) as BlockerWaitResult;
     return body.blocker.status === 'resolved' ? body : null;
+  }
+
+  putTeam(projectId: string, teamId: string, patch: TeamPatch): Promise<Team> {
+    return this.json('PUT', ROUTES.team(projectId, teamId), patch);
   }
 
   postMessage(projectId: string, nodeId: string, input: MessageInput): Promise<Message> {
