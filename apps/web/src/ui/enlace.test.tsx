@@ -78,7 +78,6 @@ async function until(cond: () => boolean, label: string) {
   }
   throw new Error(`No se cumplió: ${label}\n${host.textContent}`);
 }
-const text = () => host.textContent ?? '';
 const project = () => host.querySelector('.proj')?.textContent;
 const card = () => host.querySelector('.card.open h2')?.textContent ?? null;
 const params = () => Object.fromEntries(new URLSearchParams(window.location.search));

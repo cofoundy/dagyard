@@ -370,7 +370,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
     if (ed.kind === 'origin') {
       // «nació de»: un filamento punteado, más tenue; se enciende con su vecindario
       c = b.status === 'blocked' ? COL.blocked : b.status === 'working' ? COL.working : 0xb8c2d2;
-      o = b.status === 'working' || b.status === 'blocked' ? 0.42 : alive.get(b.id) ? 0.26 : 0.13;
+      o = b.status === 'working' || b.status === 'blocked' ? 0.4 : alive.get(b.id) ? 0.16 : 0.07;
     } else if (a.status === 'blocked' || b.status === 'blocked') {
       c = COL.blocked;
       o = 0.7;
@@ -406,7 +406,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
     const d = Math.hypot(dx, dy) || 1e-3;
     // hacia adelante en el tiempo se arquea arriba; hacia atrás (necesita algo nacido después), abajo
     let k = Math.min(90 * K, d * 0.22) * (dx >= 0 ? 1 : -1);
-    if (ed.kind === 'origin') k = Math.abs(k) * (ed.twin ? -0.6 : 0.55);
+    if (ed.kind === 'origin') k = Math.min(40 * K, Math.abs(k) * 0.4) * (ed.twin ? -1 : 1);
     ed.curve.v0.set(ax, ay, 0);
     ed.curve.v1.set((ax + bx) / 2, (ay + by) / 2 + k, Math.abs(k) * 0.4);
     ed.curve.v2.set(bx, by, 0);
@@ -532,7 +532,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
         (prevT !== null && new Date(prevT).toDateString() !== d.toDateString() ? ` · ${fmtTime(tk.t, { weekday: 'short' })}` : '');
       prevT = tk.t;
       root.appendChild(el);
-      axisLabels.push({ el, x: tk.x, y: bottom - 8 });
+      axisLabels.push({ el, x: tk.x, y: bottom - 16 });
     }
     if (pts.length) {
       const g = new BufferGeometry();
@@ -1174,7 +1174,8 @@ export function createSky(opts: CreateSkyOptions): Sky {
     // partículas: el trabajo fluye hacia lo que está en curso o te espera
     const flowing = [...edges.values()].filter((ed) => ed.line.visible && ed.dying < 0 && ed.draw > SEG && ['working', 'blocked'].includes(byId.get(ed.to)?.status ?? ''));
     for (let k = 0; k < PCOUNT; k++) {
-      const ed = flowing[k % Math.max(1, flowing.length)];
+      // ~8 partículas por línea viva: un flujo, no una cadena de cuentas
+      const ed = k < flowing.length * 8 ? flowing[k % Math.max(1, flowing.length)] : undefined;
       if (!ed || REDUCED) {
         pPos[k * 3 + 1] = 1e6;
         continue;
@@ -1225,12 +1226,19 @@ export function createSky(opts: CreateSkyOptions): Sky {
       tickMat.opacity = 0.9 * axisO;
     }
     const top = safe.top - 6, bottom = vp.height - safe.bottom + 6;
+    // cerca de una tarea las estrellas crecen: las etiquetas se apartan en proporción (y la elegida, fuera de su anillo)
+    const zoom = Math.max(1, restDistance(vp) / Math.max(1e-3, cam.r));
+    const ringPx = 22 * zoom;
     for (const v of nodes.values()) {
       const n = v.data;
       const vis = v.sc > 0.05 && v.dying < 0;
       const q = toScreen(v.x, v.y);
       const inView = q.ok && q.y > top && q.y < bottom && q.x > -40 && q.x < vp.width + 40;
-      let lx = q.x + v.lblDx, ly = q.y + v.lblDy;
+      let lx = q.x + v.lblDx + Math.sign(v.lblDx) * 11 * (zoom - 1), ly = q.y + v.lblDy - 14 * (zoom - 1);
+      if (n.id === sel) {
+        lx = q.x + ringPx + 8;
+        ly = q.y - 8;
+      }
       if (v.lblTip) {
         const qe = toScreen(Math.min(v.e, clip), v.y);
         lx = qe.x + 14;

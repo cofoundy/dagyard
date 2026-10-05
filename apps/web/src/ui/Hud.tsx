@@ -91,6 +91,8 @@ export const Brand = forwardRef<HTMLDivElement, BrandProps>(function Brand(
       <div className="now sum" aria-live="polite">
         {reconnecting ? (
           <span className="amber">{COPY.reconnecting}</span>
+        ) : sum && counts?.total === 0 ? (
+          sum.tasks
         ) : sum ? (
           <>
             <span className="n">

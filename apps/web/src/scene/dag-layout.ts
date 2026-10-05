@@ -42,6 +42,7 @@ export interface DagLayoutOptions {
   genStep?: number;
   /** Paso máximo entre generaciones cuando se estiran para llenar el ancho (px). */
   maxGenStep?: number;
+  nowGap?: number;
   curveW?: number;
   labelReserve?: number;
   maxPxPerMin?: number;
@@ -83,7 +84,9 @@ const DEFAULTS = {
   recentBoost: 34,
   recentTau: 40 * 60e3,
   genStep: 26,
-  maxGenStep: 150,
+  maxGenStep: 220,
+  /** Aire entre la última estrella y «ahora» (px): ahí se nombra lo vivo. */
+  nowGap: 28,
   curveW: 26,
   labelReserve: 150,
   maxPxPerMin: 14,
@@ -121,7 +124,7 @@ export function layoutDag(tasks: readonly LayoutTask[], o: DagLayoutOptions): Da
   }
 
   // ---------- tiempo → x ----------
-  const avail = Math.max(120, opt.width - opt.padL - opt.padR);
+  const avail = Math.max(120, opt.width - opt.padL - opt.padR - opt.nowGap);
   const place = (k: number, g: number) => {
     const xs = [0];
     const folds: { from: number; to: number }[] = [];
@@ -173,7 +176,7 @@ export function layoutDag(tasks: readonly LayoutTask[], o: DagLayoutOptions): Da
     const p = n.parent ? X.get(n.parent) : undefined;
     if (p !== undefined && X.get(n.id)! < p + opt.genStep * 0.6 && byId.get(n.parent!)!.born <= n.born) X.set(n.id, p + opt.genStep);
   }
-  const nowX = Math.max(tx(now), ...X.values());
+  const nowX = Math.max(tx(now), Math.max(...X.values()) + opt.nowGap);
 
   // ---------- tallos ----------
   const stemEnd = new Map<string, number>();

@@ -32,7 +32,7 @@ export const REST_PHI = Math.PI / 2 - 0.05;
 /** Duración del travelling de entrada (s); el grafo crece de izquierda a derecha dentro de él. */
 export const INTRO_DUR = 5;
 export const GROW_START = 0.35;
-export const GROW_DUR = 3.6;
+export const GROW_DUR = 4.2;
 /** Vuelo a una tarea y regreso (s). */
 export const FLY_DUR = 1.7;
 /** Un relevo de luz recorre su línea en este tiempo (s). */

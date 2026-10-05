@@ -152,10 +152,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .note { left: var(--gutter); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); font: 10px/1.4 var(--font-mono); letter-spacing: .06em; color: var(--faint); text-transform: uppercase; }
 
 /* ---------------------------------------------------------------- ficha */
-.card { position: absolute; z-index: 4; top: calc(100px + env(safe-area-inset-top, 0px)); right: var(--gutter); width: min(var(--card-w), calc(100vw - 40px)); max-height: calc(100% - 116px); overflow: auto; overscroll-behavior: contain; background: linear-gradient(180deg, rgba(12,18,28,.94), rgba(8,12,19,.94)); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 14px; align-content: start; transform: translateX(12px); opacity: 0; pointer-events: none; transition: opacity .35s, transform .45s var(--ease-out); backdrop-filter: blur(10px); scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.card { position: absolute; z-index: 4; top: calc(100px + env(safe-area-inset-top, 0px)); right: var(--gutter); width: min(var(--card-w), calc(100vw - 40px)); max-height: calc(100% - 116px); overflow: auto; overscroll-behavior: contain; background: linear-gradient(180deg, rgba(12,18,28,.94), rgba(8,12,19,.94)); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; transform: translateX(12px); opacity: 0; pointer-events: none; transition: opacity .35s, transform .45s var(--ease-out); backdrop-filter: blur(10px); scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .card.open { opacity: 1; transform: none; pointer-events: auto; }
 .card .top { display: flex; align-items: center; gap: 8px; }
-.card .born { font: 12px var(--font-mono); color: var(--mute); flex: 1; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .born { font: 12px var(--font-mono); color: var(--mute); flex: 1 1 0; min-width: 0; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card section { display: grid; gap: 8px; }
 .card section > p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
 .chip.kind { color: var(--text); }
@@ -188,7 +188,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .chain .more { color: var(--work); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(159,211,255,.4); }
 .team { margin: 0; font-size: 12px; color: var(--mute); }
 .card .cat { font: 500 11px var(--font-mono); letter-spacing: .14em; color: var(--mute); text-transform: uppercase; }
-.card .x { background: none; border: 0; color: var(--mute); font: 18px/1 var(--font-mono); cursor: pointer; padding: 4px 6px; transition: color .2s; }
+.card .x { flex: none; background: none; border: 0; color: var(--mute); font: 18px/1 var(--font-mono); cursor: pointer; padding: 4px 6px; transition: color .2s; }
 .card .x:hover { color: var(--text); }
 .card h2 { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; letter-spacing: -.01em; text-wrap: balance; color: var(--star); }
 .chip { font: 500 10px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; padding: 6px 9px; border-radius: 999px; border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; width: max-content; }
@@ -285,7 +285,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   .foot.carded { right: var(--gutter); }
   .hint .lg, .hint .how .long { display: none; }
   .hint .how .short { display: inline; }
-  .find input { width: 140px; font-size: 16px; height: 44px; }
+  .find input { width: 156px; font-size: 16px; height: 44px; }
+  /* el nombre en una línea: si envuelve, el resumen cae bajo los botones */
+  .proj span { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100vw - 64px); }
   .ghost { height: 44px; }
   .note { display: none; }
   .actions { top: calc(96px + env(safe-area-inset-top, 0px)); right: 16px; }
