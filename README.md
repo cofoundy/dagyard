@@ -110,7 +110,7 @@ A repo can commit a `.dagyard.json` (`{"project": "…", "url": "…"}`) so its 
 claude plugin marketplace add cofoundy/dagyard && claude plugin install dagyard@dagyard
 ```
 
-It brings the band, the `/dagyard` menu and the `dagyard` CLI on your agents' PATH. From a clone, use
+It brings the band, the `/dagyard` menu, the `dagyard` CLI on your agents' PATH and the `dagyard:protocol` skill that teaches any agent to work in plain sight. From a clone, use
 `claude plugin marketplace add "$PWD"` instead. The optional channel: [`packages/mod/README.md`](packages/mod/README.md).
 
 The interface, the CLI and the mod speak English by default and Spanish when your system is in Spanish.

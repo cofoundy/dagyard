@@ -26,6 +26,8 @@ type World = {
   files?: Record<string, string>
   env?: Record<string, string>
   snap?: () => unknown
+  /** el motor rechaza registrar /dagyard (p. ej. una skill del mismo plugin ya lo ocupa) */
+  registerRefused?: boolean
   /** responde un pedido antes que el mundo; `undefined` lo deja pasar, `'cut'` corta la red */
   respond?: (method: string, url: string) => Res | 'cut' | undefined
 }
@@ -42,7 +44,7 @@ function world(on: any, ok: boolean | World = true) {
   const sent: string[] = []
   const toasts: string[] = []
   on('session.start', ($: any, e: any) => ({ cwd: e.cwd }))
-  on('command.register', ($: any, e: any) => ({ value: { command: e.name } }))
+  on('command.register', ($: any, e: any) => (o.registerRefused ? { deny: `"/${e.name}" refused` } : { value: { command: e.name } }))
   on('fs.read', ($: any, e: any) => {
     const path = String(e.path)
     if (/\/h\/\.config\/dagyard\/(agent-key|owner-token)$/.test(path)) return { value: 'k' }
@@ -309,6 +311,19 @@ describe('en el celular (sin campo de texto)', () => {
     const sent = JSON.parse(bodies[bodies.length - 1]!)
     expect(sent.choice).toBe(1)
     expect(sent.note).toBe('Desde Claude Code')
+    await ui.unmount()
+  })
+})
+
+describe('si el motor rechaza /dagyard', () => {
+  test('la banda sigue viva: dibuja lo que te espera y sondea (#91)', async ($, on) => {
+    const { calls, clock } = world(on, { registerRefused: true })
+    await start($)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', ...BAND } as any)
+    expect(await ui.find({ type: 'Text', text: /Modelo de comisiones/ })).toBeDefined()
+    const before = calls.length
+    await clock.advance(10_000)
+    expect(calls.length).toBeGreaterThan(before)
     await ui.unmount()
   })
 })
