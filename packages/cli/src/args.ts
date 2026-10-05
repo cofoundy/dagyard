@@ -5,6 +5,8 @@ export interface ParsedArgs {
   positionals: string[];
   flags: Record<string, string[]>;
   bools: Set<string>;
+  /** las opciones con valor en el orden en que llegaron (para emparejar `--from x --why "…"`, #90) */
+  seq: Array<[key: string, value: string]>;
 }
 
 export class UsageError extends Error {
@@ -17,7 +19,7 @@ export class UsageError extends Error {
 const ALIASES: Record<string, string> = { h: 'help', q: 'q', p: 'project' };
 
 export function parseArgs(argv: string[], booleans: readonly string[]): ParsedArgs {
-  const out: ParsedArgs = { positionals: [], flags: {}, bools: new Set() };
+  const out: ParsedArgs = { positionals: [], flags: {}, bools: new Set(), seq: [] };
   const isBool = (k: string) => booleans.includes(k) || k === 'help';
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -42,6 +44,7 @@ export function parseArgs(argv: string[], booleans: readonly string[]): ParsedAr
       if (value === undefined) throw new UsageError(t(`--${key} needs a value`, `a --${key} le falta el valor`));
     }
     (out.flags[key] ??= []).push(value);
+    out.seq.push([key, value]);
   }
   return out;
 }

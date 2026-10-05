@@ -6,8 +6,8 @@ import { ApiRequestError, DagyardClient } from './api.js';
 import { assertKnownFlags, flag, parseArgs, UsageError, type ParsedArgs } from './args.js';
 import { loadConfig, loadKey } from './config.js';
 import { langFromEnv, plural, t, withLang } from './i18n.js';
-import type { BlockerInput, BlockerKind, BlockerWaitResult, DagNode, Lang, NodeInput, NodePatch, NodePatchInput, NodeStatus, Team, TeamPatch } from '@dagyard/model';
-import { BLOCKER_KINDS, DEFAULT_LANG, LANGS, LIMITS, NODE_STATUSES, TEAM_LIMITS, isSlug, normalizeIso, parseProjectGraphInput, projectLang, slugify } from '@dagyard/model';
+import type { BlockerInput, BlockerKind, BlockerWaitResult, CloseAs, CloseInput, DagNode, Lang, NodeInput, NodeKind, NodePatch, NodePatchInput, NodeStatus, OriginInput, Team, TeamPatch } from '@dagyard/model';
+import { BLOCKER_KINDS, CLOSE_AS, DEFAULT_LANG, LANGS, LIMITS, NODE_KINDS, NODE_STATUSES, TEAM_LIMITS, isSlug, normalizeIso, parseProjectGraphInput, projectLang, slugify } from '@dagyard/model';
 import { parseLedger, teamPatchFromLedger, teamsFromLedger, type LedgerTeam } from './ledger.js';
 import { buildImport, importProjectId, projectNameFromDir, readTasksDir, readTitles, type ImportResult } from './tasks/import.js';
 import { oneLine } from './tasks/parse.js';
@@ -76,30 +76,66 @@ La API key sale solo de DAGYARD_KEY o ~/.config/dagyard/agent-key; nunca se impr
 Los mensajes salen en inglés; con LANG=es (o LC_ALL / LC_MESSAGES), en español.`,
 ];
 
-const COMMANDS: Record<string, Command> = {
-  'node add': {
+/**
+ * `node add` y sus atajos `goal add` / `request add` (#90): con `kind` fijo, el atajo no acepta `--kind` (y un goal no
+ * lleva cita). Imprime solo el id.
+ */
+function addNodeCommand(fixed?: NodeKind): Command {
+  const kindFlag = fixed ? [] : ['kind'];
+  const quoteFlags = fixed === 'goal' ? [] : ['quote', 'author'];
+  const opts = fixed === 'goal' ? '' : fixed === 'request' ? ' --quote "…" [--author "…"]' : ' [--kind goal|request|task|stream] [--quote "…"] [--author "…"]';
+  const cmd = fixed ? `${fixed} add` : 'node add';
+  return {
     usage: [
-      'dagyard node add <node> --title "…" --stage <stage> [--goal "…"] [--team "…"] [--dep <node>]… [--status <status>] [--link <url>]',
-      'dagyard node add <nodo> --title "…" --stage <etapa> [--goal "…"] [--team "…"] [--dep <nodo>]… [--status <estado>] [--link <url>]',
+      `dagyard ${cmd} <node> --title "…"${opts} [--from <node> [--why "…"]]… [--stage <stage>] [--goal "…"] [--team "…"] [--dep <node>]… [--status <status>] [--report <url>] [--link <url>]`,
+      `dagyard ${cmd} <nodo> --title "…"${opts} [--from <nodo> [--why "…"]]… [--stage <etapa>] [--goal "…"] [--team "…"] [--dep <nodo>]… [--status <estado>] [--report <url>] [--link <url>]`,
     ],
-    summary: ['adds a task to the plan', 'agrega una tarea al plan'],
+    summary:
+      fixed === 'goal'
+        ? ['adds a goal: a living outcome, the root of the whys', 'agrega un objetivo: un resultado vivo, raíz de los porqués']
+        : fixed === 'request'
+          ? ["adds a person's request or decision, with their exact words", 'agrega el pedido o la decisión de una persona, con su cita']
+          : ['adds a node to the plan (a task by default)', 'agrega un nodo al plan (una tarea por defecto)'],
     help: [
       `<node> is a short id (T-314-A is stored as t-314-a). Repeat --dep or separate it with commas.
-Statuses: pending, working, done (blocked is set by dagyard block).
---link is the technical detail (the issue or PR URL); the task card shows it as a technical-detail link.`,
+Kinds: task (one owner, one session, one /goal; the only one that starts), goal (a living outcome; it starts
+In progress and never closes as done), request (a person's request, --quote is their exact words, --author who said
+it), stream (ongoing work that spawns tasks). ${fixed ? `This is node add --kind ${fixed}.` : ''}
+--from <node> says which node this one was born from (repeat it); the --why right after it says why. Born-from is not
+a dependency: it never blocks. --dep is a dependency: this node needs <dep> closed.
+Without --stage it goes to the project's first stage. Statuses: pending, working, done (blocked is set by dagyard
+block). --report attaches its report (Basalt or the PR); --link is the technical detail (the issue or PR URL).
+Prints only the id.`,
       `<nodo> es un id corto (T-314-A se guarda como t-314-a). --dep se repite o va separado por comas.
-Estados: pending, working, done (blocked lo pone dagyard block).
---link es el detalle técnico (URL del issue o del PR); la ficha lo muestra como «Detalle técnico ↗».`,
+Tipos: task (un dueño, una sesión, un /goal; la única que arranca), goal (un resultado vivo; nace En progreso y nunca
+se cierra como lista), request (el pedido de una persona: --quote es su cita literal, --author quién lo dijo), stream
+(trabajo continuo que suelta tareas). ${fixed ? `Es node add --kind ${fixed}.` : ''}
+--from <nodo> dice de qué nodo nació este (se repite); el --why que va justo después dice por qué. Nacer de no es
+depender: nunca bloquea. --dep sí es una dependencia: este nodo necesita <dep> cerrado.
+Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done (blocked lo pone dagyard block).
+--report cuelga su informe (Basalt o el PR); --link es el detalle técnico (URL del issue o del PR). Imprime
+solo el id.`,
     ],
-    flags: ['title', 'stage', 'goal', 'team', 'dep', 'status', 'report', 'link', ...GLOBAL_FLAGS],
+    flags: ['title', 'stage', 'goal', 'team', 'dep', 'status', 'report', 'link', 'from', 'why', ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
     async run({ io, args }) {
       const [id] = need(args, [['node', 'nodo']]);
       const input: NodeInput = {
         id: nodeId(id),
         title: required(args, 'title', LIMITS.title),
-        stage: slugify(required(args, 'stage')),
         deps: (args.flags.dep ?? []).flatMap((d) => d.split(',')).map((d) => d.trim()).filter(Boolean).map(nodeId),
       };
+      const kind = fixed ?? kindArg(args);
+      if (kind) input.kind = kind;
+      const stage = flag(args, 'stage');
+      if (stage !== undefined) input.stage = slugify(stage);
+      const quote = optional(args, 'quote', LIMITS.quote);
+      const author = optional(args, 'author', LIMITS.name);
+      if (kind === 'request' && !quote) throw new UsageError(t('a request needs --quote: the exact words of the person', 'un request necesita --quote: la cita literal de la persona'));
+      if (kind !== 'request' && (quote !== undefined || author !== undefined)) throw new UsageError(t('--quote and --author are only for a request', '--quote y --author son solo para un request'));
+      if (quote) input.quote = quote;
+      if (author) input.quoteBy = author;
+      const origins = originsArg(args);
+      if (origins.length) input.origins = origins;
       const goal = optional(args, 'goal', LIMITS.goal);
       if (goal !== undefined) input.goal = goal;
       const team = optional(args, 'team', LIMITS.name);
@@ -114,7 +150,13 @@ Estados: pending, working, done (blocked lo pone dagyard block).
       io.stdout(`${node?.id ?? input.id}\n`);
       return EXIT.ok;
     },
-  },
+  };
+}
+
+export const COMMANDS: Record<string, Command> = {
+  'node add': addNodeCommand(),
+  'goal add': addNodeCommand('goal'),
+  'request add': addNodeCommand('request'),
   'node update': {
     usage: [
       'dagyard node update <node> [--title "…"] [--stage <stage>] [--goal "…"] [--team "…"] [--status <status>] [--progress <p>] [--report <url>] [--link <url>]',
@@ -203,22 +245,68 @@ suma la tarea a ese equipo, y crea el equipo si todavía no existe.`,
       return EXIT.ok;
     },
   },
+  'node close': {
+    usage: ['dagyard node close <node> --as done|replaced|dropped|learned [--why "…"] [--by <node>] [--report <url>]', 'dagyard node close <nodo> --as done|replaced|dropped|learned [--why "…"] [--by <nodo>] [--report <url>]'],
+    summary: ['closes a node with its reason: done, replaced, dropped or learned', 'cierra un nodo con su motivo: lista, reemplazada, descartada o aprendimos'],
+    help: [
+      `--why says why; it is required for replaced, dropped and learned. A task closed as done needs evidence: --why
+(what got done) or --report (or the report it already had). --by is the node that replaces it (only with replaced).
+A goal or a stream never closes as done. To split a node, close it as replaced by one part and add the others with
+--from <node>; to merge two, close one as replaced by the other. Closing leaves the node in the plan, in plain sight.
+Prints only the id.`,
+      `--why dice por qué; es obligatorio para replaced, dropped y learned. Una tarea cerrada como done necesita
+evidencia: --why (qué quedó) o --report (o el informe que ya tenía). --by es el nodo que la reemplaza (solo con
+replaced). Un goal o un stream nunca se cierra como done. Para partir un nodo, ciérralo como replaced por una parte
+y agrega las demás con --from <nodo>; para unir dos, cierra uno como replaced por el otro. Cerrar deja el nodo en el
+plan, a la vista. Imprime solo el id.`,
+    ],
+    flags: ['as', 'why', 'by', 'report', ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id] = need(args, [['node', 'nodo']]);
+      const as = required(args, 'as') as CloseAs;
+      const reasons = CLOSE_AS.join(', ');
+      if (!CLOSE_AS.includes(as)) throw new UsageError(t(`--as must be ${reasons}`, `--as debe ser ${reasons}`));
+      const input: CloseInput = { as };
+      const why = optional(args, 'why', LIMITS.closedReason);
+      if (why) input.why = why;
+      const by = flag(args, 'by');
+      if (as === 'replaced' && !by) throw new UsageError(t('replaced needs --by <node>: the one that replaces it', 'replaced necesita --by <nodo>: el que la reemplaza'));
+      if (as !== 'replaced' && by !== undefined) throw new UsageError(t('--by is only for --as replaced', '--by es solo para --as replaced'));
+      if (by) input.by = nodeId(by);
+      if (as !== 'done' && !why) throw new UsageError(t(`closing as ${as} needs --why`, `cerrar como ${as} necesita --why`));
+      const report = optional(args, 'report', LIMITS.url);
+      if (report !== undefined) input.reportUrl = report;
+      await client(io, args).closeNode(project(io, args), nodeId(id), input);
+      io.stdout(`${nodeId(id)}\n`);
+      return EXIT.ok;
+    },
+  },
   'edge add': {
-    usage: ['dagyard edge add <from> <to>', 'dagyard edge add <de> <a>'],
-    summary: ['adds a dependency: <to> needs <from> to be done', 'agrega una dependencia: <a> necesita que <de> esté lista'],
-    help: ['The server rejects the dependency if it closes a loop.', 'El servidor rechaza la arista si arma un ciclo.'],
-    flags: [...GLOBAL_FLAGS],
+    usage: ['dagyard edge add <from> <to> [--kind origin --why "…"]', 'dagyard edge add <de> <a> [--kind origin --why "…"]'],
+    summary: ['adds a dependency: <to> needs <from> to be closed', 'agrega una dependencia: <a> necesita que <de> esté cerrada'],
+    help: [
+      `With --kind origin it is not a dependency but a born-from: <to> was born from <from> (--why says why). It never
+blocks. The server rejects either kind if it closes a loop, and a dependency on a goal or a stream (they never close).`,
+      `Con --kind origin no es una dependencia sino un «nació de»: <a> nació de <de> (--why dice por qué). Nunca
+bloquea. El servidor rechaza cualquiera de las dos si arma un ciclo, y una dependencia de un goal o un stream (nunca se
+cierran).`,
+    ],
+    flags: ['kind', 'why', ...GLOBAL_FLAGS],
     async run({ io, args }) {
       const [from, to] = need(args, [['from', 'de'], ['to', 'a']]);
-      await client(io, args).addEdge(project(io, args), nodeId(from), nodeId(to));
-      io.stdout(`${nodeId(from)} → ${nodeId(to)}\n`);
+      const kind = flag(args, 'kind');
+      if (kind !== undefined && kind !== 'origin' && kind !== 'requires') throw new UsageError(t('--kind must be origin (or requires)', '--kind debe ser origin (o requires)'));
+      const why = optional(args, 'why', LIMITS.originWhy);
+      if (why !== undefined && kind !== 'origin') throw new UsageError(t('--why goes with --kind origin', '--why va con --kind origin'));
+      await client(io, args).addEdge(project(io, args), nodeId(from), nodeId(to), kind === 'origin' ? { kind: 'origin', ...(why ? { why } : {}) } : {});
+      io.stdout(`${nodeId(from)} ${kind === 'origin' ? '⇢' : '→'} ${nodeId(to)}\n`);
       return EXIT.ok;
     },
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"]',
-      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"]',
+      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--json]',
     ],
     summary: ['asks a person for a decision, a review or an access', 'le pide al humano una decisión, una revisión o un acceso'],
     help: [
@@ -282,6 +370,7 @@ Sin --timeout espera para siempre. Exit 2 si vence.`,
       const proj = project(io, args);
       const blockerId = flag(args, 'blocker') ?? (await blockerOf(api, proj, nodeId(id)));
       const deadline = timeout > 0 ? Date.now() + timeout * 1000 : Infinity;
+      let failures = 0;
       for (;;) {
         const left = Math.ceil((deadline - Date.now()) / 1000);
         if (left <= 0) {
@@ -291,9 +380,12 @@ Sin --timeout espera para siempre. Exit 2 si vence.`,
         let result: BlockerWaitResult | null;
         try {
           result = await api.waitOnce(proj, blockerId, Math.min(25, left));
+          failures = 0;
         } catch (err) {
-          if (err instanceof ApiRequestError && (err.status === 0 || err.status >= 502)) {
-            await sleep(2000); // red o proxy caídos: reintenta sin perder la espera
+          if (err instanceof ApiRequestError && waitTransient(err)) {
+            // un long-poll suelto que falla no corta la espera (#94): backoff corto, nunca más allá del plazo
+            const backoff = WAIT_BACKOFF_MS[Math.min(failures++, WAIT_BACKOFF_MS.length - 1)]!;
+            await sleep(Math.max(0, Math.min(backoff, deadline - Date.now())));
             continue;
           }
           throw err;
@@ -690,7 +782,7 @@ async function runIn(argv: string[], io: Io): Promise<number> {
     }
     let name: string;
     let rest: string[];
-    if (first === 'node' || first === 'edge' || first === 'team') {
+    if (first === 'node' || first === 'edge' || first === 'team' || first === 'goal' || first === 'request') {
       if (!second || second.startsWith('-')) {
         io.stdout(groupHelp(first));
         return second && !['--help', '-h'].includes(second) ? EXIT.usage : EXIT.ok;
@@ -900,6 +992,16 @@ function nodeId(raw: string): string {
 }
 
 /** El último bloqueante abierto del nodo; si no hay, el último resuelto. */
+/** Esperas de `wait` entre long-polls fallidos (#94): crecen hasta 10 s y vuelven a 1 s tras una vuelta buena. */
+export const WAIT_BACKOFF_MS = [1000, 2000, 5000, 10_000];
+
+/**
+ * ¿Un long-poll fallido merece otra vuelta? Sí ante la red, cualquier 5xx (`internal`, `unavailable`,
+ * `overloaded`, el borde) o un 429: el bloqueante sigue ahí. Un 4xx (`not_found`, `unauthorized`,
+ * `forbidden`, una petición mal hecha) no cambia por esperar, así que corta.
+ */
+const waitTransient = (err: ApiRequestError) => err.status === 0 || err.status >= 500 || err.status === 429;
+
 async function blockerOf(api: DagyardClient, proj: string, node: string): Promise<string> {
   const mine = (await api.snapshot(proj)).blockers
     .filter((b) => b.nodeId === node)
@@ -929,6 +1031,32 @@ function linkArg(args: ParsedArgs): string | undefined {
     throw new UsageError(t(`--link must be an http(s) URL (the issue or PR one): «${link}»`, `--link debe ser una URL http(s) (la del issue o del PR): «${link}»`));
   }
   return link;
+}
+
+function kindArg(args: ParsedArgs): NodeKind | undefined {
+  const k = flag(args, 'kind');
+  if (k === undefined) return undefined;
+  const kinds = NODE_KINDS.join(', ');
+  if (!NODE_KINDS.includes(k as NodeKind)) throw new UsageError(t(`--kind must be ${kinds}`, `--kind debe ser ${kinds}`));
+  return k as NodeKind;
+}
+
+/** `--from <nodo> [--why "…"]`, repetible: cada `--why` va con el `--from` que tiene justo antes (#90). */
+function originsArg(args: ParsedArgs): OriginInput[] {
+  const out: OriginInput[] = [];
+  for (const [k, v] of args.seq) {
+    if (k === 'from') {
+      out.push({ from: nodeId(v) });
+      continue;
+    }
+    if (k !== 'why') continue;
+    const last = out[out.length - 1];
+    if (!last || last.why !== undefined) throw new UsageError(t('each --why goes right after its --from', 'cada --why va justo después de su --from'));
+    const why = v.trim();
+    if ([...why].length > LIMITS.originWhy) throw new UsageError(t(`--why is at most ${LIMITS.originWhy} characters`, `--why va hasta ${LIMITS.originWhy} caracteres`));
+    if (why) last.why = why;
+  }
+  return out;
 }
 
 function statusArg(s: string): NodeStatus {

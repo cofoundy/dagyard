@@ -17,11 +17,11 @@
 | HTTP | `code` | Cuándo |
 |---|---|---|
 | 400 | `invalid` | el body no pasa la validación de `@dagyard/model` |
-| 400 | `cycle` | la arista o el grafo cerraría un ciclo |
+| 400 | `cycle` | la arista o el grafo cerraría un ciclo («necesita» y «nació de» por separado), o un reemplazo cerraría una cadena de `replacedBy` (el spec #90 decía 409; queda 400 como siempre) |
 | 401 | `unauthorized` | sin credencial o credencial inválida |
 | 403 | `forbidden` | credencial válida, rol equivocado (p. ej. un agente que intenta resolver) |
 | 404 | `not_found` | proyecto, nodo o bloqueante inexistente |
-| 409 | `conflict` | id repetido; resolver un bloqueante ya resuelto; cambiar el `status` de un nodo con un bloqueante abierto, o declararlo `done` en un `PUT`; un agente que haría desaparecer un bloqueante, abierto o resuelto (`PUT` que quita su tarea o `DELETE` del nodo); o un `PUT` con `If-None-Match: *` sobre un proyecto que ya existe |
+| 409 | `conflict` | id repetido; resolver un bloqueante ya resuelto; cambiar el `status` de un nodo con un bloqueante abierto, declararlo `done` en un `PUT`, o cerrarlo (`close`, `DELETE`) con uno abierto; cerrar un nodo ya cerrado; un `PUT` de un agente sobre una **demo** que quitaría una tarea con un bloqueante (abierto o resuelto); o un `PUT` con `If-None-Match: *` sobre un proyecto que ya existe |
 | 500 | `internal` | lo demás |
 | 503 | `unavailable` | el servidor se está reiniciando (un deploy) y no escribió nada, o la escritura quedó con su `Idempotency-Key`: repetir con la misma clave es seguro |
 | 503 | `overloaded` | el servidor está sobrecargado: espera antes de reintentar (reintentar enseguida empeora) |
@@ -69,7 +69,8 @@ Formas de presentarla (el servidor prueba en este orden):
    y el token no queda en ninguna URL), o, como último recurso, la query `?token=<token>`.
 
 Qué puede cada rol: los dos leen y escriben el grafo y los mensajes. **Resolver un bloqueante es solo
-del `owner`** (es el humano quien desbloquea). **Recibir el valor de un acceso es solo del `agent`**
+del `owner`** (es el humano quien desbloquea), igual que **descartar un nodo** (`DELETE`) y **quitar un «nació de»**
+(es el porqué; #90): la fábrica cierra con motivo (`close`). **Recibir el valor de un acceso es solo del `agent`**
 (en `wait`); el valor nunca viaja en snapshots, listados ni eventos, y se guarda cifrado (AES-GCM, amarrado a su proyecto y bloqueante) en el Durable Object `Store` (SQLite).
 Sin el secret `VAULT_KEY`, resolver un acceso, recibir su valor o mandar una escritura con `Idempotency-Key` responde `500`: nunca se guarda ni se entrega en claro.
 
@@ -103,12 +104,12 @@ Sin auth: solo `GET /api/health` → `200 {"ok": true, "version": "<sha corto>"}
 
 | Método y ruta | Body | Respuesta |
 |---|---|---|
-| `GET /api/projects` | — | `{"projects": ProjectSummary[]}` (con conteos por estado y bloqueantes abiertos) |
+| `GET /api/projects` | — | `{"projects": ProjectSummary[]}` (con conteos por estado de las tareas, `kind: "task"`, y bloqueantes abiertos) |
 | `POST /api/projects` | `ProjectInput` (`name`, `id?`, `lang?`, `stages?`) | `201 Project`. Sin `lang`, `en`; sin `stages` usa las 5 por defecto con su nombre en ese idioma (los ids son los mismos en los dos: `descubrimiento`, `diseno`, `construccion`, `pruebas`, `lanzamiento`) |
 | `GET /api/projects/:pid` | — | `ProjectSnapshot` (ver abajo) |
-| `PUT /api/projects/:pid` | `ProjectGraphInput` | `200 ProjectSnapshot`. Crea el proyecto o **reemplaza** el grafo entero (idempotente). Lo usan la semilla (con el token del dueño) y `dagyard import`. Con `If-None-Match: *` solo crea: `409` si el proyecto ya existe, sin tocarlo. Si quien llama es `agent` conserva los bloqueantes, los mensajes y la antigüedad de las tareas (ver abajo) y responde `409` si el grafo nuevo quita una tarea que tiene alguno. Emite `project.replaced` |
+| `PUT /api/projects/:pid` | `ProjectGraphInput` | `200 ProjectSnapshot`. Crea el proyecto o reescribe su grafo (idempotente). Lo usan la semilla (con el token del dueño) y `dagyard import`. Con `If-None-Match: *` solo crea: `409` si el proyecto ya existe, sin tocarlo. En un proyecto existente que no es demo **ningún nodo desaparece** (#90, ver abajo). Si quien llama es `agent` conserva los bloqueantes, los mensajes y la antigüedad de las tareas (ver abajo). Emite `project.replaced` |
 | `PATCH /api/projects/:pid` | `{"name"?, "lang"?, "stages"?}` | `200 Project`. Emite `project.updated` |
-| `DELETE /api/projects/:pid` | — | `204`. Solo `owner` |
+| `DELETE /api/projects/:pid` | — | `204`. Solo `owner`. Borra el proyecto entero con sus nodos: uno de los dos únicos caminos que borran filas de nodo (el otro: re-sembrar una demo) |
 | `GET /api/projects/:pid/next` | — | `NextResult`: `{"node": DagNode \| null, "goalLine": "/goal …" \| null}` |
 | `GET /api/projects/:pid/events?since=<seq>` | — | `{"events": DagEvent[]}` con `seq > since`, máx. 500 (recuperación sin WebSocket). Si `since` está bajo el piso de eventos (la demo los poda), `{"events": [], "resync": true}`: vuelve a pedir el snapshot |
 
@@ -120,9 +121,21 @@ conserva el suyo. Un proyecto guardado antes del campo (`dagyard`, las demos sem
 (la demo inglesa, `en`) y nadie lo reescribe: cambia solo si un POST, PUT o PATCH manda `lang`. El idioma
 cambia los nombres de las etapas por defecto, nunca sus ids.
 
-`ProjectSnapshot` = `{ project, nodes, edges, blockers, messages, teams, seq }`: nodos, aristas y bloqueantes
-completos (abiertos y resueltos, sin valores de acceso), los últimos 200 mensajes en orden cronológico y
-el `seq` del último evento. Con ese `seq` la UI abre el WebSocket.
+`ProjectSnapshot` = `{ project, nodes, edges, origins, blockers, messages, teams, seq }`: nodos, aristas «necesita»
+(`edges`), aristas «nació de» (`origins`, #90) y bloqueantes completos (abiertos y resueltos, sin valores de acceso),
+los últimos 200 mensajes en orden cronológico y el `seq` del último evento. Con ese `seq` la UI abre el WebSocket.
+
+**PUT sin borrar (#90).** En un proyecto existente que no es una de las dos demos, un nodo que el cuerpo no trae ya
+no se borra: queda con sus aristas, orígenes, preguntas y mensajes, y si estaba abierto se cierra como `dropped`
+(«no está en el import» / «not in the import», en el idioma del proyecto). Uno con una pregunta abierta para el
+dueño no se cierra: sigue esperándola, y sus aristas «necesita» hacia nodos del cuerpo se conservan (si arman ciclo
+con los `deps` del cuerpo, `400 cycle`). Las demás aristas «necesita» que llegan a un nodo del cuerpo salen de sus
+`deps`; las que llegan a uno que no viene se quedan. Después de `project.replaced` sale un `node.updated` por cada nodo
+que se cerró como `dropped`. Los orígenes existentes se conservan y se suman los del cuerpo. Un nodo
+del cuerpo que ya existía y no trae `kind`, `quote`, `quoteBy` o `bornAt` conserva los guardados (un import no los
+conoce y no debe volver tarea a un objetivo), y si sigue `done` conserva su cierre. Si el `PUT` cambia las etapas y
+un nodo que no viene usa una que desaparece, `400`. Las demos son fixtures que vuelven a su guion: ahí el `PUT` sigue
+reemplazando el grafo entero.
 
 Resolver es solo del dueño, así que un agente no puede hacer desaparecer ni una pregunta abierta ni una
 respuesta ya dada. Con la API key, el `PUT` sobre un proyecto existente **conserva** cada bloqueante
@@ -131,14 +144,16 @@ encontrando. Las tareas que tienen un bloqueante abierto quedan `blocked` las de
 bloqueante del body igual a uno conservado **abierto** (misma tarea, `kind`, `question`, `options` y
 `accessLabel`) no se duplica: re-importar el mismo archivo es idempotente. Uno igual a uno ya **resuelto**
 entra como bloqueante nuevo y abierto (re-preguntar nunca se descarta en silencio), y la respuesta anterior
-se conserva al lado. Si el grafo nuevo quita una tarea que tiene algún bloqueante, `409` y no se toca nada.
+se conserva al lado. En una demo, si el grafo nuevo quita una tarea que tiene algún bloqueante, `409` y no se toca
+nada (en un proyecto que no es demo la tarea se queda, con sus bloqueantes).
 Ese mismo `PUT` conserva tal cual (id, firma y fecha) los mensajes de las tareas que siguen, incluido el
 mensaje del sistema de cada respuesta, y el `createdAt` de cada tarea que ya existía, así
 `next` no cambia de orden al re-importar. También conserva el `link` de cada tarea que ya existía cuando el body
 no trae la clave (un import no la manda); `"link": null` explícito sí lo borra. Un mensaje del body igual a uno conservado (misma tarea, `from`,
 `text` y `reportUrl`; sin `from`, basta tarea, `text` y `reportUrl`, porque la firma sale del equipo
-actual y puede haber cambiado) no se duplica; los mensajes de una tarea quitada se van con ella. El dueño reemplaza
-el grafo entero siempre (sus bloqueantes y mensajes se recrean desde el body con otros ids y fecha nueva).
+actual y puede haber cambiado) no se duplica; en una demo, los mensajes de una tarea quitada se van con ella. El
+dueño recrea desde el body los bloqueantes y mensajes de las tareas que el body trae (con otros ids y fecha nueva);
+los de las que no trae se quedan con ellas.
 
 Con cualquier llamante, una tarea declarada `done` que quedaría `blocked` (por un bloqueante abierto
 conservado o del mismo body) responde `409` sin tocar nada, igual que el `PATCH`: no se cierra una tarea
@@ -152,18 +167,21 @@ archivo queda `pending`, y si pide algo a una persona (su status nombra una esca
 o no espera a ninguna otra tarea) deja un aviso en `warnings`; el agente hace la pregunta en vivo con
 `dagyard block` (una pregunta generada desde el archivo se reabriría en cada `--replace`).
 
-`next` elige, entre los nodos `pending` con todas sus dependencias `done`, el de la etapa más temprana y,
-a igualdad, el más antiguo (`nextStartable()` del modelo). `goalLine` es `/goal <goal o título>`.
+`next` elige, entre las `task` `pending` con todas sus dependencias «necesita» satisfechas, la de la etapa más
+temprana y, a igualdad, la más antigua (`nextStartable()` del modelo). Una dependencia está satisfecha si está
+cerrada; si se cerró como `replaced`, cuenta la última de su cadena de `replacedBy`. `origins` nunca entra, ni un
+`goal`, `request` o `stream` arranca (#90). `goalLine` es `/goal <goal o título>`.
 
 ### Nodos y aristas
 
 | Método y ruta | Body | Respuesta |
 |---|---|---|
-| `POST /api/projects/:pid/nodes` | `NodeInput` (`stage`, `title`, `id?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `deps?`) | `201 DagNode`. Emite `node.added` + un `edge.added` por cada dep |
-| `PATCH /api/projects/:pid/nodes/:nid` | `NodePatch` (`stage?`, `title?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `teamId?`) | `200 DagNode`. Emite `node.updated`. Un `teamId` de un equipo que no existe lo crea (arrancado ahora, nombre desde el slug) |
-| `DELETE /api/projects/:pid/nodes/:nid` | — | `204`. Borra sus aristas, bloqueantes y mensajes. `409` si quien llama es `agent` y el nodo tiene ≥1 bloqueante (abierto o resuelto). Emite `node.removed` |
-| `POST /api/projects/:pid/edges` | `{"from", "to"}` | `201 Edge`; `400 cycle` si cierra un ciclo; `409` si ya existe. Emite `edge.added` |
-| `DELETE /api/projects/:pid/edges?from=<id>&to=<id>` | — | `204`. Emite `edge.removed` |
+| `POST /api/projects/:pid/nodes` | `NodeInput` (`title`, `id?`, `stage?`, `kind?`, `bornAt?`, `quote?`, `quoteBy?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `deps?`, `origins?: [{from, why?}]`) | `201 DagNode`. Sin `stage`, la primera del proyecto. Emite `node.added` + un `edge.added` por cada dep + un `origin.added` por cada origen |
+| `PATCH /api/projects/:pid/nodes/:nid` | `NodePatch` (`stage?`, `title?`, `kind?`, `quote?`, `quoteBy?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `teamId?`) | `200 DagNode`. Emite `node.updated`. `status: "done"` cierra como `done`; `pending`/`working` reabre. No acepta `closedAs` (para eso, `close`). Un `teamId` de un equipo que no existe lo crea (arrancado ahora, nombre desde el slug) |
+| `POST /api/projects/:pid/nodes/:nid/close` | `CloseInput` (`as`, `why?`, `by?`, `reportUrl?`) | `200 DagNode`. Cierra con motivo (ver §El modelo del DAG). Ya cerrado → `409`; con una pregunta abierta → `409`. Emite `node.updated` |
+| `DELETE /api/projects/:pid/nodes/:nid?why=<motivo>` | — | `200 DagNode`. **Descartar**, solo `owner` (agente → `403`): cierra como `dropped` con el motivo opcional de `?why=` (≤500). Nunca borra la fila. Mismas reglas que `close`. Emite `node.updated` |
+| `POST /api/projects/:pid/edges` | `EdgeInput` (`from`, `to`, `kind?: "requires" \| "origin"`, `why?`) | `201 Edge` (o `201 Origin` con `kind: "origin"`). Sin `kind`, «necesita»; `why` (≤280) solo con `origin`. `400 cycle` si cierra un ciclo de su tipo; `400` si un «necesita» sale de un `goal` o `stream`; `409` si ya existe. Emite `edge.added` u `origin.added` |
+| `DELETE /api/projects/:pid/edges?from=<id>&to=<id>[&kind=origin]` | — | `204`. «Necesita»: los dos roles; «nació de» (`kind=origin`): solo `owner`. Emite `edge.removed` u `origin.removed` |
 
 `link` es el detalle técnico de la tarea: la URL (http o https) del issue o del PR. Es opcional
 (`null` por defecto, `null` en un `PATCH` lo borra) y la UI lo ofrece en la ficha como «Detalle técnico»,
@@ -179,8 +197,53 @@ Reglas del servidor al escribir un nodo:
 - `startedAt` y `doneAt` los pone el servidor, nunca el cliente (#75): `startedAt` la primera vez que la
   tarea pasa a `working` (vuelve a `null` si regresa a `pending`), `doneAt` al pasar a `done` (se limpia si
   deja de estarlo). El `PUT` del grafo los conserva, junto con `teamId`, en las tareas que siguen.
-- El CLI mapea `start` → `PATCH {"status": "working"}`, `progress <n>` → `PATCH {"progress": n}` y
-  `done` → `PATCH {"status": "done"}`.
+- El CLI mapea `start` → `PATCH {"status": "working"}`, `progress <n>` → `PATCH {"progress": n}`,
+  `done` → `PATCH {"status": "done"}` y `node close <n> --as …` → `POST …/close`.
+
+### El modelo del DAG (#90, D12)
+
+La intención y sus siete principios viven en `docs/spec/modelo.md`. En la API:
+
+| Campo de `DagNode` | Qué |
+|---|---|
+| `kind` | `goal` (un resultado vivo, raíz de los porqués), `request` (pedido o decisión de una persona), `task` (un dueño, una sesión, un `/goal`) o `stream` (trabajo continuo que suelta tareas). Los guardados antes de #90 son `task` |
+| `bornAt` | cuándo nació (el eje x). Por defecto la hora de la escritura; se puede mandar al crear para traer historia, nunca en el futuro (se recorta a ahora). Los viejos: su `createdAt` |
+| `quote`, `quoteBy` | `request`: la cita literal (≤1000, obligatoria) y quién la dijo (≤80, opcional). Los demás: `null` |
+| `closedAs` | `done`, `replaced`, `dropped`, `learned` o `null` (abierto). Un nodo cerrado queda en `status: "done"` |
+| `closedReason`, `replacedBy`, `closedAt` | el porqué (≤500), el nodo que lo reemplaza (solo con `replaced`) y cuándo se cerró |
+
+Todos vienen en cada snapshot (en el tipo son opcionales solo para leer servidores viejos). Un `goal`, `request` o
+`stream` nuevo nace `working` si no se dice otra cosa: solo una `task` espera a arrancar. No son tareas: los conteos de
+`GET /api/projects` (y `countNodes`, `liveStages` del modelo) cuentan solo `kind: "task"`.
+
+| `kind` | Arranca (`next`) | Cómo se cierra |
+|---|---|---|
+| `goal` | nunca | no como `done`; sí `replaced`, `dropped` o `learned` |
+| `request` | nunca | con cualquier motivo (`done` = cumplido) |
+| `task` | sí | con cualquier motivo; `done` exige evidencia: `why` o un `reportUrl` (el del cuerpo o el que ya tenía) |
+| `stream` | nunca | no como `done`; sí `replaced`, `dropped` o `learned` |
+
+`close`: `why` es obligatorio para `replaced`, `dropped` y `learned`; `by` es obligatorio con `replaced` (un nodo que
+existe, no él mismo, sin cerrar un ciclo de reemplazos) y prohibido con los demás. Una `task` o un `request` no se
+reemplaza por algo cuya cadena termine en un `goal` o `stream` (`400`: quien la necesitaba esperaría para siempre), ni
+un nodo que reemplaza a una tarea se vuelve `goal`/`stream` por `PATCH` (`400`). Un `goal` sí puede reemplazar a otro.
+Si la cadena de reemplazos de una dependencia llega al propio dependiente (unir dos: C necesita A y A se reemplaza por
+C), la dependencia cuenta como satisfecha. Partir un nodo = cerrarlo como
+`replaced` por una de las partes y hacer nacer las demás de él (`origins`); unir dos = cerrar uno como `replaced` por el
+otro. Reabrir (`PATCH status: pending|working`) limpia los cuatro campos de cierre; el log guarda el anterior.
+
+Las dos aristas van en listas separadas para que un cliente viejo, que solo conoce `edges`, vea exactamente las mismas
+dependencias:
+
+| | «Necesita» (`edges`) | «Nació de» (`origins`) |
+|---|---|---|
+| Sentido | `to` necesita que `from` esté cerrado | `to` nació de `from` |
+| Campos | `projectId, from, to` | `projectId, from, to, why, createdAt` |
+| Restricción | `from` no puede ser `goal` ni `stream` (nunca se cierran) | ninguna |
+| Quitar | dueño o agente | solo el dueño |
+
+Un nodo puede nacer de varios y tener las dos aristas con el mismo vecino. `purposeless(nodes, origins)` del modelo
+devuelve los nodos que no son `goal` y no llegan por «nació de» a ninguno: posible desperdicio.
 
 ### Equipos de la fábrica (#75)
 
@@ -199,7 +262,7 @@ ahora): así recrear un proyecto no pierde la hora real de sus preguntas.
 
 | Método y ruta | Body | Respuesta |
 |---|---|---|
-| `POST /api/projects/:pid/nodes/:nid/blockers` | `BlockerInput` | `201 Blocker`. El nodo pasa a `blocked`. Emite `blocker.opened` + `node.updated` |
+| `POST /api/projects/:pid/nodes/:nid/blockers` | `BlockerInput` | `201 Blocker`. El nodo pasa a `blocked`. Sobre un nodo cerrado → `409` (#90: reábrelo antes). Emite `blocker.opened` + `node.updated` |
 | `GET /api/projects/:pid/blockers/:bid` | — | `200 Blocker` (sin valor) |
 | `POST /api/projects/:pid/blockers/:bid/resolve` | `ResolveInput` | `200 Blocker`. **Solo `owner`**. Ya resuelto → `409`. Emite `blocker.resolved` + `node.updated` |
 | `GET /api/projects/:pid/blockers/:bid/wait?timeout=<s>` | — | long-poll hasta `timeout` (default 25, máx. 25): `200 BlockerWaitResult` |
@@ -277,8 +340,9 @@ pierde eventos. Cliente → servidor: `{"type": "ping"}`
 | `project.replaced` | `{project}` — el grafo entero cambió: vuelve a pedir el snapshot (`needsRefetch()`) |
 | `project.updated` | `{project}` |
 | `node.added` / `node.updated` | `{node}` (el nodo completo, no un diff) |
-| `node.removed` | `{nodeId}` |
-| `edge.added` / `edge.removed` | `{edge}` |
+| `node.removed` | `{nodeId}` — ya nada lo emite (#90); queda para reproducir logs viejos |
+| `edge.added` / `edge.removed` | `{edge}` («necesita») |
+| `origin.added` / `origin.removed` | `{origin}` («nació de», #90; `removed` trae `projectId, from, to`) |
 | `blocker.opened` / `blocker.resolved` | `{blocker}` (sin valor de acceso) |
 | `message.posted` | `{message}` |
 

@@ -54,9 +54,11 @@ export function applyEvent(s: ProjectSnapshot, ev: DagEvent): ProjectSnapshot {
       break;
     }
     case 'node.removed': {
+      // ya nada lo emite (#90); reproduce logs viejos
       const id = ev.payload.nodeId;
       next.nodes = s.nodes.filter((x) => x.id !== id);
       next.edges = s.edges.filter((e) => e.from !== id && e.to !== id);
+      if (s.origins) next.origins = s.origins.filter((o) => o.from !== id && o.to !== id);
       next.blockers = s.blockers.filter((b) => b.nodeId !== id);
       next.messages = s.messages.filter((m) => m.nodeId !== id);
       break;
@@ -69,6 +71,17 @@ export function applyEvent(s: ProjectSnapshot, ev: DagEvent): ProjectSnapshot {
     case 'edge.removed': {
       const e = ev.payload.edge;
       next.edges = s.edges.filter((x) => !(x.from === e.from && x.to === e.to));
+      break;
+    }
+    case 'origin.added': {
+      const o = ev.payload.origin;
+      const origins = s.origins ?? [];
+      if (!origins.some((x) => x.from === o.from && x.to === o.to)) next.origins = [...origins, o];
+      break;
+    }
+    case 'origin.removed': {
+      const o = ev.payload.origin;
+      next.origins = (s.origins ?? []).filter((x) => !(x.from === o.from && x.to === o.to));
       break;
     }
     case 'blocker.opened':

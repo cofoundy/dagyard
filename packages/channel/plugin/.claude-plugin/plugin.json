@@ -1,0 +1,14 @@
+{
+  "name": "dagyard-channel",
+  "version": "0.1.0",
+  "description": "Dagyard channel for Claude Code: pushes the owner's answer to your blocker into the session, and a reply tool to post progress on your node",
+  "author": { "name": "Cofoundy", "email": "info@cofoundy.dev" },
+  "repository": "https://github.com/cofoundy/dagyard",
+  "mcpServers": {
+    "dagyard": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/dagyard-channel.mjs"]
+    }
+  },
+  "channels": [{ "server": "dagyard", "displayName": "Dagyard" }]
+}

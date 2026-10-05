@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EXIT, run } from '../src/cli.js';
+import { COMMANDS, EXIT, run } from '../src/cli.js';
 import { langFromEnv, withLang } from '../src/i18n.js';
 import { formatSync, type SyncReport } from '../src/sync/sync.js';
 
@@ -66,10 +66,10 @@ describe('el CLI habla el idioma del entorno (#73)', () => {
     expect(en.code).toBe(EXIT.ok);
     expect(es.code).toBe(EXIT.ok);
     expect(en.stdout).toContain('Usage: dagyard <command> [options]');
-    expect(en.stdout).toContain('adds a task to the plan');
-    expect(en.stdout).not.toMatch(/Comandos|agrega una tarea/);
+    expect(en.stdout).toContain('adds a node to the plan');
+    expect(en.stdout).not.toMatch(/Comandos|agrega un nodo/);
     expect(es.stdout).toContain('Uso: dagyard <comando> [opciones]');
-    expect(es.stdout).toContain('agrega una tarea al plan');
+    expect(es.stdout).toContain('agrega un nodo al plan');
     const commands = (s: string) => s.split('\n').filter((l) => /^ {2}\S/.test(l)).map((l) => l.trim().split(/\s{2,}/)[0]);
     expect(commands(en.stdout)).toEqual(commands(es.stdout));
   });
@@ -90,6 +90,25 @@ describe('el CLI habla el idioma del entorno (#73)', () => {
     const flagEn = await cli(['start', 'x', '--nope', '1'], EN);
     expect(flagEn.stderr).toContain('unknown option: --nope');
     expect((await cli(['start', 'x', '--nope', '1'], ES)).stderr).toContain('opción desconocida: --nope');
+  });
+
+  it('el uso de cada comando lista toda opción que acepta, en los dos idiomas (#103: la skill lee --help como verdad)', () => {
+    const missing: string[] = [];
+    for (const [name, cmd] of Object.entries(COMMANDS)) {
+      const opts = [...cmd.flags, ...(cmd.bools ?? [])].filter((f) => f !== 'project' && f !== 'url');
+      cmd.usage.forEach((usage, i) => {
+        for (const o of opts) if (!new RegExp(`--${o}\\b`).test(usage)) missing.push(`${name} [${i ? 'es' : 'en'}] --${o}`);
+      });
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it.each(['node add', 'goal add', 'request add'])('«%s --help» lista --report <url>', async (cmd) => {
+    for (const locale of [EN, ES]) {
+      const r = await cli([...cmd.split(' '), '--help'], locale);
+      expect(r.code).toBe(EXIT.ok);
+      expect(r.stdout.split('\n')[0]).toContain('[--report <url>]');
+    }
   });
 
   it('next sin nada arrancable: el aviso cambia, el exit 3 y el JSON no', async () => {

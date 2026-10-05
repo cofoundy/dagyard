@@ -140,6 +140,31 @@ export const MIGRATIONS: string[][] = [
           ), 0)
      ) WHERE status = 'done'`,
   ],
+  // v8: el modelo del DAG (#90, D12). Cuatro tipos de nodo (los guardados antes son `task`), cuándo nació (el eje x;
+  // los viejos: su `created_at`), la cita de un pedido y el cierre con motivo (los `done` existentes quedan cerrados
+  // como `done`). «Nació de» va en su propia tabla: las aristas existentes ya son «necesita» y no cambian.
+  [
+    `ALTER TABLE nodes ADD COLUMN kind TEXT NOT NULL DEFAULT 'task'`,
+    `ALTER TABLE nodes ADD COLUMN born_at TEXT`,
+    `UPDATE nodes SET born_at = created_at`,
+    `ALTER TABLE nodes ADD COLUMN quote TEXT`,
+    `ALTER TABLE nodes ADD COLUMN quote_by TEXT`,
+    `ALTER TABLE nodes ADD COLUMN closed_as TEXT`,
+    `ALTER TABLE nodes ADD COLUMN closed_reason TEXT`,
+    `ALTER TABLE nodes ADD COLUMN replaced_by TEXT`,
+    `ALTER TABLE nodes ADD COLUMN closed_at TEXT`,
+    `UPDATE nodes SET closed_as = 'done', closed_at = COALESCE(done_at, updated_at) WHERE status = 'done'`,
+    `CREATE TABLE origins (
+       project_id TEXT NOT NULL,
+       from_id TEXT NOT NULL,
+       to_id TEXT NOT NULL,
+       why TEXT,
+       created_at TEXT NOT NULL,
+       PRIMARY KEY (project_id, from_id, to_id),
+       FOREIGN KEY (project_id, from_id) REFERENCES nodes(project_id, id) ON DELETE CASCADE,
+       FOREIGN KEY (project_id, to_id) REFERENCES nodes(project_id, id) ON DELETE CASCADE
+     )`,
+  ],
 ];
 
 /**

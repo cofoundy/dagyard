@@ -6,13 +6,16 @@ import type {
   Blocker,
   BlockerInput,
   BlockerWaitResult,
+  CloseInput,
   DagNode,
   Edge,
+  EdgeKind,
   Message,
   MessageInput,
   NextResult,
   NodeInput,
   NodePatchInput,
+  Origin,
   ProjectGraphInput,
   ProjectSnapshot,
   Team,
@@ -35,7 +38,9 @@ export const ROUTES = {
   nodes: (projectId: string) => `/api/projects/${p(projectId)}/nodes`,
   /** PATCH: actualiza un nodo. */
   node: (projectId: string, nodeId: string) => `/api/projects/${p(projectId)}/nodes/${p(nodeId)}`,
-  /** POST: crea una arista `{ from, to }`. */
+  /** POST: cierra un nodo con motivo `{ as, why?, by?, reportUrl? }` (#90). */
+  close: (projectId: string, nodeId: string) => `/api/projects/${p(projectId)}/nodes/${p(nodeId)}/close`,
+  /** POST: crea una arista `{ from, to, kind?, why? }`: «necesita» o, con `kind: 'origin'`, «nació de» (#90). */
   edges: (projectId: string) => `/api/projects/${p(projectId)}/edges`,
   /** POST: abre un bloqueante sobre el nodo. */
   blockers: (projectId: string, nodeId: string) =>
@@ -124,8 +129,15 @@ export class DagyardClient {
     return this.json('PATCH', ROUTES.node(projectId, nodeId), patch);
   }
 
-  addEdge(projectId: string, from: string, to: string): Promise<Edge> {
-    return this.json('POST', ROUTES.edges(projectId), { from, to });
+  /** Sin `kind`, «necesita»; `kind: 'origin'` = «nació de», con su `why` (#90). */
+  addEdge(projectId: string, from: string, to: string, opts: { kind?: EdgeKind; why?: string } = {}): Promise<Edge | Origin> {
+    const body = opts.kind === 'origin' ? { from, to, kind: 'origin', ...(opts.why ? { why: opts.why } : {}) } : { from, to };
+    return this.json('POST', ROUTES.edges(projectId), body);
+  }
+
+  /** Cierra con motivo (#90): lista, reemplazada, descartada o «aprendimos». */
+  closeNode(projectId: string, nodeId: string, input: CloseInput): Promise<DagNode> {
+    return this.json('POST', ROUTES.close(projectId, nodeId), input);
   }
 
   openBlocker(projectId: string, nodeId: string, input: BlockerInput): Promise<Blocker> {

@@ -1,4 +1,4 @@
-import { demoProject, type BlockerWaitResult, type NextResult, type ProjectGraphInput, type ProjectSnapshot } from '@dagyard/model';
+import { demoProject, type BlockerWaitResult, type DagNode, type NextResult, type ProjectGraphInput, type ProjectSnapshot } from '@dagyard/model';
 import { describe, expect, it } from 'vitest';
 import { buildImport } from '../../../packages/cli/src/tasks/import.js';
 import { AGENT, OWNER, api, json, seedDemo, uniquePid } from './helpers.js';
@@ -87,54 +87,51 @@ describe('un agente no borra bloqueantes', () => {
     expect(open(again)).toHaveLength(4);
   });
 
-  it('PUT del agente que quita un nodo con bloqueante (resuelto o abierto) → 409 sin tocar nada', async () => {
+  it('PUT sin un nodo con bloqueante (#90): el nodo sigue con su pregunta; abierta, espera; respondida, se descarta', async () => {
     const pid = uniquePid();
     const s = await json<ProjectSnapshot>(await put(pid, small()), 200);
     const bid = s.blockers[0]!.id;
     const onlyA = { name: 'Con acceso', nodes: [{ id: 'a', stage: 'diseno', title: 'A', status: 'done' as const }] };
+    const b = (x: ProjectSnapshot) => x.nodes.find((n) => n.id === 'b')!;
 
-    let r = await json(await put(pid, onlyA), 409);
-    expect(r.error.code).toBe('conflict');
-    expect(r.error.message).toMatch(/«B»/);
-
-    await resolve(pid, bid, { value: 'sk_live_123' });
-    const resolved = await snap(pid);
-    r = await json(await put(pid, onlyA), 409);
-    expect(r.error.code).toBe('conflict');
-    const after = await snap(pid);
-    expect(after.seq).toBe(resolved.seq);
+    // abierta: «b» sigue esperando al dueño, con su pregunta
+    let after = await json<ProjectSnapshot>(await put(pid, onlyA), 200);
     expect(after.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+    expect(b(after)).toMatchObject({ status: 'blocked', closedAs: null });
+    expect(after.blockers.map((x) => [x.id, x.status])).toEqual([[bid, 'open']]);
+    expect(after.edges).toEqual([{ projectId: pid, from: 'a', to: 'b' }]);
 
+    // respondida: el siguiente PUT sin «b» la descarta, y la respuesta sigue
+    await resolve(pid, bid, { value: 'sk_live_123' });
+    after = await json<ProjectSnapshot>(await put(pid, onlyA), 200);
+    expect(b(after)).toMatchObject({ status: 'done', closedAs: 'dropped', closedReason: 'no está en el import' });
     const w = await json<BlockerWaitResult>(await api(`/api/projects/${pid}/blockers/${bid}/wait?timeout=0`), 200);
     expect(w.value).toBe('sk_live_123');
 
-    // el dueño sí puede
+    // el dueño tampoco la borra: un proyecto que no es demo nunca pierde un nodo
     const owner = await json<ProjectSnapshot>(await put(pid, onlyA, OWNER), 200);
-    expect(owner.blockers).toHaveLength(0);
+    expect(owner.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+    expect(owner.blockers.map((x) => x.id)).toEqual([bid]);
   });
 
-  it('DELETE de un nodo con bloqueante abierto: agente → 409; dueño → 204', async () => {
+  it('DELETE (descartar, #90): agente → 403; dueño con una pregunta abierta → 409; respondida → la cierra como dropped', async () => {
     const s = await seedDemo();
     const pid = s.project.id;
-    const r = await json(await api(`/api/projects/${pid}/nodes/comision`, { method: 'DELETE', headers: AGENT }), 409);
-    expect(r.error.code).toBe('conflict');
-    expect(r.error.message).toMatch(/una pregunta abierta/);
+    let r = await json(await api(`/api/projects/${pid}/nodes/landing`, { method: 'DELETE', headers: AGENT }), 403);
+    expect(r.error.code).toBe('forbidden');
+    r = await json(await api(`/api/projects/${pid}/nodes/comision`, { method: 'DELETE', headers: OWNER }), 409);
+    expect(r.error.message).toMatch(/bloqueante abierto/);
     expect(open(await snap(pid)).some((b) => b.nodeId === 'comision')).toBe(true);
 
-    // un nodo sin bloqueantes lo sigue borrando el agente
-    expect((await api(`/api/projects/${pid}/nodes/landing`, { method: 'DELETE', headers: AGENT })).status).toBe(204);
-    expect((await api(`/api/projects/${pid}/nodes/comision`, { method: 'DELETE', headers: OWNER })).status).toBe(204);
-  });
-
-  it('DELETE de un nodo con el bloqueante ya resuelto: agente → 409 y la respuesta sigue; dueño → 204', async () => {
-    const s = await seedDemo();
-    const pid = s.project.id;
     const b = s.blockers.find((x) => x.nodeId === 'comision')!;
     await resolve(pid, b.id, { choice: 0 });
-    const r = await json(await api(`/api/projects/${pid}/nodes/comision`, { method: 'DELETE', headers: AGENT }), 409);
-    expect(r.error.code).toBe('conflict');
-    expect((await snap(pid)).blockers.find((x) => x.id === b.id)?.status).toBe('resolved');
-    expect((await api(`/api/projects/${pid}/nodes/comision`, { method: 'DELETE', headers: OWNER })).status).toBe(204);
+    const dropped = await json<DagNode>(await api(`/api/projects/${pid}/nodes/comision?why=${encodeURIComponent('ya no aplica')}`, { method: 'DELETE', headers: OWNER }), 200);
+    expect(dropped).toMatchObject({ id: 'comision', status: 'done', closedAs: 'dropped', closedReason: 'ya no aplica' });
+    const after = await snap(pid);
+    expect(after.blockers.find((x) => x.id === b.id)?.status).toBe('resolved');
+    expect(after.nodes).toHaveLength(s.nodes.length);
+    // ya cerrada: descartarla otra vez → 409
+    await json(await api(`/api/projects/${pid}/nodes/comision`, { method: 'DELETE', headers: OWNER }), 409);
   });
 
   it('PUT del agente sobre un proyecto sin bloqueantes → 200 (lo usa la QA de tiempo real)', async () => {
@@ -210,16 +207,15 @@ describe('el PUT de un agente conserva mensajes y antigüedad', () => {
     const again = await json<ProjectSnapshot>(await put(pid, demoProject()), 200);
     expect(again.messages).toEqual(s.messages);
 
-    // un mensaje nuevo del archivo sí entra; los de una tarea quitada se van
+    // un mensaje nuevo del archivo sí entra; los de una tarea que el archivo ya no trae se quedan con ella (#90)
     const g = demoProject();
     g.messages = [...g.messages!, { nodeId: 'registro', text: 'Ya mandé el correo de bienvenida.' }];
     g.nodes = g.nodes.filter((n) => n.id !== 'entrevistas').map((n) => ({ ...n, deps: n.deps?.filter((d) => d !== 'entrevistas') }));
     g.messages = g.messages.filter((m) => m.nodeId !== 'entrevistas');
     const after = await json<ProjectSnapshot>(await put(pid, g), 200);
-    expect(after.messages.map((m) => m.id)).toEqual(expect.arrayContaining(s.messages.filter((m) => m.nodeId !== 'entrevistas').map((m) => m.id)));
-    expect(after.messages.some((m) => m.nodeId === 'entrevistas')).toBe(false);
+    expect(after.messages.map((m) => m.id)).toEqual(expect.arrayContaining(s.messages.map((m) => m.id)));
     expect(after.messages.filter((m) => m.text === 'Ya mandé el correo de bienvenida.')).toHaveLength(1);
-    expect(after.messages).toHaveLength(8);
+    expect(after.messages).toHaveLength(9);
   });
 
   it('un mensaje sin from no se duplica al re-importar aunque la tarea cambie de equipo', async () => {

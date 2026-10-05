@@ -1,0 +1,2881 @@
+#!/usr/bin/env node
+
+// src/cli.ts
+import { execFileSync, spawn } from "node:child_process";
+import { readFileSync as readFileSync3 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { basename as basename2, join as join3 } from "node:path";
+
+// src/i18n.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+function langFromEnv(env) {
+  const raw = [env.LC_ALL, env.LC_MESSAGES, env.LANG].map((v) => v?.trim() ?? "").find((v) => v !== "") ?? "";
+  return /^es(?:$|[_.@-])/i.test(raw) ? "es" : "en";
+}
+var current = new AsyncLocalStorage();
+function withLang(lang3, fn) {
+  return current.run(lang3, fn);
+}
+function lang() {
+  return current.getStore() ?? "en";
+}
+function t(en, es) {
+  return lang() === "es" ? es : en;
+}
+function plural(n, en, es) {
+  const [one, many] = lang() === "es" ? es : en;
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+// src/api.ts
+var p = encodeURIComponent;
+var ROUTES = {
+  /**
+   * GET: snapshot completo · PUT: reemplaza el grafo entero (idempotente). Con `If-None-Match: *` solo
+   * crea: 409 si ya existe. Con la API key conserva los bloqueantes (abiertos y respondidos) y responde
+   * 409 si el grafo nuevo quita una tarea que tiene alguno.
+   */
+  project: (projectId) => `/api/projects/${p(projectId)}`,
+  /** GET: el siguiente nodo arrancable y su línea `/goal`. */
+  next: (projectId) => `/api/projects/${p(projectId)}/next`,
+  /** POST: crea un nodo. */
+  nodes: (projectId) => `/api/projects/${p(projectId)}/nodes`,
+  /** PATCH: actualiza un nodo. */
+  node: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}`,
+  /** POST: cierra un nodo con motivo `{ as, why?, by?, reportUrl? }` (#90). */
+  close: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}/close`,
+  /** POST: crea una arista `{ from, to, kind?, why? }`: «necesita» o, con `kind: 'origin'`, «nació de» (#90). */
+  edges: (projectId) => `/api/projects/${p(projectId)}/edges`,
+  /** POST: abre un bloqueante sobre el nodo. */
+  blockers: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}/blockers`,
+  /**
+   * GET long-poll (`timeout` ≤25 s): 200 `BlockerWaitResult` apenas se resuelve, o al vencer con el
+   * bloqueante todavía `open` (entonces se vuelve a llamar).
+   */
+  wait: (projectId, blockerId) => `/api/projects/${p(projectId)}/blockers/${p(blockerId)}/wait`,
+  /** PUT: upsert parcial de un equipo de la fábrica (#75); sin cambios no emite nada. */
+  team: (projectId, teamId) => `/api/projects/${p(projectId)}/teams/${p(teamId)}`,
+  /** POST: mensaje corto del agente al PM. */
+  messages: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}/messages`
+};
+var ApiRequestError = class extends Error {
+  constructor(status2, code2, message) {
+    super(message);
+    this.status = status2;
+    this.code = code2;
+    this.name = "ApiRequestError";
+  }
+  status;
+  code;
+};
+var RETRY_DELAYS_MS = [300, 900];
+var jitter = (ms) => Math.round(ms * (0.5 + Math.random()));
+var transient = (err) => err.status === 0 || err.status === 503 && (err.code === "unavailable" || err.code === "http_503");
+var DagyardClient = class {
+  baseUrl;
+  key;
+  fetchImpl;
+  retryDelaysMs;
+  sleep;
+  constructor(opts) {
+    this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
+    this.key = opts.key;
+    this.fetchImpl = opts.fetch ?? fetch;
+    this.retryDelaysMs = opts.retryDelaysMs ?? RETRY_DELAYS_MS;
+    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  }
+  /** `exclusive`: creación exclusiva (`If-None-Match: *`); si el proyecto ya existe, 409 sin tocarlo. */
+  putProject(projectId, graph, opts = {}) {
+    return this.json("PUT", ROUTES.project(projectId), graph, opts.exclusive ? { "if-none-match": "*" } : {});
+  }
+  snapshot(projectId) {
+    return this.json("GET", ROUTES.project(projectId));
+  }
+  next(projectId) {
+    return this.json("GET", ROUTES.next(projectId));
+  }
+  addNode(projectId, node) {
+    return this.json("POST", ROUTES.nodes(projectId), node);
+  }
+  /** `teamId` (#75): el sitio que la toma; el servidor la suma a ese equipo. */
+  updateNode(projectId, nodeId2, patch) {
+    return this.json("PATCH", ROUTES.node(projectId, nodeId2), patch);
+  }
+  /** Sin `kind`, «necesita»; `kind: 'origin'` = «nació de», con su `why` (#90). */
+  addEdge(projectId, from, to, opts = {}) {
+    const body = opts.kind === "origin" ? { from, to, kind: "origin", ...opts.why ? { why: opts.why } : {} } : { from, to };
+    return this.json("POST", ROUTES.edges(projectId), body);
+  }
+  /** Cierra con motivo (#90): lista, reemplazada, descartada o «aprendimos». */
+  closeNode(projectId, nodeId2, input) {
+    return this.json("POST", ROUTES.close(projectId, nodeId2), input);
+  }
+  openBlocker(projectId, nodeId2, input) {
+    return this.json("POST", ROUTES.blockers(projectId, nodeId2), input);
+  }
+  /** Una vuelta de long-poll: `null` si venció con el bloqueante todavía abierto. */
+  async waitOnce(projectId, blockerId, timeoutSec) {
+    const qs = new URLSearchParams({ timeout: String(timeoutSec) });
+    const res = await this.request("GET", `${ROUTES.wait(projectId, blockerId)}?${qs}`);
+    if (res.status === 204) return null;
+    const body = await res.json();
+    return body.blocker.status === "resolved" ? body : null;
+  }
+  putTeam(projectId, teamId, patch) {
+    return this.json("PUT", ROUTES.team(projectId, teamId), patch);
+  }
+  postMessage(projectId, nodeId2, input) {
+    return this.json("POST", ROUTES.messages(projectId, nodeId2), input);
+  }
+  async json(method, path, body, extra2 = {}) {
+    const res = await this.request(method, path, body, extra2);
+    if (res.status === 204) return void 0;
+    return await res.json();
+  }
+  /**
+   * Una invocación de la API. Toda escritura lleva una `Idempotency-Key` nueva, la misma en cada reintento:
+   * así reintentar un `503 unavailable` o un corte de red (la escritura pudo quedar) nunca la duplica.
+   */
+  async request(method, path, body, extra2 = {}) {
+    const headers = {
+      ...extra2,
+      authorization: `Bearer ${this.key}`,
+      accept: "application/json"
+    };
+    if (body !== void 0) headers["content-type"] = "application/json";
+    if (method !== "GET" && method !== "HEAD") headers["idempotency-key"] = crypto.randomUUID();
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.attempt(method, path, headers, body);
+      } catch (err) {
+        if (!(err instanceof ApiRequestError) || !transient(err) || attempt >= this.retryDelaysMs.length) throw err;
+        await this.sleep(jitter(this.retryDelaysMs[attempt]));
+      }
+    }
+  }
+  async attempt(method, path, headers, body) {
+    let res;
+    try {
+      res = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers,
+        body: body === void 0 ? void 0 : JSON.stringify(body)
+      });
+    } catch (err) {
+      const cause = err instanceof Error ? err.message : String(err);
+      throw new ApiRequestError(0, "network", t(`could not reach ${this.baseUrl}: ${cause}`, `no pude conectar con ${this.baseUrl}: ${cause}`));
+    }
+    if (!res.ok) {
+      let code2 = `http_${res.status}`;
+      let message = res.statusText || "error";
+      try {
+        const err = await res.json();
+        if (err.error?.code) code2 = err.error.code;
+        if (err.error?.message) message = err.error.message;
+      } catch {
+      }
+      throw new ApiRequestError(res.status, code2, message);
+    }
+    return res;
+  }
+};
+
+// src/args.ts
+var UsageError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UsageError";
+  }
+};
+var ALIASES = { h: "help", q: "q", p: "project" };
+function parseArgs(argv, booleans) {
+  const out = { positionals: [], flags: {}, bools: /* @__PURE__ */ new Set(), seq: [] };
+  const isBool = (k) => booleans.includes(k) || k === "help";
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--") {
+      out.positionals.push(...argv.slice(i + 1));
+      break;
+    }
+    const m = /^--?([A-Za-z][\w-]*)(?:=(.*))?$/.exec(arg);
+    if (!m || /^-\d/.test(arg)) {
+      out.positionals.push(arg);
+      continue;
+    }
+    const key = ALIASES[m[1]] ?? m[1];
+    if (isBool(key)) {
+      if (m[2] !== void 0) throw new UsageError(t(`--${key} takes no value`, `--${key} no lleva valor`));
+      out.bools.add(key);
+      continue;
+    }
+    let value = m[2];
+    if (value === void 0) {
+      value = argv[++i];
+      if (value === void 0) throw new UsageError(t(`--${key} needs a value`, `a --${key} le falta el valor`));
+    }
+    (out.flags[key] ??= []).push(value);
+    out.seq.push([key, value]);
+  }
+  return out;
+}
+function flag(a, key) {
+  const v = a.flags[key];
+  return v ? v[v.length - 1] : void 0;
+}
+function assertKnownFlags(a, allowed) {
+  for (const k of Object.keys(a.flags)) {
+    if (!allowed.includes(k)) throw new UsageError(t(`unknown option: --${k}`, `opci\xF3n desconocida: --${k}`));
+  }
+}
+
+// src/config.ts
+import { readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+var REPO_CONFIG = ".dagyard.json";
+var TRUSTED_ORIGINS = ["https://dagyard.cofoundy-dev.workers.dev", "https://dagyard.run"];
+function loadConfig(env = process.env, cwd = process.cwd(), opts = {}) {
+  const repo = readRepoConfig(cwd, env.HOME || homedir());
+  const envUrl = env.DAGYARD_URL?.trim();
+  let repoUrl = null;
+  if (repo?.url && !envUrl && !opts.skipRepoUrl) {
+    if (isTrustedUrl(repo.url, env)) repoUrl = repo.url;
+    else {
+      const warn = opts.warn ?? ((m) => process.stderr.write(m));
+      const trustFile = join(configDir(env), "trusted-urls");
+      warn(
+        t(
+          `dagyard: ignoring the url in ${repo.path} (\xAB${repo.url}\xBB): it is not https or its origin is not trusted. If it is yours, add it to ${trustFile}.
+`,
+          `dagyard: ignoro la url de ${repo.path} (\xAB${repo.url}\xBB): no es https o su origen no es de confianza. Si es tuya, agr\xE9gala a ${trustFile}.
+`
+        )
+      );
+    }
+  }
+  return {
+    url: envUrl || repoUrl || fromConfigDir(env, "url"),
+    key: loadKey(env),
+    project: env.DAGYARD_PROJECT?.trim() || repo?.project || fromConfigDir(env, "project")
+  };
+}
+function loadKey(env = process.env) {
+  return env.DAGYARD_KEY?.trim() || fromConfigDir(env, "agent-key");
+}
+function isTrustedUrl(raw, env = process.env) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" || u.username || u.password) return false;
+  const trusted = new Set(TRUSTED_ORIGINS);
+  const extra2 = [
+    env.DAGYARD_URL,
+    fromConfigDir(env, "url"),
+    ...(fromConfigDir(env, "trusted-urls") ?? "").split(/\r?\n/).filter((l) => !l.trim().startsWith("#"))
+  ];
+  for (const s of extra2) {
+    const o = originOf(s?.trim());
+    if (o) trusted.add(o);
+  }
+  return trusted.has(u.origin);
+}
+function originOf(s) {
+  if (!s) return null;
+  try {
+    const o = new URL(s).origin;
+    return o === "null" ? null : o;
+  } catch {
+    return null;
+  }
+}
+function findRepoConfig(cwd, home = homedir()) {
+  let dir = resolve(cwd);
+  const stop = resolve(home);
+  for (; ; ) {
+    const candidate = join(dir, REPO_CONFIG);
+    if (isFile(candidate)) return candidate;
+    if (exists(join(dir, ".git")) || dir === stop) return null;
+    const up = dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+}
+function isFile(p2) {
+  try {
+    return statSync(p2).isFile();
+  } catch {
+    return false;
+  }
+}
+function exists(p2) {
+  try {
+    statSync(p2);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function readRepoConfig(cwd, home) {
+  const path = findRepoConfig(cwd, home);
+  if (!path) return null;
+  let data;
+  try {
+    data = JSON.parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    throw new UsageError(
+      t(
+        `${path} is not valid JSON (${why}); it must be {"project": "\u2026", "url": "\u2026"}`,
+        `${path} no es JSON v\xE1lido (${why}); debe ser {"project": "\u2026", "url": "\u2026"}`
+      )
+    );
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new UsageError(t(`${path} must be an object {"project": "\u2026", "url": "\u2026"}`, `${path} debe ser un objeto {"project": "\u2026", "url": "\u2026"}`));
+  }
+  const o = data;
+  const field = (k) => {
+    const v = o[k];
+    if (v === void 0 || v === null) return null;
+    if (typeof v !== "string") throw new UsageError(t(`${path}: "${k}" must be text`, `${path}: "${k}" debe ser texto`));
+    return v.trim() || null;
+  };
+  return { path, project: field("project"), url: field("url") };
+}
+function configDir(env) {
+  return env.DAGYARD_CONFIG_DIR || join(homedir(), ".config", "dagyard");
+}
+function fromConfigDir(env, name) {
+  try {
+    return readFileSync(join(configDir(env), name), "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// ../model/dist/types.js
+var NODE_STATUSES = ["pending", "working", "blocked", "done"];
+var BLOCKER_KINDS = ["decision", "review", "access"];
+var NODE_KINDS = ["goal", "request", "task", "stream"];
+var CLOSE_AS = ["done", "replaced", "dropped", "learned"];
+var LANGS = ["en", "es"];
+var DEFAULT_LANG = "en";
+var LEGACY_LANG = "es";
+function projectLang(p2) {
+  return p2.lang ?? LEGACY_LANG;
+}
+var DEFAULT_STAGES_BY_LANG = {
+  en: [
+    { id: "descubrimiento", name: "Discovery" },
+    { id: "diseno", name: "Design" },
+    { id: "construccion", name: "Build" },
+    { id: "pruebas", name: "Testing" },
+    { id: "lanzamiento", name: "Launch" }
+  ],
+  es: [
+    { id: "descubrimiento", name: "Descubrimiento" },
+    { id: "diseno", name: "Dise\xF1o" },
+    { id: "construccion", name: "Construcci\xF3n" },
+    { id: "pruebas", name: "Pruebas" },
+    { id: "lanzamiento", name: "Lanzamiento" }
+  ]
+};
+var DEFAULT_STAGES = DEFAULT_STAGES_BY_LANG.es;
+var LIMITS = {
+  slug: 64,
+  title: 120,
+  name: 80,
+  goal: 500,
+  question: 500,
+  option: 120,
+  options: 6,
+  message: 280,
+  url: 2048,
+  accessValue: 4096,
+  note: 1e3,
+  nodesPerProject: 500,
+  /** #90 */
+  quote: 1e3,
+  closedReason: 500,
+  originWhy: 280
+};
+
+// ../model/dist/graph.js
+function findCycle(ids, edges) {
+  const out = /* @__PURE__ */ new Map();
+  for (const id of ids)
+    out.set(id, []);
+  for (const e of edges) {
+    if (!out.has(e.from))
+      out.set(e.from, []);
+    out.get(e.from).push(e.to);
+  }
+  const WHITE = 0, GREY = 1, BLACK = 2;
+  const color = /* @__PURE__ */ new Map();
+  const stack = [];
+  const visit = (u) => {
+    color.set(u, GREY);
+    stack.push(u);
+    for (const v of out.get(u) ?? []) {
+      const c = color.get(v) ?? WHITE;
+      if (c === GREY)
+        return [...stack.slice(stack.indexOf(v)), v];
+      if (c === WHITE) {
+        const r = visit(v);
+        if (r)
+          return r;
+      }
+    }
+    stack.pop();
+    color.set(u, BLACK);
+    return null;
+  };
+  for (const id of out.keys()) {
+    if ((color.get(id) ?? WHITE) === WHITE) {
+      const r = visit(id);
+      if (r)
+        return r;
+    }
+  }
+  return null;
+}
+function wouldCreateCycle(edges, from, to) {
+  if (from === to)
+    return true;
+  const out = /* @__PURE__ */ new Map();
+  for (const e of edges)
+    (out.get(e.from) ?? out.set(e.from, []).get(e.from)).push(e.to);
+  const seen = /* @__PURE__ */ new Set();
+  const q = [to];
+  while (q.length) {
+    const u = q.pop();
+    if (u === from)
+      return true;
+    if (seen.has(u))
+      continue;
+    seen.add(u);
+    q.push(...out.get(u) ?? []);
+  }
+  return false;
+}
+function neverDone(kind2) {
+  return kind2 === "goal" || kind2 === "stream";
+}
+
+// ../model/dist/validate.js
+var TEAM_LIMITS = {
+  nodeIds: 50,
+  outcome: LIMITS.note,
+  perProject: LIMITS.nodesPerProject,
+  /** una fecha de equipo anterior a esta es un error de quien escribe (la fábrica es de 2026) */
+  earliest: "2020-01-01T00:00:00.000Z",
+  /** cuánto al futuro tolera una fecha de equipo (relojes desfasados), en ms */
+  future: 24 * 60 * 60 * 1e3
+};
+var ISO_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-](\d{2}):?(\d{2}))$/;
+function normalizeIso(v) {
+  if (typeof v !== "string")
+    return null;
+  const m = ISO_RE.exec(v.trim());
+  if (!m)
+    return null;
+  const [y, mo, d, h, mi, se = "0", zh = "0", zm = "0"] = m.slice(1).map((x) => x ?? void 0);
+  const days = new Date(Date.UTC(Number(y), Number(mo), 0)).getUTCDate();
+  if (Number(mo) < 1 || Number(mo) > 12 || Number(d) < 1 || Number(d) > days)
+    return null;
+  if (Number(h) > 23 || Number(mi) > 59 || Number(se) > 59 || Number(zh) > 23 || Number(zm) > 59)
+    return null;
+  const ms = Date.parse(v.trim());
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+var Invalid = class extends Error {
+};
+var fail = (message) => {
+  throw new Invalid(message);
+};
+var wrap = (fn) => {
+  try {
+    return { ok: true, value: fn() };
+  } catch (e) {
+    if (e instanceof Invalid)
+      return { ok: false, message: e.message };
+    throw e;
+  }
+};
+var SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+function isSlug(s) {
+  return typeof s === "string" && s.length <= LIMITS.slug && SLUG_RE.test(s);
+}
+function slugify(text) {
+  const s = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, LIMITS.slug).replace(/-+$/g, "");
+  return s || "x";
+}
+function obj(v, what) {
+  if (typeof v !== "object" || v === null || Array.isArray(v))
+    fail(`${what}: se esperaba un objeto`);
+  return v;
+}
+function str(v, field, max, opts = {}) {
+  if (v === void 0 && opts.optional)
+    return void 0;
+  if (typeof v !== "string")
+    return fail(`${field}: se esperaba texto`);
+  const t2 = v.trim();
+  if (!t2)
+    return fail(`${field}: no puede estar vac\xEDo`);
+  if ([...t2].length > max)
+    return fail(`${field}: m\xE1ximo ${max} caracteres`);
+  return t2;
+}
+function nullableStr(v, field, max) {
+  if (v === void 0)
+    return void 0;
+  if (v === null || v === "")
+    return null;
+  return str(v, field, max);
+}
+function url(v, field) {
+  const s = nullableStr(v, field, LIMITS.url);
+  if (s && !/^https?:\/\//i.test(s))
+    fail(`${field}: debe empezar con http:// o https://`);
+  return s;
+}
+function slug(v, field, optional2 = false) {
+  if (v === void 0 && optional2)
+    return void 0;
+  if (!isSlug(v))
+    return fail(`${field}: usa min\xFAsculas, n\xFAmeros y guiones (m\xE1x. ${LIMITS.slug})`);
+  return v;
+}
+function status(v) {
+  if (v === void 0)
+    return void 0;
+  if (!NODE_STATUSES.includes(v))
+    fail(`status: uno de ${NODE_STATUSES.join(", ")}`);
+  return v;
+}
+function progress(v) {
+  if (v === void 0)
+    return void 0;
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1)
+    fail("progress: un n\xFAmero entre 0 y 1");
+  return v;
+}
+function stringList(v, field, max, maxLen) {
+  if (v === void 0)
+    return void 0;
+  if (!Array.isArray(v))
+    return fail(`${field}: se esperaba una lista`);
+  if (v.length > max)
+    return fail(`${field}: m\xE1ximo ${max}`);
+  return v.map((x, i) => str(x, `${field}[${i}]`, maxLen));
+}
+function isoDate(v, field) {
+  if (v === void 0)
+    return void 0;
+  if (v === null)
+    return null;
+  return normalizeIso(v) ?? fail(`${field}: una fecha ISO 8601 con hora y zona, p. ej. 2026-10-04T05:35:20Z`);
+}
+function kind(v, field) {
+  if (v === void 0)
+    return void 0;
+  if (!NODE_KINDS.includes(v))
+    fail(`${field}: uno de ${NODE_KINDS.join(", ")}`);
+  return v;
+}
+var BORN_AT_FUTURE_MS = TEAM_LIMITS.future;
+function bornAt(v, field) {
+  if (v === void 0)
+    return void 0;
+  if (v === null)
+    return fail(`${field}: una fecha ISO 8601, o no lo mandes`);
+  const d = isoDate(v, field);
+  if (d < TEAM_LIMITS.earliest || d > new Date(Date.now() + BORN_AT_FUTURE_MS).toISOString())
+    fail(`${field}: fuera de rango (desde 2020 hasta ahora): ${d}`);
+  return d;
+}
+function origins(v, field) {
+  if (v === void 0)
+    return void 0;
+  if (!Array.isArray(v))
+    return fail(`${field}: se esperaba una lista de {from, why?}`);
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  v.forEach((x, i) => {
+    const o = obj(x, `${field}[${i}]`);
+    const from = slug(o.from, `${field}[${i}].from`);
+    const why = nullableStr(o.why, `${field}[${i}].why`, LIMITS.originWhy);
+    if (seen.has(from))
+      return;
+    seen.add(from);
+    out.push(why !== void 0 ? { from, why } : { from });
+  });
+  return out;
+}
+function kindRules(n, at, creating) {
+  const k = n.kind ?? "task";
+  if (k === "request" && creating && !n.quote)
+    fail(`${at}quote: un pedido (request) lleva la cita literal de la persona`);
+  if (n.kind !== void 0 && k !== "request" && n.quote)
+    fail(`${at}quote: solo un pedido (request) lleva cita`);
+  if (n.status === "done" && neverDone(k))
+    fail(`${at}status: un ${k} no se cierra como \xABdone\xBB; ci\xE9rralo con otro motivo (replaced, dropped o learned)`);
+}
+function lang2(v) {
+  if (v === void 0)
+    return void 0;
+  if (!LANGS.includes(v))
+    fail(`lang: uno de ${LANGS.join(", ")}`);
+  return v;
+}
+function stages(v) {
+  if (v === void 0)
+    return void 0;
+  if (!Array.isArray(v) || v.length === 0)
+    return fail("stages: se esperaba una lista con al menos una etapa");
+  if (v.length > 12)
+    return fail("stages: m\xE1ximo 12");
+  const out = v.map((x, i) => {
+    if (typeof x === "string")
+      return { name: str(x, `stages[${i}]`, LIMITS.name) };
+    const o = obj(x, `stages[${i}]`);
+    const s = { name: str(o.name, `stages[${i}].name`, LIMITS.name) };
+    const id = slug(o.id, `stages[${i}].id`, true);
+    if (id)
+      s.id = id;
+    return s;
+  });
+  const ids = out.map((s) => s.id ?? slugify(s.name));
+  if (new Set(ids).size !== ids.length)
+    fail("stages: hay etapas repetidas");
+  return out;
+}
+function nodeInput(o, at) {
+  const n = { title: str(o.title, `${at}title`, LIMITS.title) };
+  const stage = slug(o.stage, `${at}stage`, true);
+  if (stage)
+    n.stage = stage;
+  const id = slug(o.id, `${at}id`, true);
+  if (id)
+    n.id = id;
+  const k = kind(o.kind, `${at}kind`);
+  if (k)
+    n.kind = k;
+  const b = bornAt(o.bornAt, `${at}bornAt`);
+  if (b)
+    n.bornAt = b;
+  const quote = nullableStr(o.quote, `${at}quote`, LIMITS.quote);
+  if (quote !== void 0)
+    n.quote = quote;
+  const quoteBy = nullableStr(o.quoteBy, `${at}quoteBy`, LIMITS.name);
+  if (quoteBy !== void 0)
+    n.quoteBy = quoteBy;
+  const s = status(o.status);
+  if (s)
+    n.status = s;
+  const p2 = progress(o.progress);
+  if (p2 !== void 0)
+    n.progress = p2;
+  const team = nullableStr(o.team, `${at}team`, LIMITS.name);
+  if (team !== void 0)
+    n.team = team;
+  const goal = nullableStr(o.goal, `${at}goal`, LIMITS.goal);
+  if (goal !== void 0)
+    n.goal = goal;
+  const r = url(o.reportUrl, `${at}reportUrl`);
+  if (r !== void 0)
+    n.reportUrl = r;
+  const l = url(o.link, `${at}link`);
+  if (l !== void 0)
+    n.link = l;
+  if (o.deps !== void 0) {
+    if (!Array.isArray(o.deps))
+      fail(`${at}deps: se esperaba una lista`);
+    n.deps = o.deps.map((d, i) => slug(d, `${at}deps[${i}]`));
+  }
+  const og = origins(o.origins, `${at}origins`);
+  if (og)
+    n.origins = og;
+  kindRules(n, at, n.kind === "request");
+  return n;
+}
+function blockerInput(o, at) {
+  if (!BLOCKER_KINDS.includes(o.kind))
+    fail(`${at}kind: uno de ${BLOCKER_KINDS.join(", ")}`);
+  const kind2 = o.kind;
+  const b = { kind: kind2, question: str(o.question, `${at}question`, LIMITS.question) };
+  const options = stringList(o.options, `${at}options`, LIMITS.options, LIMITS.option);
+  if (kind2 === "access") {
+    if (options && options.length)
+      fail(`${at}options: un acceso no lleva opciones`);
+    b.options = [];
+    b.accessLabel = str(o.accessLabel, `${at}accessLabel`, LIMITS.name);
+  } else {
+    if (options && options.length)
+      b.options = options;
+    else if (kind2 !== "review")
+      fail(`${at}options: una decisi\xF3n necesita al menos una opci\xF3n`);
+    b.accessLabel = null;
+  }
+  return b;
+}
+function messageInput(o, at) {
+  const m = { text: str(o.text, `${at}text`, LIMITS.message) };
+  const from = str(o.from, `${at}from`, LIMITS.name, { optional: true });
+  if (from)
+    m.from = from;
+  const r = url(o.reportUrl, `${at}reportUrl`);
+  if (r !== void 0)
+    m.reportUrl = r;
+  return m;
+}
+function parseProjectGraphInput(body) {
+  return wrap(() => {
+    const o = obj(body, "body");
+    const g = { name: str(o.name, "name", LIMITS.name), nodes: [] };
+    const l = lang2(o.lang);
+    if (l)
+      g.lang = l;
+    const st = stages(o.stages);
+    if (st)
+      g.stages = st;
+    if (!Array.isArray(o.nodes))
+      fail("nodes: se esperaba una lista");
+    const raw = o.nodes;
+    if (raw.length > LIMITS.nodesPerProject)
+      fail(`nodes: m\xE1ximo ${LIMITS.nodesPerProject}`);
+    g.nodes = raw.map((x, i) => nodeInput(obj(x, `nodes[${i}]`), `nodes[${i}].`));
+    if (o.blockers !== void 0) {
+      if (!Array.isArray(o.blockers))
+        fail("blockers: se esperaba una lista");
+      g.blockers = o.blockers.map((x, i) => {
+        const bo = obj(x, `blockers[${i}]`);
+        const b = { ...blockerInput(bo, `blockers[${i}].`), nodeId: slug(bo.nodeId, `blockers[${i}].nodeId`) };
+        if (bo.createdAt !== void 0)
+          b.createdAt = isoDate(bo.createdAt, `blockers[${i}].createdAt`);
+        return b;
+      });
+    }
+    if (o.messages !== void 0) {
+      if (!Array.isArray(o.messages))
+        fail("messages: se esperaba una lista");
+      g.messages = o.messages.map((x, i) => {
+        const mo = obj(x, `messages[${i}]`);
+        return { ...messageInput(mo, `messages[${i}].`), nodeId: slug(mo.nodeId, `messages[${i}].nodeId`) };
+      });
+    }
+    const problem = checkGraph(g);
+    if (problem)
+      fail(problem);
+    return g;
+  });
+}
+function checkGraph(g) {
+  const stageIds = new Set((g.stages ?? []).map((s) => s.id ?? slugify(s.name)));
+  const ids = g.nodes.map((n) => n.id ?? slugify(n.title));
+  const seen = /* @__PURE__ */ new Set();
+  for (const id of ids) {
+    if (seen.has(id))
+      return `nodes: id repetido \xAB${id}\xBB`;
+    seen.add(id);
+  }
+  const kindOf = new Map(g.nodes.map((n, i) => [ids[i], n.kind]));
+  for (const [i, n] of g.nodes.entries()) {
+    if (g.stages && n.stage !== void 0 && !stageIds.has(n.stage))
+      return `nodes[${i}].stage: \xAB${n.stage}\xBB no es una etapa del proyecto`;
+    for (const d of n.deps ?? []) {
+      if (!seen.has(d))
+        return `nodes[${i}].deps: \xAB${d}\xBB no existe`;
+      const k = kindOf.get(d);
+      if (k && neverDone(k))
+        return `nodes[${i}].deps: \xAB${d}\xBB es un ${k}, nunca se cierra: nada puede necesitarlo`;
+    }
+    for (const o of n.origins ?? [])
+      if (!seen.has(o.from))
+        return `nodes[${i}].origins: \xAB${o.from}\xBB no existe`;
+  }
+  for (const [i, b] of (g.blockers ?? []).entries())
+    if (!seen.has(b.nodeId))
+      return `blockers[${i}].nodeId: \xAB${b.nodeId}\xBB no existe`;
+  for (const [i, m] of (g.messages ?? []).entries())
+    if (!seen.has(m.nodeId))
+      return `messages[${i}].nodeId: \xAB${m.nodeId}\xBB no existe`;
+  const edges = g.nodes.flatMap((n, i) => (n.deps ?? []).map((d) => ({ from: d, to: ids[i] })));
+  const cyc = findCycle(ids, edges);
+  if (cyc)
+    return `ciclo en las dependencias: ${cyc.join(" \u2192 ")}`;
+  const born = g.nodes.flatMap((n, i) => (n.origins ?? []).map((o) => ({ from: o.from, to: ids[i] })));
+  const ocyc = findCycle(ids, born);
+  if (ocyc)
+    return `ciclo en \xABnaci\xF3 de\xBB: ${ocyc.join(" \u2192 ")}`;
+  return null;
+}
+
+// ../model/dist/demo.js
+var IDS = { en: "booking-marketplace", es: "marketplace-reservas" };
+var DEMO_PROJECT_IDS = [IDS.en, IDS.es];
+var DEMO_PROJECT_ID = IDS.es;
+var STAGE_NAMES = {
+  en: DEFAULT_STAGES_BY_LANG.en.map((s) => s.name),
+  es: DEFAULT_STAGES.map((s) => s.name)
+};
+
+// src/ledger.ts
+function parseLedger(text) {
+  const trimmed = text.trim();
+  let raw;
+  let invalid = 0;
+  if (trimmed.startsWith("[")) {
+    raw = JSON.parse(trimmed);
+  } else {
+    raw = [];
+    for (const line of trimmed.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        raw.push(JSON.parse(line));
+      } catch {
+        invalid++;
+      }
+    }
+  }
+  const rows = [];
+  for (const r of raw) {
+    if (legible(r)) rows.push(r);
+    else invalid++;
+  }
+  return { rows, invalid };
+}
+function legible(r) {
+  if (typeof r !== "object" || r === null || Array.isArray(r)) return false;
+  const o = r;
+  if (typeof o.site !== "string" || !o.site.trim() || o.site.trim().length > LIMITS.slug) return false;
+  if (typeof o.event !== "string" || typeof o.ts !== "string") return false;
+  if (o.issues === void 0) return true;
+  if (!Array.isArray(o.issues)) return false;
+  return o.issues.every((x) => (typeof x === "string" || typeof x === "number" && Number.isFinite(x)) && `gh-${String(x).trim()}`.length <= LIMITS.slug);
+}
+function teamsFromLedger(rows, repo) {
+  const anyRepo = rows.some((r) => typeof r.repo === "string");
+  const mine = rows.map((r, i) => ({ r, i, at: normalizeIso(r.ts) })).filter(({ r, at }) => at !== null && (anyRepo ? r.repo === repo : true)).sort((a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : a.i - b.i);
+  const skipped = rows.length - mine.length;
+  const byId = /* @__PURE__ */ new Map();
+  for (const { r, at } of mine) {
+    const id = isSlug(r.site) ? r.site : slugify(r.site);
+    let t2 = byId.get(id);
+    if (!t2) byId.set(id, t2 = { id, nodeIds: [], requestedAt: null, startedAt: null, closedAt: null, outcome: null });
+    const reopen = () => {
+      t2.closedAt = null;
+      t2.outcome = null;
+    };
+    if (r.event === "requested") {
+      t2.requestedAt ??= at;
+      if (t2.closedAt) reopen();
+      for (const issue of r.issues ?? []) {
+        const n = String(issue).trim().replace(/^#/, "");
+        const nid = `gh-${n}`;
+        if (/^\d+$/.test(n) && !t2.nodeIds.includes(nid) && t2.nodeIds.length < TEAM_LIMITS.nodeIds) t2.nodeIds.push(nid);
+      }
+    } else if (r.event === "started") {
+      t2.startedAt ??= at;
+      if (t2.closedAt) reopen();
+    } else if (r.event === "closed") {
+      t2.closedAt = at;
+      const outcome = typeof r.outcome === "string" ? r.outcome.trim() : "";
+      t2.outcome = outcome ? [...outcome].slice(0, TEAM_LIMITS.outcome).join("") : null;
+    }
+  }
+  const teams = [...byId.values()];
+  const key = (t2) => t2.startedAt ?? t2.requestedAt ?? "";
+  teams.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
+  return { teams, skipped };
+}
+function teamPatchFromLedger(l, current2) {
+  const patch = {};
+  const extra2 = l.nodeIds.filter((id) => !current2?.nodeIds.includes(id));
+  if (extra2.length) patch.addNodeIds = extra2;
+  for (const k of ["requestedAt", "startedAt", "closedAt", "outcome"]) if (l[k] !== null && l[k] !== current2?.[k]) patch[k] = l[k];
+  return current2 && !Object.keys(patch).length ? null : patch;
+}
+
+// src/tasks/import.ts
+import { readdirSync, readFileSync as readFileSync2 } from "node:fs";
+import { basename, dirname as dirname2, join as join2, resolve as resolve2 } from "node:path";
+
+// src/defaults.ts
+var PHASE_WORDS = [
+  ["discovery", "research", "descubrimiento", "spec", "plan", "planning"],
+  ["design", "dise\xF1o", "diseno", "ux"],
+  ["build", "implementation", "implement", "dev", "development", "construccion", "construcci\xF3n"],
+  ["verification", "verify", "test", "testing", "qa", "pruebas", "review"],
+  ["deploy", "post-deploy", "release", "launch", "lanzamiento", "rollout", "ship"]
+];
+var BUILD = 2;
+var DEPTH_STAGES = {
+  en: {
+    first: "Getting started",
+    last: "Finally",
+    middle: ["Next", "Then", "After that", "Later", "Further on", "Well along", "Toward the end", "Near the end", "Almost at the end", "Right before the end"]
+  },
+  es: {
+    first: "Para empezar",
+    last: "Al final",
+    middle: ["Despu\xE9s", "Luego", "M\xE1s adelante", "M\xE1s tarde", "Ya avanzado", "Bien avanzado", "Hacia el final", "Cerca del final", "Casi al final", "Justo antes del final"]
+  }
+};
+function depthStageName(d, max, lang3) {
+  const names = DEPTH_STAGES[lang3];
+  if (d === 0) return names.first;
+  if (d === max) return names.last;
+  return names.middle[d - 1] ?? names.middle[2];
+}
+function importGoal(title, path, lang3) {
+  return lang3 === "en" ? `${title} \u2014 follow ${path} and meet its acceptance criteria` : `${title} \u2014 sigue ${path} y cumple su aceptaci\xF3n`;
+}
+var YES_NO = { en: ["Yes", "No"], es: ["S\xED", "No"] };
+var SAME_STAGE = [
+  ...DEFAULT_STAGES_BY_LANG.en.map((en, i) => {
+    const es = DEFAULT_STAGES_BY_LANG.es[i];
+    return /* @__PURE__ */ new Set([en.id, slugify(en.name), es.id, slugify(es.name)]);
+  }),
+  /* @__PURE__ */ new Set([slugify(DEPTH_STAGES.en.first), slugify(DEPTH_STAGES.es.first)]),
+  /* @__PURE__ */ new Set([slugify(DEPTH_STAGES.en.last), slugify(DEPTH_STAGES.es.last)]),
+  ...DEPTH_STAGES.en.middle.map((en, i) => /* @__PURE__ */ new Set([slugify(en), slugify(DEPTH_STAGES.es.middle[i])]))
+];
+function findStage(stages2, wanted) {
+  const slug2 = slugify(wanted);
+  const matches = (keys) => (s) => keys.has(s.id) || keys.has(slugify(s.name));
+  return stages2.find(matches(/* @__PURE__ */ new Set([slug2]))) ?? stages2.find(matches(SAME_STAGE.find((g) => g.has(slug2)) ?? /* @__PURE__ */ new Set()));
+}
+function defaultSyncStage(stages2, lang3) {
+  return findStage(stages2, DEFAULT_STAGES_BY_LANG[lang3][BUILD].name) ?? stages2[0];
+}
+
+// src/tasks/parse.ts
+var KEY_TO_FIELD = {
+  id: "id",
+  title: "title",
+  status: "status",
+  deps: "deps",
+  depends: "deps",
+  depends_on: "deps",
+  dependson: "deps",
+  blockedby: "deps",
+  blocked_by: "deps",
+  phase: "phase",
+  goal: "goal",
+  role: "team",
+  role_owner: "team",
+  "role owner": "team"
+};
+var KEY_ALTERNATION = "id|title|status|deps|depends_on|dependsOn|depends|blockedBy|blocked_by|phase|goal|role_owner|Role owner|role";
+var INLINE_KEY = new RegExp(
+  `(\\*\\*|\`)?\\b(${KEY_ALTERNATION})\\b(\\*\\*)?[ \\t]*:(\\*\\*|\`)?[ \\t]*`,
+  "gi"
+);
+var SEGMENT_END = /\s+·\s+/;
+function parseTask(file, text) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const fields = {};
+  const depRefs = [];
+  const put = (field, value) => {
+    if (field === "deps") {
+      const refs = depText(value);
+      if (refs) depRefs.push(refs);
+      return;
+    }
+    if (fields[field] === void 0 && value.trim()) fields[field] = value.trim();
+  };
+  let bodyStart = 0;
+  if (lines[0]?.trim() === "---") {
+    const end = lines.findIndex((l, i) => i > 0 && l.trim() === "---");
+    if (end > 0) {
+      parseFrontMatter(lines.slice(1, end), put);
+      bodyStart = end + 1;
+    }
+  }
+  let h1 = null;
+  let summary = null;
+  let fence = null;
+  for (let i = bodyStart; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const fenceMatch = /^\s*(```+|~~~+)\s*([\w-]*)/.exec(line);
+    if (fenceMatch) {
+      if (fence === null) fence = (fenceMatch[2] ?? "").toLowerCase() || "plain";
+      else fence = null;
+      continue;
+    }
+    if (fence !== null && fence !== "yaml" && fence !== "yml") continue;
+    if (fence === null && /^#{2,}\s/.test(line)) break;
+    if (fence === null && h1 === null && /^#\s+\S/.test(line)) {
+      h1 = line.replace(/^#\s+/, "").trim();
+      continue;
+    }
+    if (fence === null && summary === null && ISSUE_LINE.test(line)) summary = issueSummary(lines, i);
+    for (const [field, value] of inlineFields(line)) put(field, value);
+  }
+  const rawStatus = fields.status ? cleanValue(fields.status) : null;
+  const statusWord = rawStatus ? /[a-z][a-z_-]*/i.exec(rawStatus)?.[0] ?? "" : "";
+  if (/^blocked[-_]by$/i.test(statusWord) && rawStatus) {
+    const refs = depText(rawStatus.slice(rawStatus.toLowerCase().indexOf(statusWord.toLowerCase()) + statusWord.length));
+    if (refs) depRefs.push(refs);
+  }
+  const stem = file.replace(/\.md$/i, "");
+  const titleSource = fields.title ? unquote(cleanValue(fields.title)) : h1;
+  const prefix = titleSource ? idPrefix(titleSource, stem) : null;
+  const explicitId = fields.id ? unquote(cleanValue(fields.id)) : null;
+  const id = explicitId || prefix?.id || stem;
+  const aliases = unique([id, prefix?.id, stem, explicitId].filter((a) => !!a));
+  return {
+    file,
+    id,
+    aliases,
+    title: humanTitle(prefix ? prefix.rest : titleSource ?? "", stem),
+    summary,
+    rawStatus,
+    status: normalizeStatus(statusWord),
+    needsHuman: !!fields.status && NEEDS_HUMAN.test(fields.status),
+    depRefs,
+    phase: fields.phase ? unquote(cleanValue(fields.phase)) || null : null,
+    goal: fields.goal ? oneLine(unquote(cleanValue(fields.goal)), LIMITS.goal) || null : null,
+    team: fields.team ? oneLine(stripMarkdown(unquote(cleanValue(fields.team))).replace(/\s*\(.*$/, ""), LIMITS.name) || null : null
+  };
+}
+function parseFrontMatter(lines, put) {
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([A-Za-z_][\w -]*?)\s*:\s*(.*)$/.exec(lines[i] ?? "");
+    if (!m) continue;
+    const field = KEY_TO_FIELD[(m[1] ?? "").toLowerCase()];
+    if (!field) continue;
+    let value = m[2] ?? "";
+    if (stripYamlComment(value).trim() === "") {
+      const items = [];
+      while (i + 1 < lines.length && /^\s+-\s+/.test(lines[i + 1] ?? "")) {
+        items.push((lines[++i] ?? "").replace(/^\s+-\s+/, ""));
+      }
+      value = items.map((it) => stripYamlComment(it)).join(", ");
+    }
+    put(field, field === "status" ? value : stripYamlComment(value));
+  }
+}
+function inlineFields(line) {
+  const out = [];
+  const matches = [...line.matchAll(INLINE_KEY)];
+  const accepted = matches.filter((m) => {
+    const before = line.slice(0, m.index);
+    const marked = m[1] !== void 0;
+    return marked || /^\s*(?:[-*+]\s+)?$/.test(before) || /·\s*$/.test(before);
+  });
+  accepted.forEach((m, k) => {
+    const key = (m[2] ?? "").toLowerCase();
+    const field = KEY_TO_FIELD[key];
+    if (!field) return;
+    const start = (m.index ?? 0) + m[0].length;
+    const nextStart = accepted[k + 1]?.index ?? line.length;
+    let value = line.slice(start, nextStart);
+    const seg = SEGMENT_END.exec(value);
+    if (seg) value = value.slice(0, seg.index);
+    out.push([field, value]);
+  });
+  return out;
+}
+var EMPTY_DEPS = /^(?:—|–|-|~|\[\s*\]|none|null|n\/a|ninguna?|nada)(?=$|[\s(,.;:·*`])/i;
+function depText(raw) {
+  const v = stripMarkdown(stripYamlComment(raw)).replace(/^[\s*`:]+/, "").trim();
+  if (!v || EMPTY_DEPS.test(v)) return "";
+  let out = v;
+  for (let prev = ""; prev !== out; ) {
+    prev = out;
+    out = out.replace(/\([^()]*\)/g, " ");
+  }
+  return out.trim();
+}
+function stripYamlComment(v) {
+  return v.replace(/(^|\s)#(\s.*)?$/, "").trimEnd();
+}
+function cleanValue(v) {
+  return stripYamlComment(v).replace(/^[\s*`]+/, "").replace(/[\s*`·→]+$/, "").trim();
+}
+function unquote(v) {
+  const m = /^(["'])(.*)\1$/.exec(v.trim());
+  return (m ? m[2] ?? "" : v).trim();
+}
+function idPrefix(title, stem) {
+  const m = /^(?:task\s+)?([A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*)\s*(?:—|–|·|:|-)\s+(.*)$/i.exec(title);
+  if (!m) return null;
+  const token = m[1] ?? "";
+  const looksLikeId = /\d/.test(token) || token === token.toUpperCase() || token.toLowerCase() === stem.toLowerCase();
+  return looksLikeId ? { id: token, rest: m[2] ?? "" } : null;
+}
+function humanTitle(raw, stem) {
+  let t2 = stripMarkdown(raw).replace(/\(\s*#\d+[^)]*\)/g, " ").replace(/^\s*#\d+\b[:,]?/, " ").replace(/\bT-[A-Z0-9]+(?:-[A-Za-z0-9]+)*\b/g, " ").replace(/\s\(\s*\)/g, " ").replace(/\s+/g, " ").replace(/^[\s—–·:,-]+|[\s—–·:,-]+$/g, "").trim();
+  if (!t2) t2 = humanize(stem.replace(/^T-\w+-?/i, "") || stem);
+  if (new RegExp("^\\p{Ll}+(?=[\\s,:;]|$)", "u").test(t2)) t2 = t2.charAt(0).toUpperCase() + t2.slice(1);
+  return oneLine(t2, LIMITS.title);
+}
+var ISSUE_LINE = /^\s*(?:[-*+]\s+)?(?:\*\*|`)?issue(?:\*\*)?\s*:/i;
+var CONTINUATION_STOP = /^\s*(?:$|[-*+]\s|#|>|```|~~~|\*\*[^*]+:\*\*|`?[A-Za-z_][\w ]*:\s)/;
+function issueSummary(lines, i) {
+  const parts = [(lines[i] ?? "").replace(ISSUE_LINE, "")];
+  for (let j = i + 1; j < lines.length && !CONTINUATION_STOP.test(lines[j] ?? ""); j++) parts.push(lines[j] ?? "");
+  const text = stripMarkdown(parts.join(" ")).replace(/\*/g, "").replace(/^\s*#\d+\b\s*(?:[—–:·-]\s*)?/, "").split(/\s*(?:⇒|→|=>|:\s|;\s|\.\s|\.$|\s[—–]\s)/)[0].trim();
+  return text || null;
+}
+var ACRONYMS = new Set(
+  "MCP API CI CD PR XSS UI UX HTML CSS JSX TSX URL URI HTTP HTTPS OIDC SQL JSON YAML DAG PM SSO JWT CLI SDK DNS CSRF FTS AUC QA ID IA AI SEO CDN TTL RLS CTA DOM SVG PDF CSV TLS SSH AWS GCP DTO SPA SSR RSC ORM CRUD REST RPC WS KV DO LLM SLA KPI MVP OK ESM NPM UTC IP IDE OS GPU CPU RAM SMS OTP RAG".split(" ")
+);
+var CODE_DIRS = /^(?:\.?[\w-]*factory|lib|app|apps|src|test|tests|scripts|components|packages|docs|migrations|public|\.github|\.cofoundy)$/i;
+var PATH_TOKEN = /(?<![\w.@])(?:\.?\/)?[\w.@~*-]*\/[\w.@~*\/-]*/g;
+function humanizePath(token) {
+  if (token.includes("//") || /^\/api\//i.test(token)) return "";
+  const segs = token.split("/").filter(Boolean);
+  if (!segs.length) return "";
+  const isList = !token.startsWith("/") && !token.endsWith("/") && segs.length >= 2 && segs.every((x) => new RegExp("^\\p{L}+$", "u").test(x)) && !CODE_DIRS.test(segs[0]);
+  if (!isList) return segs.at(-1);
+  return segs.length === 2 ? `${segs[0]} y ${segs[1]}` : `${segs.slice(0, -1).join(", ")} y ${segs.at(-1)}`;
+}
+var CODE_CALL = /(?<=^|\s)\.?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\([^()]*\)/g;
+var CODE_FILE = /(?<![\w.-])([\w-]+?)(?:\.(?:test|spec|config|d|e2e))?\.(?:ts|tsx|js|jsx|mjs|cjs|sh|bash|py|ya?ml|json|sql|toml|mdx?|css|html|go|rs|rb)\b/g;
+var SCREAMING_SNAKE = /(?<![\w])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?![\w])/g;
+var ONLY_IDENTIFIERS = /^[a-z][a-z0-9]*[A-Z]\w*(?:\s*[+,]\s*[a-z][a-z0-9]*[A-Z]\w*)*$/;
+var LEADING_CODES = [
+  /^(?:phase|fase|wave|lane|stage)[-\s]?\d+[a-z]?\b\s*(?:[—–:·]\s*)?/i,
+  /^(?:migration|migraci[oó]n)\s+\d+\b\s*(?:[—–:·]\s*)?/i,
+  /^P\d+(?:\.\d+)*\b\s*(?:[—–:·]\s*)?/
+];
+var LEADING_CAPS_CODE = /^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*)\s*[—–:·]\s+/;
+var LEADING_FILE = /^[^\s:—–]*(?:\/|\.[A-Za-z]{1,4}\b)[^\s:—–]*(?:\s+[\w-]+){0,2}?(?:\s*[—–:]\s+|\s+\+\s+)/;
+function cleanTitle(raw) {
+  let t2 = stripMarkdown(raw).replace(/<([A-Za-z][\w.-]*)>/g, "$1").replace(/\s+/g, " ").trim();
+  for (let prev = ""; prev !== t2; ) {
+    prev = t2;
+    for (const re of LEADING_CODES) t2 = t2.replace(re, "");
+    const caps = LEADING_CAPS_CODE.exec(t2);
+    if (caps && !ACRONYMS.has(caps[1])) t2 = t2.slice(caps[0].length);
+    const file = LEADING_FILE.exec(t2);
+    if (file && t2.slice(file[0].length).trim()) t2 = t2.slice(file[0].length);
+  }
+  t2 = t2.replace(CODE_CALL, "$1");
+  for (let prev = ""; prev !== t2; ) {
+    prev = t2;
+    t2 = t2.replace(/(^|\s)\([^()]*\)/g, "$1");
+  }
+  t2 = t2.replace(/\s+(?:de|del|of|en|in)\s+#\d+\b/gi, "").replace(/(^|\s)#\d+\b[:,]?/g, "$1").replace(PATH_TOKEN, humanizePath).replace(CODE_FILE, "$1").replace(SCREAMING_SNAKE, (w) => w.toLowerCase().replace(/_+/g, " ")).replace(new RegExp("(?<![\\p{L}\\p{N}_])\\p{Lu}{2,}(?![\\p{L}\\p{N}_])", "gu"), (w) => ACRONYMS.has(w) ? w : w.toLowerCase()).replace(/\s+([,;])/g, "$1").replace(/\s+/g, " ").replace(/^[\s—–·:,;+-]+|[\s—–·:,;+-]+$/g, "").trim();
+  if (ONLY_IDENTIFIERS.test(t2)) t2 = t2.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  if (new RegExp("^\\p{Ll}+(?:-\\p{Ll}+)*(?=[\\s,:;]|$)", "u").test(t2)) t2 = t2.charAt(0).toUpperCase() + t2.slice(1);
+  return t2;
+}
+var NOT_A_TITLE = /^(?:role|rol|owner|lane)\s*:/i;
+function legibleTitle(title, summary = null) {
+  let t2 = NOT_A_TITLE.test(title.trim()) ? "" : cleanTitle(title);
+  if (!t2 && summary) t2 = cleanTitle(summary);
+  if (!t2) t2 = cleanTitle(title.replace(NOT_A_TITLE, ""));
+  if (!t2) t2 = title.trim() || "Tarea";
+  return oneLine(t2, LIMITS.title);
+}
+function stripMarkdown(s) {
+  return s.replace(/\*\*|__/g, "").replace(/`([^`]*)`/g, "$1").replace(/`/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1");
+}
+function humanize(s) {
+  const t2 = s.replace(/[-_]+/g, " ").trim();
+  return t2.charAt(0).toUpperCase() + t2.slice(1);
+}
+function oneLine(s, max) {
+  const t2 = s.replace(/\s+/g, " ").trim();
+  return t2.length <= max ? t2 : `${t2.slice(0, max - 1).trimEnd()}\u2026`;
+}
+var NEEDS_HUMAN = /escalat|escalad|human|founder|decisi[oó]n|aprobaci[oó]n|approval/i;
+var STATUS_WORDS = {
+  done: ["done", "completed", "complete", "merged", "shipped", "closed", "finished", "resolved", "delivered", "lista", "listo"],
+  working: ["working", "in-progress", "in_progress", "inprogress", "progress", "wip", "active", "doing", "started", "claimed", "running", "in-review", "review"],
+  blocked: ["blocked", "blocked-by", "blocked_by", "waiting", "escalated", "on-hold", "hold", "stuck"],
+  pending: ["pending", "ready", "todo", "open", "new", "queued", "planned", "deferred", "backlog", "draft"]
+};
+function normalizeStatus(word) {
+  const w = (word ?? "").toLowerCase();
+  for (const status2 of ["done", "working", "blocked", "pending"]) {
+    if (STATUS_WORDS[status2].includes(w)) return status2;
+  }
+  return "pending";
+}
+function unique(xs) {
+  return [...new Set(xs)];
+}
+
+// src/tasks/import.ts
+var MAX_STAGES = 12;
+var SKIP_FILES = /^(readme|index|_.*)\.md$/i;
+function readTasksDir(dir) {
+  return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && /\.md$/i.test(d.name) && !SKIP_FILES.test(d.name)).map((d) => d.name).sort((a, b) => a.localeCompare(b, "en", { numeric: true })).map((file) => ({ file, text: readFileSync2(join2(dir, file), "utf8") }));
+}
+function projectNameFromDir(dir) {
+  const abs = resolve2(dir);
+  const parent = dirname2(abs);
+  if (basename(abs) === "tasks" && basename(parent) === ".cofoundy") return basename(dirname2(parent));
+  return basename(abs);
+}
+function importProjectId(opts) {
+  return slugify(opts.projectId || opts.dirName || "proyecto");
+}
+function buildImport(files, opts = {}) {
+  return withLang(opts.lang ?? lang(), () => build(files, opts));
+}
+function build(files, opts) {
+  const warnings = [];
+  const tasks = files.map((f) => parseTask(f.file, f.text));
+  if (tasks.length > LIMITS.nodesPerProject) {
+    throw new Error(
+      t(
+        `there are ${tasks.length} tasks; a project holds at most ${LIMITS.nodesPerProject}`,
+        `son ${tasks.length} tareas; el m\xE1ximo por proyecto es ${LIMITS.nodesPerProject}`
+      )
+    );
+  }
+  const nodeIds = [];
+  const used = /* @__PURE__ */ new Set();
+  for (const t2 of tasks) {
+    const base = slugify(t2.id) || slugify(t2.file.replace(/\.md$/i, "")) || "tarea";
+    let id = base;
+    for (let n = 2; used.has(id); n++) id = `${base.slice(0, LIMITS.slug - 3)}-${n}`;
+    if (id !== base) warnings.push(t(`${t2.file}: the id \xAB${t2.id}\xBB is repeated; it became \xAB${id}\xBB`, `${t2.file}: el id \xAB${t2.id}\xBB se repite; qued\xF3 como \xAB${id}\xBB`));
+    used.add(id);
+    nodeIds.push(id);
+  }
+  const byAlias = /* @__PURE__ */ new Map();
+  tasks.forEach((t2, i) => {
+    for (const a of t2.aliases) if (!byAlias.has(a.toLowerCase())) byAlias.set(a.toLowerCase(), i);
+  });
+  const deps = tasks.map(() => []);
+  tasks.forEach((t2, to) => {
+    const unknown = /* @__PURE__ */ new Set();
+    for (const ref of t2.depRefs) {
+      for (const token of ref.match(/[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*/g) ?? []) {
+        const from = byAlias.get(token.toLowerCase());
+        if (from === void 0) {
+          if (/^T-|\d/.test(token) && /^[A-Z]/.test(token)) unknown.add(token);
+          continue;
+        }
+        if (from !== to && !deps[to].includes(from)) deps[to].push(from);
+      }
+    }
+    if (unknown.size) {
+      const refs = [...unknown].join(", ");
+      warnings.push(t(`${t2.file}: depends on ${refs}, which are not in the folder`, `${t2.file}: depende de ${refs}, que no est\xE1n en el directorio`));
+    }
+  });
+  for (const [from, to] of breakCycles(deps)) {
+    deps[to] = deps[to].filter((d) => d !== from);
+    const edge = `${tasks[to].file} \u2192 ${tasks[from].file}`;
+    warnings.push(t(`loop: removed the dependency ${edge}`, `ciclo: se quit\xF3 la dependencia ${edge}`));
+  }
+  const depth = longestPathDepth(deps);
+  const statuses = tasks.map(effectiveStatus);
+  const dataLang = opts.projectLang ?? DEFAULT_LANG;
+  const { stages: stages2, stageOf, source } = inferStages(tasks, depth, dataLang);
+  const given = opts.titles ? givenTitles(opts.titles, tasks, nodeIds, warnings) : null;
+  const tasksPath = (opts.tasksPath ?? ".cofoundy/tasks").replace(/\/+$/, "");
+  const nodes = tasks.map((t2, i) => {
+    const title = given?.get(i) ?? legibleTitle(t2.title, t2.summary);
+    return {
+      id: nodeIds[i],
+      stage: stageOf[i],
+      title,
+      status: statuses[i],
+      progress: statuses[i] === "done" ? 1 : 0,
+      team: t2.team,
+      goal: t2.goal ?? oneLine(importGoal(title, `${tasksPath}/${t2.file}`, dataLang), LIMITS.goal),
+      deps: deps[i].map((d) => nodeIds[d])
+    };
+  });
+  let askers = 0;
+  tasks.forEach((t2, i) => {
+    if (!asksHuman(t2, deps[i], tasks)) return;
+    askers++;
+    const title = nodes[i].title;
+    warnings.push(
+      t(
+        `\xAB${title}\xBB asks a person for something; it stays Pending. Ask them live with dagyard block`,
+        `\xAB${title}\xBB pide algo a una persona; qued\xF3 Pendiente. Preg\xFAntaselo en vivo con dagyard block`
+      )
+    );
+  });
+  const projectId = importProjectId(opts);
+  const name = oneLine(opts.name ?? humanize(opts.dirName ?? projectId), LIMITS.name);
+  const status2 = { pending: 0, working: 0, blocked: 0, done: 0 };
+  for (const s of statuses) status2[s]++;
+  return {
+    projectId,
+    graph: { name, lang: dataLang, stages: stages2, nodes },
+    stats: {
+      nodes: nodes.length,
+      edges: nodes.reduce((n, node) => n + (node.deps?.length ?? 0), 0),
+      stageSource: source,
+      stages: stages2.map((s) => ({ id: s.id, name: s.name, nodes: stageOf.filter((x) => x === s.id).length })),
+      status: status2,
+      asksHuman: askers,
+      ...given ? { titled: given.size } : {}
+    },
+    warnings
+  };
+}
+function readTitles(raw) {
+  let text = raw;
+  if (!raw.trim().startsWith("{")) {
+    try {
+      text = readFileSync2(raw, "utf8");
+    } catch {
+      throw new Error(t(`\xAB${raw}\xBB is neither a JSON object nor a file I can read`, `\xAB${raw}\xBB no es un objeto JSON ni un archivo que pueda leer`));
+    }
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    throw new Error(t(`it is not valid JSON (${why})`, `no es JSON v\xE1lido (${why})`));
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(t('expected an object { "node id": "title" }', 'se esperaba un objeto { "id de nodo": "t\xEDtulo" }'));
+  }
+  return parsed;
+}
+function givenTitles(titles, tasks, nodeIds, warnings) {
+  const byKey = /* @__PURE__ */ new Map();
+  nodeIds.forEach((id, i) => byKey.set(id, i));
+  tasks.forEach((t2, i) => {
+    const k = slugify(t2.id);
+    if (k && !byKey.has(k)) byKey.set(k, i);
+  });
+  const out = /* @__PURE__ */ new Map();
+  const keyOf = /* @__PURE__ */ new Map();
+  for (const [key, value] of Object.entries(titles)) {
+    const i = byKey.get(key) ?? byKey.get(slugify(key));
+    if (i === void 0) {
+      warnings.push(t(`--titles: there is no task \xAB${key}\xBB; ignored`, `--titles: no hay ninguna tarea \xAB${key}\xBB; se ignor\xF3`));
+      continue;
+    }
+    const title = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+    const fallback = legibleTitle(tasks[i].title, tasks[i].summary);
+    const keep = t(`kept \xAB${fallback}\xBB`, `qued\xF3 \xAB${fallback}\xBB`);
+    if (!title) {
+      warnings.push(t(`--titles: the title for \xAB${key}\xBB is not text with content; ${keep}`, `--titles: el t\xEDtulo de \xAB${key}\xBB no es un texto con contenido; ${keep}`));
+      continue;
+    }
+    const len = [...title].length;
+    if (len > LIMITS.title) {
+      warnings.push(
+        t(
+          `--titles: the title for \xAB${key}\xBB has ${len} characters (at most ${LIMITS.title}); ${keep}`,
+          `--titles: el t\xEDtulo de \xAB${key}\xBB tiene ${len} caracteres (m\xE1ximo ${LIMITS.title}); ${keep}`
+        )
+      );
+      continue;
+    }
+    if (out.has(i)) {
+      const prev = keyOf.get(i);
+      warnings.push(t(`--titles: \xAB${prev}\xBB and \xAB${key}\xBB are the same task; kept the one from \xAB${key}\xBB`, `--titles: \xAB${prev}\xBB y \xAB${key}\xBB son la misma tarea; qued\xF3 el de \xAB${key}\xBB`));
+    }
+    out.set(i, title);
+    keyOf.set(i, key);
+  }
+  return out;
+}
+function effectiveStatus(t2) {
+  return t2.status === "blocked" ? "pending" : t2.status;
+}
+function asksHuman(t2, myDeps, tasks) {
+  if (t2.status !== "blocked") return false;
+  return t2.needsHuman || !myDeps.some((d) => tasks[d].status !== "done");
+}
+function breakCycles(deps) {
+  const color = deps.map(() => 0);
+  const back = [];
+  const visit = (to) => {
+    color[to] = 1;
+    for (const from of deps[to]) {
+      if (color[from] === 1) back.push([from, to]);
+      else if (color[from] === 0) visit(from);
+    }
+    color[to] = 2;
+  };
+  deps.forEach((_, i) => color[i] === 0 && visit(i));
+  return back;
+}
+function longestPathDepth(deps) {
+  const memo = /* @__PURE__ */ new Map();
+  const depthOf = (i) => {
+    const known = memo.get(i);
+    if (known !== void 0) return known;
+    const d = deps[i].length ? 1 + Math.max(...deps[i].map(depthOf)) : 0;
+    memo.set(i, d);
+    return d;
+  };
+  return deps.map((_, i) => depthOf(i));
+}
+function inferStages(tasks, depth, lang3) {
+  const phases = new Set(tasks.map((t2) => t2.phase?.toLowerCase()));
+  if (tasks.length > 0 && tasks.every((t2) => t2.phase) && phases.size <= MAX_STAGES) {
+    const known = DEFAULT_STAGES_BY_LANG[lang3];
+    const order = [];
+    const stageOf = tasks.map((t2, i) => {
+      const word = t2.phase.toLowerCase();
+      const k = PHASE_WORDS.findIndex((words) => words.includes(word));
+      const id = k >= 0 ? known[k].id : slugify(word) || "etapa";
+      const name = k >= 0 ? known[k].name : humanize(t2.phase);
+      const existing = order.find((s) => s.id === id);
+      if (existing) existing.minDepth = Math.min(existing.minDepth, depth[i]);
+      else order.push({ id, name, rank: k >= 0 ? k : PHASE_WORDS.length, minDepth: depth[i] });
+      return id;
+    });
+    order.sort((a, b) => a.rank - b.rank || a.minDepth - b.minDepth);
+    return { stages: order.map(({ id, name }) => ({ id, name })), stageOf, source: "phase" };
+  }
+  const max = Math.min(depth.length ? Math.max(...depth) : 0, MAX_STAGES - 1);
+  const stages2 = Array.from({ length: max + 1 }, (_, d) => {
+    const name = depthStageName(d, max, lang3);
+    return { id: slugify(name), name };
+  });
+  return { stages: stages2, stageOf: depth.map((d) => stages2[Math.min(d, max)].id), source: "depth" };
+}
+
+// src/sync/github.ts
+import { execFile } from "node:child_process";
+var defaultExec = (file, args) => new Promise((resolve3, reject) => {
+  execFile(file, args, { maxBuffer: 256 * 1024 * 1024, encoding: "utf8" }, (err, stdout, stderr) => {
+    if (!err) return resolve3(stdout);
+    if (err.code === "ENOENT") {
+      return reject(new Error(t("gh (GitHub CLI) was not found: install it and run \xABgh auth login\xBB", "no encontr\xE9 gh (GitHub CLI): inst\xE1lalo y corre \xABgh auth login\xBB")));
+    }
+    const cmd = `gh ${args.slice(0, 3).join(" ")}`;
+    const why = oneLine(String(stderr || err.message), 500);
+    reject(new Error(t(`${cmd} failed: ${why}`, `${cmd} fall\xF3: ${why}`)));
+  });
+});
+var ISSUE_JQ = ".[] | {number, title, body, state, state_reason, html_url, labels: [.labels[].name], pull_request: (.pull_request != null)}";
+var PULL_JQ = ".[] | {number, title, body}";
+function ghCliSource(exec = defaultExec) {
+  const lines = async (path, jq) => {
+    const out = await exec("gh", ["api", "--paginate", path, "--jq", jq]);
+    return out.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+  };
+  return {
+    async issues(repo, opts) {
+      const qs = new URLSearchParams({ state: "all", per_page: "100" });
+      if (opts.label) qs.set("labels", opts.label);
+      const rows = await lines(`repos/${repo}/issues?${qs.toString().replace(/\+/g, "%20")}`, ISSUE_JQ);
+      return rows.map((r) => ({
+        number: Number(r.number),
+        title: String(r.title ?? ""),
+        body: typeof r.body === "string" ? r.body : "",
+        state: r.state === "closed" ? "closed" : "open",
+        stateReason: typeof r.state_reason === "string" ? r.state_reason : null,
+        url: String(r.html_url ?? ""),
+        labels: Array.isArray(r.labels) ? r.labels.map(String) : [],
+        isPull: r.pull_request === true
+      }));
+    },
+    async openPulls(repo) {
+      const rows = await lines(`repos/${repo}/pulls?state=open&per_page=100`, PULL_JQ);
+      return rows.map((r) => ({
+        number: Number(r.number),
+        title: String(r.title ?? ""),
+        body: typeof r.body === "string" ? r.body : ""
+      }));
+    }
+  };
+}
+var PREFIX = /^[\p{L}\p{N}_./-]+(?:\([^)]*\))?!?:\s+/u;
+function cleanTitle2(raw) {
+  const line = oneLine(raw, 1e4);
+  const bare = line.replace(PREFIX, "") || line;
+  const capped = bare.replace(new RegExp("\\p{L}", "u"), (c) => c.toLocaleUpperCase("es"));
+  return oneLine(capped, LIMITS.title);
+}
+var REF_PHRASE = /\s*\(?\s*(?:(?:desde|tras|después de|según|por|ver|véase|see|since|after|from|per)\s+)?#\d+\s*\)?/giu;
+function issueNodeTitle(raw, n) {
+  const bare = cleanTitle2(raw).replace(REF_PHRASE, " ");
+  const t2 = legibleTitle(oneLine(bare, 1e4) || raw);
+  return t2 && t2 !== "Tarea" ? t2 : `Issue ${n}`;
+}
+var REF_LIST = String.raw`#\d+(?:\s*(?:,|\by\b|\be\b|\band\b|&)\s*#\d+)*`;
+function refsAfter(text, phrases) {
+  const out = [];
+  const re = new RegExp(String.raw`(?:^|[^\p{L}])(?:${phrases})\s*:?\s+(${REF_LIST})`, "giu");
+  for (const m of text.matchAll(re)) {
+    for (const n of m[1].matchAll(/#(\d+)/g)) out.push(Number(n[1]));
+  }
+  return [...new Set(out)];
+}
+function closingRefs(text) {
+  const out = [];
+  const re = /(?:^|[^\p{L}])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|cierra|resuelve)\s*:?\s+#(\d+)/giu;
+  for (const m of text.matchAll(re)) out.push(Number(m[1]));
+  return [...new Set(out)];
+}
+function dependencyRefs(text) {
+  return {
+    partOf: refsAfter(text, "parte de|part of"),
+    dependsOn: refsAfter(text, "depende de|depends on|blocked by|bloquead[oa] por"),
+    bornFrom: refsAfter(text, "sale de la revisi[o\xF3]n de|nace de|born from")
+  };
+}
+var OPTION_BOLD = /^\s*[-*]\s+\*\*\s*([A-Za-z0-9]{1,2})\s*(?:\(([^)]*)\))?\s*[:.)]?\s*\*\*\s*[:.)]?\s*(.*)$/;
+var OPTION_PAREN = /^\s*[-*]\s+([A-Za-z0-9]{1,2})\)\s+(.+)$/;
+function parseOptions(body) {
+  const out = [];
+  for (const line of body.split(/\r?\n/)) {
+    let letter;
+    let note;
+    let text;
+    const bold = OPTION_BOLD.exec(line);
+    const paren = bold ? null : OPTION_PAREN.exec(line);
+    if (bold) [, letter, note, text] = bold;
+    else if (paren) [, letter, text] = paren;
+    else continue;
+    const plain = text.replace(/\*\*|__|`/g, "").trim();
+    const head = note?.trim() ? `${letter} (${note.trim()})` : letter;
+    const option = oneLine(plain ? `${head}: ${plain}` : head, LIMITS.option);
+    if (!out.includes(option)) out.push(option);
+    if (out.length === LIMITS.options) break;
+  }
+  return out;
+}
+
+// src/sync/sync.ts
+var FOUNDER_LABEL = "founder-input";
+var EPIC_LABEL = "epic";
+var RANK = { pending: 0, working: 1, blocked: 1, done: 2 };
+var STATUS_EN = { pending: "Pending", working: "In progress", blocked: "Needs you", done: "Done" };
+var STATUS_ES = { pending: "Pendiente", working: "En progreso", blocked: "Te espera", done: "Lista" };
+var statusHuman = (s) => t(STATUS_EN[s], STATUS_ES[s]);
+var nodeIdOf = (n) => `gh-${n}`;
+async function syncGithub(api, source, projectId, opts) {
+  const dry = !!opts.dryRun;
+  const snap = await api.snapshot(projectId);
+  const lang3 = projectLang(snap.project);
+  const stage = pickStage(snap.project.stages, opts.stage, lang3);
+  const listed = await source.issues(opts.repo, opts.label ? { label: opts.label } : {});
+  const issues = listed.filter((i) => !i.isPull).sort((a, b) => a.number - b.number);
+  const withPr = /* @__PURE__ */ new Set();
+  for (const pr of await source.openPulls(opts.repo)) for (const n of closingRefs(`${pr.title}
+${pr.body}`)) withPr.add(n);
+  const nodes = new Map(snap.nodes.map((n) => [n.id, n]));
+  const edges = snap.edges.map((e) => ({ from: e.from, to: e.to }));
+  const origins2 = (snap.origins ?? []).map((o) => ({ from: o.from, to: o.to }));
+  const report = {
+    repo: opts.repo,
+    project: projectId,
+    dryRun: dry,
+    issues: 0,
+    created: [],
+    updated: [],
+    unchanged: [],
+    actions: [],
+    warnings: []
+  };
+  const created = /* @__PURE__ */ new Set();
+  const foreign = /* @__PURE__ */ new Set();
+  const updated = /* @__PURE__ */ new Set();
+  const considered = [];
+  const soft = async (what, fn) => {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof ApiRequestError && [400, 404, 409].includes(err.status)) {
+        report.warnings.push(`${what}: ${err.message}`);
+        return void 0;
+      }
+      throw err;
+    }
+  };
+  for (const issue of issues) {
+    const id = nodeIdOf(issue.number);
+    const existing = nodes.get(id);
+    const completed = issue.state === "closed" && (issue.stateReason === "completed" || issue.stateReason === null);
+    if (!existing) {
+      if (issue.state === "closed" && (!opts.all || !completed)) continue;
+      if (issue.labels.includes(EPIC_LABEL)) continue;
+      const input = {
+        id,
+        stage,
+        title: issueNodeTitle(issue.title, issue.number),
+        status: completed ? "done" : withPr.has(issue.number) ? "working" : "pending",
+        link: issue.url
+      };
+      considered.push(issue);
+      const ok = dry || await soft(t(`could not create ${id}`, `no pude crear ${id}`), () => api.addNode(projectId, input)) !== void 0;
+      if (!ok) continue;
+      nodes.set(id, { id, status: input.status, link: input.link });
+      created.add(id);
+      report.actions.push(t(`new ${id} \xAB${input.title}\xBB (${statusHuman(input.status)})`, `nuevo ${id} \xAB${input.title}\xBB (${statusHuman(input.status)})`));
+      continue;
+    }
+    if (existing.link && linkClash(existing.link, issue, opts.repo)) {
+      foreign.add(id);
+      report.warnings.push(
+        t(
+          `${id} points to ${existing.link}, not to ${issue.url}: skipped it (another repo with the same number?)`,
+          `${id} apunta a ${existing.link}, no a ${issue.url}: lo salt\xE9 (\xBFotro repo con el mismo n\xFAmero?)`
+        )
+      );
+      continue;
+    }
+    considered.push(issue);
+    const patch = {};
+    if (!existing.link && issue.url) patch.link = issue.url;
+    const want = completed ? "done" : issue.state === "open" && withPr.has(issue.number) ? "working" : null;
+    if (want && RANK[want] > RANK[existing.status]) {
+      if (existing.status === "blocked" || hasOpenBlocker(snap.blockers, id)) {
+        report.warnings.push(openQuestion(id, want));
+      } else {
+        patch.status = want;
+      }
+    }
+    if (!Object.keys(patch).length) continue;
+    let applied = patch;
+    if (!dry) {
+      try {
+        await api.updateNode(projectId, id, patch);
+      } catch (err) {
+        if (!(err instanceof ApiRequestError) || ![400, 404, 409].includes(err.status)) throw err;
+        if (err.status !== 409 || !patch.status) {
+          report.warnings.push(t(`could not update ${id}: ${err.message}`, `no pude actualizar ${id}: ${err.message}`));
+          continue;
+        }
+        report.warnings.push(openQuestion(id, patch.status));
+        const { status: _skip, ...rest } = patch;
+        applied = rest;
+        if (!Object.keys(rest).length) continue;
+        if (await soft(t(`could not update ${id}`, `no pude actualizar ${id}`), () => api.updateNode(projectId, id, rest)) === void 0) continue;
+      }
+    }
+    nodes.set(id, { ...existing, ...applied.link ? { link: applied.link } : {}, ...applied.status ? { status: applied.status } : {} });
+    updated.add(id);
+    const what = [applied.status ? statusHuman(applied.status) : null, applied.link ? t("link to the issue", "enlace al issue") : null].filter(Boolean);
+    report.actions.push(`${id}: ${what.join(", ")}`);
+  }
+  for (const issue of considered) {
+    const self = nodeIdOf(issue.number);
+    if (!nodes.has(self)) continue;
+    const refs = dependencyRefs(issue.body);
+    const wanted = [
+      ...refs.partOf.map((n) => [self, nodeIdOf(n)]),
+      // la épica necesita sus partes
+      ...refs.dependsOn.map((n) => [nodeIdOf(n), self])
+    ];
+    for (const [from, to] of wanted) {
+      if (from === to || !nodes.has(from) || !nodes.has(to) || foreign.has(from) || foreign.has(to)) continue;
+      if (edges.some((e) => e.from === from && e.to === to)) continue;
+      if (dry) {
+        if (wouldCreateCycle(edges, from, to)) {
+          report.warnings.push(cycleWarning(from, to));
+          continue;
+        }
+      } else {
+        try {
+          await api.addEdge(projectId, from, to);
+        } catch (err) {
+          if (!(err instanceof ApiRequestError)) throw err;
+          if (err.status === 400 && err.code === "cycle") report.warnings.push(cycleWarning(from, to));
+          else if (err.status === 409) report.warnings.push(t(`${from} \u2192 ${to} already existed`, `${from} \u2192 ${to} ya exist\xEDa`));
+          else if ([400, 404].includes(err.status)) report.warnings.push(t(`did not add ${from} \u2192 ${to}: ${err.message}`, `no agregu\xE9 ${from} \u2192 ${to}: ${err.message}`));
+          else throw err;
+          continue;
+        }
+      }
+      edges.push({ from, to });
+      updated.add(self);
+      report.actions.push(`${from} \u2192 ${to}`);
+    }
+    for (const n of refs.bornFrom) {
+      const from = nodeIdOf(n);
+      if (from === self || !nodes.has(from) || foreign.has(from) || foreign.has(self)) continue;
+      if (origins2.some((o) => o.from === from && o.to === self)) continue;
+      if (dry) {
+        if (wouldCreateCycle(origins2, from, self)) {
+          report.warnings.push(bornCycleWarning(from, self));
+          continue;
+        }
+      } else {
+        try {
+          await api.addEdge(projectId, from, self, { kind: "origin" });
+        } catch (err) {
+          if (!(err instanceof ApiRequestError)) throw err;
+          if (err.status === 400 && err.code === "cycle") report.warnings.push(bornCycleWarning(from, self));
+          else if (err.status === 409) report.warnings.push(t(`${self} was already born from ${from}`, `${self} ya nac\xEDa de ${from}`));
+          else if ([400, 404].includes(err.status)) report.warnings.push(t(`did not say ${self} was born from ${from}: ${err.message}`, `no dije que ${self} naci\xF3 de ${from}: ${err.message}`));
+          else throw err;
+          continue;
+        }
+      }
+      origins2.push({ from, to: self });
+      updated.add(self);
+      report.actions.push(t(`${self} born from ${from}`, `${self} naci\xF3 de ${from}`));
+    }
+  }
+  for (const issue of considered) {
+    if (issue.state !== "open" || !issue.labels.includes(FOUNDER_LABEL)) continue;
+    const id = nodeIdOf(issue.number);
+    const node = nodes.get(id);
+    if (!node || node.status === "done") continue;
+    if (snap.blockers.some((b) => b.nodeId === id && b.kind === "decision")) continue;
+    const question = oneLine(cleanTitle2(issue.title), LIMITS.question);
+    const options = parseOptions(issue.body);
+    const input = { kind: "decision", question, options: options.length ? options : [...YES_NO[lang3]] };
+    if (!dry && await soft(t(`could not open the question for ${id}`, `no pude abrir la pregunta de ${id}`), () => api.openBlocker(projectId, id, input)) === void 0) continue;
+    nodes.set(id, { ...node, status: "blocked" });
+    updated.add(id);
+    report.actions.push(t(`${id}: asks the owner \xAB${question}\xBB`, `${id}: pregunta al due\xF1o \xAB${question}\xBB`));
+  }
+  report.issues = considered.length;
+  for (const issue of considered) {
+    const id = nodeIdOf(issue.number);
+    if (created.has(id)) report.created.push(id);
+    else if (updated.has(id)) report.updated.push(id);
+    else report.unchanged.push(id);
+  }
+  return report;
+}
+function linkClash(link, issue, repo) {
+  const norm = (u) => u.trim().replace(/\/+$/, "").toLowerCase();
+  const l = norm(link);
+  if (l === norm(issue.url)) return false;
+  const base = `https://github.com/${repo.toLowerCase()}/`;
+  if (!l.startsWith(base)) return true;
+  const m = /^issues\/(\d+)(?:[/?#]|$)/.exec(l.slice(base.length));
+  return !!m && Number(m[1]) !== issue.number;
+}
+function openQuestion(id, status2) {
+  return t(
+    `${id} has an open question for the owner; did not move it to ${statusHuman(status2)}`,
+    `${id} tiene una pregunta abierta para el due\xF1o; no lo pas\xE9 a ${statusHuman(status2)}`
+  );
+}
+function cycleWarning(from, to) {
+  return t(`did not add ${from} \u2192 ${to}: it would close a loop`, `no agregu\xE9 ${from} \u2192 ${to}: cerrar\xEDa un ciclo`);
+}
+function bornCycleWarning(from, to) {
+  return t(`did not say ${to} was born from ${from}: it would close a loop`, `no dije que ${to} naci\xF3 de ${from}: cerrar\xEDa un ciclo`);
+}
+function hasOpenBlocker(blockers, nodeId2) {
+  return blockers.some((b) => b.nodeId === nodeId2 && b.status === "open");
+}
+function pickStage(stages2, wanted, lang3) {
+  if (!stages2.length) throw new UsageError(t("the project has no stages", "el proyecto no tiene etapas"));
+  if (wanted !== void 0) {
+    const hit = findStage(stages2, wanted);
+    if (!hit) {
+      const ids = stages2.map((s) => s.id).join(", ");
+      throw new UsageError(t(`there is no stage \xAB${wanted}\xBB; the project has: ${ids}`, `no existe la etapa \xAB${wanted}\xBB; las del proyecto: ${ids}`));
+    }
+    return hit.id;
+  }
+  return defaultSyncStage(stages2, lang3).id;
+}
+function formatSync(r) {
+  const lines = [
+    t(
+      `Synced ${r.issues} issues: ${r.created.length} new \xB7 ${r.updated.length} updated \xB7 ${r.unchanged.length} unchanged`,
+      `Sincronic\xE9 ${r.issues} issues: ${r.created.length} nuevas \xB7 ${r.updated.length} actualizadas \xB7 ${r.unchanged.length} sin cambios`
+    )
+  ];
+  if (r.dryRun) lines.push(t(`This was a dry run: nothing was sent to \xAB${r.project}\xBB.`, `Fue una simulaci\xF3n: no se envi\xF3 nada a \xAB${r.project}\xBB.`));
+  if (r.warnings.length) lines.push(t(`Warnings (${r.warnings.length}):`, `Avisos (${r.warnings.length}):`), ...r.warnings.map((w) => `  - ${w}`));
+  return `${lines.join("\n")}
+`;
+}
+
+// src/cli.ts
+var VERSION = "0.1.0";
+var EXIT = { ok: 0, api: 1, timeout: 2, nothing: 3, usage: 64 };
+var tx = (text) => t(text[0], text[1]);
+var GLOBAL_FLAGS = ["project", "url"];
+var HELP_GLOBAL = [
+  `Common options (before or after the command):
+  -p, --project <p>   project (or DAGYARD_PROJECT, .dagyard.json or ~/.config/dagyard/project)
+  --url <url>         server (or DAGYARD_URL, .dagyard.json or ~/.config/dagyard/url)
+  -h, --help          this help
+.dagyard.json = {"project": "\u2026", "url": "\u2026"}, the first one found walking up from the current folder (never
+past the repo root or $HOME); it is committed. Its url gets the key only if it is https and trusted (the
+preview, dagyard.run, the one in DAGYARD_URL or ~/.config/dagyard/url, or a line of ~/.config/dagyard/trusted-urls).
+The API key comes only from DAGYARD_KEY or ~/.config/dagyard/agent-key; it is never printed.
+Messages are in English; with LANG=es (or LC_ALL / LC_MESSAGES) they are in Spanish.`,
+  `Opciones comunes (antes o despu\xE9s del comando):
+  -p, --project <p>   proyecto (o DAGYARD_PROJECT, .dagyard.json o ~/.config/dagyard/project)
+  --url <url>         servidor (o DAGYARD_URL, .dagyard.json o ~/.config/dagyard/url)
+  -h, --help          esta ayuda
+.dagyard.json = {"project": "\u2026", "url": "\u2026"}, el primero subiendo desde la carpeta actual (sin pasar de la
+ra\xEDz del repo ni de $HOME); se commitea. Su url recibe la key solo si es https y de confianza (la preview,
+dagyard.run, la de DAGYARD_URL o ~/.config/dagyard/url, o una l\xEDnea de ~/.config/dagyard/trusted-urls).
+La API key sale solo de DAGYARD_KEY o ~/.config/dagyard/agent-key; nunca se imprime.
+Los mensajes salen en ingl\xE9s; con LANG=es (o LC_ALL / LC_MESSAGES), en espa\xF1ol.`
+];
+function addNodeCommand(fixed) {
+  const kindFlag = fixed ? [] : ["kind"];
+  const quoteFlags = fixed === "goal" ? [] : ["quote", "author"];
+  const opts = fixed === "goal" ? "" : fixed === "request" ? ' --quote "\u2026" [--author "\u2026"]' : ' [--kind goal|request|task|stream] [--quote "\u2026"] [--author "\u2026"]';
+  const cmd = fixed ? `${fixed} add` : "node add";
+  return {
+    usage: [
+      `dagyard ${cmd} <node> --title "\u2026"${opts} [--from <node> [--why "\u2026"]]\u2026 [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--report <url>] [--link <url>]`,
+      `dagyard ${cmd} <nodo> --title "\u2026"${opts} [--from <nodo> [--why "\u2026"]]\u2026 [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--report <url>] [--link <url>]`
+    ],
+    summary: fixed === "goal" ? ["adds a goal: a living outcome, the root of the whys", "agrega un objetivo: un resultado vivo, ra\xEDz de los porqu\xE9s"] : fixed === "request" ? ["adds a person's request or decision, with their exact words", "agrega el pedido o la decisi\xF3n de una persona, con su cita"] : ["adds a node to the plan (a task by default)", "agrega un nodo al plan (una tarea por defecto)"],
+    help: [
+      `<node> is a short id (T-314-A is stored as t-314-a). Repeat --dep or separate it with commas.
+Kinds: task (one owner, one session, one /goal; the only one that starts), goal (a living outcome; it starts
+In progress and never closes as done), request (a person's request, --quote is their exact words, --author who said
+it), stream (ongoing work that spawns tasks). ${fixed ? `This is node add --kind ${fixed}.` : ""}
+--from <node> says which node this one was born from (repeat it); the --why right after it says why. Born-from is not
+a dependency: it never blocks. --dep is a dependency: this node needs <dep> closed.
+Without --stage it goes to the project's first stage. Statuses: pending, working, done (blocked is set by dagyard
+block). --report attaches its report (Basalt or the PR); --link is the technical detail (the issue or PR URL).
+Prints only the id.`,
+      `<nodo> es un id corto (T-314-A se guarda como t-314-a). --dep se repite o va separado por comas.
+Tipos: task (un due\xF1o, una sesi\xF3n, un /goal; la \xFAnica que arranca), goal (un resultado vivo; nace En progreso y nunca
+se cierra como lista), request (el pedido de una persona: --quote es su cita literal, --author qui\xE9n lo dijo), stream
+(trabajo continuo que suelta tareas). ${fixed ? `Es node add --kind ${fixed}.` : ""}
+--from <nodo> dice de qu\xE9 nodo naci\xF3 este (se repite); el --why que va justo despu\xE9s dice por qu\xE9. Nacer de no es
+depender: nunca bloquea. --dep s\xED es una dependencia: este nodo necesita <dep> cerrado.
+Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done (blocked lo pone dagyard block).
+--report cuelga su informe (Basalt o el PR); --link es el detalle t\xE9cnico (URL del issue o del PR). Imprime
+solo el id.`
+    ],
+    flags: ["title", "stage", "goal", "team", "dep", "status", "report", "link", "from", "why", ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"]]);
+      const input = {
+        id: nodeId(id),
+        title: required(args, "title", LIMITS.title),
+        deps: (args.flags.dep ?? []).flatMap((d) => d.split(",")).map((d) => d.trim()).filter(Boolean).map(nodeId)
+      };
+      const kind2 = fixed ?? kindArg(args);
+      if (kind2) input.kind = kind2;
+      const stage = flag(args, "stage");
+      if (stage !== void 0) input.stage = slugify(stage);
+      const quote = optional(args, "quote", LIMITS.quote);
+      const author = optional(args, "author", LIMITS.name);
+      if (kind2 === "request" && !quote) throw new UsageError(t("a request needs --quote: the exact words of the person", "un request necesita --quote: la cita literal de la persona"));
+      if (kind2 !== "request" && (quote !== void 0 || author !== void 0)) throw new UsageError(t("--quote and --author are only for a request", "--quote y --author son solo para un request"));
+      if (quote) input.quote = quote;
+      if (author) input.quoteBy = author;
+      const origins2 = originsArg(args);
+      if (origins2.length) input.origins = origins2;
+      const goal = optional(args, "goal", LIMITS.goal);
+      if (goal !== void 0) input.goal = goal;
+      const team = optional(args, "team", LIMITS.name);
+      if (team !== void 0) input.team = team;
+      const status2 = flag(args, "status");
+      if (status2 !== void 0) input.status = statusArg(status2);
+      const report = optional(args, "report", LIMITS.url);
+      if (report !== void 0) input.reportUrl = report;
+      const link = linkArg(args);
+      if (link !== void 0) input.link = link;
+      const node = await client(io, args).addNode(project(io, args), input);
+      io.stdout(`${node?.id ?? input.id}
+`);
+      return EXIT.ok;
+    }
+  };
+}
+var COMMANDS = {
+  "node add": addNodeCommand(),
+  "goal add": addNodeCommand("goal"),
+  "request add": addNodeCommand("request"),
+  "node update": {
+    usage: [
+      'dagyard node update <node> [--title "\u2026"] [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--status <status>] [--progress <p>] [--report <url>] [--link <url>]',
+      'dagyard node update <nodo> [--title "\u2026"] [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--status <estado>] [--progress <p>] [--report <url>] [--link <url>]'
+    ],
+    summary: ["changes fields of a task", "cambia campos de una tarea"],
+    help: [
+      "--progress takes 0..1 or a percentage (40%). --link: the issue or PR URL (the technical-detail link).",
+      "--progress acepta 0..1 o un porcentaje (40%). --link: URL del issue o del PR (\xABDetalle t\xE9cnico \u2197\xBB)."
+    ],
+    flags: ["title", "stage", "goal", "team", "status", "progress", "report", "link", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"]]);
+      const patch = {};
+      const title = optional(args, "title", LIMITS.title);
+      if (title !== void 0) patch.title = title;
+      const stage = flag(args, "stage");
+      if (stage !== void 0) patch.stage = slugify(stage);
+      const goal = optional(args, "goal", LIMITS.goal);
+      if (goal !== void 0) patch.goal = goal;
+      const team = optional(args, "team", LIMITS.name);
+      if (team !== void 0) patch.team = team;
+      const status2 = flag(args, "status");
+      if (status2 !== void 0) patch.status = statusArg(status2);
+      const progress2 = flag(args, "progress");
+      if (progress2 !== void 0) patch.progress = progressArg(progress2);
+      const report = optional(args, "report", LIMITS.url);
+      if (report !== void 0) patch.reportUrl = report;
+      const link = linkArg(args);
+      if (link !== void 0) patch.link = link;
+      if (Object.keys(patch).length === 0) throw new UsageError(t("nothing to change", "no hay nada que cambiar"));
+      await client(io, args).updateNode(project(io, args), nodeId(id), patch);
+      io.stdout(`${nodeId(id)}
+`);
+      return EXIT.ok;
+    }
+  },
+  "node start": {
+    usage: ['dagyard node start <node> [--team "\u2026"] [--site <site>]', 'dagyard node start <nodo> [--team "\u2026"] [--site <sitio>]'],
+    summary: ["marks a task In progress", "marca una tarea En progreso"],
+    help: [
+      `Shortcut: dagyard start <node>. --site (or $COFOUNDY_AGENT) is the factory site that takes it: the server
+adds the task to that team, and creates the team if it does not exist yet.`,
+      `Atajo: dagyard start <nodo>. --site (o $COFOUNDY_AGENT) es el sitio de la f\xE1brica que la toma: el servidor
+suma la tarea a ese equipo, y crea el equipo si todav\xEDa no existe.`
+    ],
+    flags: ["team", "site", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"]]);
+      const patch = { status: "working" };
+      const team = optional(args, "team", LIMITS.name);
+      if (team !== void 0) patch.team = team;
+      const site = optional(args, "site") || io.env.COFOUNDY_AGENT?.trim();
+      if (site) patch.teamId = siteId(site);
+      await client(io, args).updateNode(project(io, args), nodeId(id), patch);
+      io.stdout(`${nodeId(id)}
+`);
+      return EXIT.ok;
+    }
+  },
+  "node progress": {
+    usage: ["dagyard node progress <node> <p>", "dagyard node progress <nodo> <p>"],
+    summary: ["reports progress (0..1 or 40%)", "reporta avance (0..1 o 40%)"],
+    help: ["Shortcut: dagyard progress <node> <p>.", "Atajo: dagyard progress <nodo> <p>."],
+    flags: [...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id, p2] = need(args, [["node", "nodo"], ["progress", "avance"]]);
+      await client(io, args).updateNode(project(io, args), nodeId(id), { progress: progressArg(p2) });
+      io.stdout(`${nodeId(id)}
+`);
+      return EXIT.ok;
+    }
+  },
+  "node done": {
+    usage: ["dagyard node done <node> [--report <url>]", "dagyard node done <nodo> [--report <url>]"],
+    summary: ["marks a task Done", "marca una tarea Lista"],
+    help: [
+      "--report attaches the task's Basalt report. Shortcut: dagyard done <node>.",
+      "--report cuelga el informe de Basalt de la tarea. Atajo: dagyard done <nodo>."
+    ],
+    flags: ["report", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"]]);
+      const patch = { status: "done" };
+      const report = optional(args, "report", LIMITS.url);
+      if (report !== void 0) patch.reportUrl = report;
+      await client(io, args).updateNode(project(io, args), nodeId(id), patch);
+      io.stdout(`${nodeId(id)}
+`);
+      return EXIT.ok;
+    }
+  },
+  "node close": {
+    usage: ['dagyard node close <node> --as done|replaced|dropped|learned [--why "\u2026"] [--by <node>] [--report <url>]', 'dagyard node close <nodo> --as done|replaced|dropped|learned [--why "\u2026"] [--by <nodo>] [--report <url>]'],
+    summary: ["closes a node with its reason: done, replaced, dropped or learned", "cierra un nodo con su motivo: lista, reemplazada, descartada o aprendimos"],
+    help: [
+      `--why says why; it is required for replaced, dropped and learned. A task closed as done needs evidence: --why
+(what got done) or --report (or the report it already had). --by is the node that replaces it (only with replaced).
+A goal or a stream never closes as done. To split a node, close it as replaced by one part and add the others with
+--from <node>; to merge two, close one as replaced by the other. Closing leaves the node in the plan, in plain sight.
+Prints only the id.`,
+      `--why dice por qu\xE9; es obligatorio para replaced, dropped y learned. Una tarea cerrada como done necesita
+evidencia: --why (qu\xE9 qued\xF3) o --report (o el informe que ya ten\xEDa). --by es el nodo que la reemplaza (solo con
+replaced). Un goal o un stream nunca se cierra como done. Para partir un nodo, ci\xE9rralo como replaced por una parte
+y agrega las dem\xE1s con --from <nodo>; para unir dos, cierra uno como replaced por el otro. Cerrar deja el nodo en el
+plan, a la vista. Imprime solo el id.`
+    ],
+    flags: ["as", "why", "by", "report", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"]]);
+      const as = required(args, "as");
+      const reasons = CLOSE_AS.join(", ");
+      if (!CLOSE_AS.includes(as)) throw new UsageError(t(`--as must be ${reasons}`, `--as debe ser ${reasons}`));
+      const input = { as };
+      const why = optional(args, "why", LIMITS.closedReason);
+      if (why) input.why = why;
+      const by = flag(args, "by");
+      if (as === "replaced" && !by) throw new UsageError(t("replaced needs --by <node>: the one that replaces it", "replaced necesita --by <nodo>: el que la reemplaza"));
+      if (as !== "replaced" && by !== void 0) throw new UsageError(t("--by is only for --as replaced", "--by es solo para --as replaced"));
+      if (by) input.by = nodeId(by);
+      if (as !== "done" && !why) throw new UsageError(t(`closing as ${as} needs --why`, `cerrar como ${as} necesita --why`));
+      const report = optional(args, "report", LIMITS.url);
+      if (report !== void 0) input.reportUrl = report;
+      await client(io, args).closeNode(project(io, args), nodeId(id), input);
+      io.stdout(`${nodeId(id)}
+`);
+      return EXIT.ok;
+    }
+  },
+  "edge add": {
+    usage: ['dagyard edge add <from> <to> [--kind origin --why "\u2026"]', 'dagyard edge add <de> <a> [--kind origin --why "\u2026"]'],
+    summary: ["adds a dependency: <to> needs <from> to be closed", "agrega una dependencia: <a> necesita que <de> est\xE9 cerrada"],
+    help: [
+      `With --kind origin it is not a dependency but a born-from: <to> was born from <from> (--why says why). It never
+blocks. The server rejects either kind if it closes a loop, and a dependency on a goal or a stream (they never close).`,
+      `Con --kind origin no es una dependencia sino un \xABnaci\xF3 de\xBB: <a> naci\xF3 de <de> (--why dice por qu\xE9). Nunca
+bloquea. El servidor rechaza cualquiera de las dos si arma un ciclo, y una dependencia de un goal o un stream (nunca se
+cierran).`
+    ],
+    flags: ["kind", "why", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [from, to] = need(args, [["from", "de"], ["to", "a"]]);
+      const kind2 = flag(args, "kind");
+      if (kind2 !== void 0 && kind2 !== "origin" && kind2 !== "requires") throw new UsageError(t("--kind must be origin (or requires)", "--kind debe ser origin (o requires)"));
+      const why = optional(args, "why", LIMITS.originWhy);
+      if (why !== void 0 && kind2 !== "origin") throw new UsageError(t("--why goes with --kind origin", "--why va con --kind origin"));
+      await client(io, args).addEdge(project(io, args), nodeId(from), nodeId(to), kind2 === "origin" ? { kind: "origin", ...why ? { why } : {} } : {});
+      io.stdout(`${nodeId(from)} ${kind2 === "origin" ? "\u21E2" : "\u2192"} ${nodeId(to)}
+`);
+      return EXIT.ok;
+    }
+  },
+  block: {
+    usage: [
+      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--json]'
+    ],
+    summary: ["asks a person for a decision, a review or an access", "le pide al humano una decisi\xF3n, una revisi\xF3n o un acceso"],
+    help: [
+      `decision: --opt at least once (at most ${LIMITS.options}).
+review: without --opt it offers \xABApprove\xBB and \xABRequest changes\xBB (in a Spanish project, \xABAprobar\xBB and \xABPedir cambios\xBB).
+access: --label names the access (e.g. \xABPayment gateway key\xBB).
+Prints the blocker id, to pass to dagyard wait --blocker.`,
+      `decision: --opt al menos una vez (m\xE1ximo ${LIMITS.options}).
+review: sin --opt ofrece \xABApprove\xBB y \xABRequest changes\xBB (en un proyecto en espa\xF1ol, \xABAprobar\xBB y \xABPedir cambios\xBB).
+access: --label nombra el acceso (p. ej. \xABClave de la pasarela de pagos\xBB).
+Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`
+    ],
+    flags: ["kind", "q", "opt", "label", ...GLOBAL_FLAGS],
+    bools: ["json"],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"]]);
+      const kind2 = required(args, "kind");
+      const kinds = BLOCKER_KINDS.join(", ");
+      if (!BLOCKER_KINDS.includes(kind2)) throw new UsageError(t(`--kind must be ${kinds}`, `--kind debe ser ${kinds}`));
+      const input = { kind: kind2, question: required(args, "q", LIMITS.question) };
+      const opts = (args.flags.opt ?? []).map((o) => o.trim()).filter(Boolean);
+      for (const o of opts) {
+        if (o.length > LIMITS.option) throw new UsageError(t(`each --opt is at most ${LIMITS.option} characters`, `cada --opt va hasta ${LIMITS.option} caracteres`));
+      }
+      if (opts.length > LIMITS.options) throw new UsageError(t(`at most ${LIMITS.options} options`, `m\xE1ximo ${LIMITS.options} opciones`));
+      if (kind2 === "access") {
+        if (opts.length) throw new UsageError(t("access takes no --opt; use --label", "access no lleva --opt; usa --label"));
+        input.options = [];
+        input.accessLabel = required(args, "label", LIMITS.name);
+      } else {
+        if (flag(args, "label") !== void 0) throw new UsageError(t("--label is only for access", "--label es solo para access"));
+        if (!opts.length && kind2 !== "review") throw new UsageError(t("decision needs at least one --opt", "decision necesita al menos un --opt"));
+        if (opts.length) input.options = opts;
+      }
+      const blocker = await client(io, args).openBlocker(project(io, args), nodeId(id), input);
+      io.stdout(args.bools.has("json") ? `${JSON.stringify(blocker)}
+` : `${blocker.id}
+`);
+      return EXIT.ok;
+    }
+  },
+  wait: {
+    usage: ["dagyard wait <node> [--blocker <id>] [--timeout <sec>] [--json]", "dagyard wait <nodo> [--blocker <id>] [--timeout <seg>] [--json]"],
+    summary: ["waits for the person to answer and prints the answer", "espera a que el humano resuelva y devuelve la resoluci\xF3n"],
+    help: [
+      `Without --blocker it waits on the node's latest open blocker (or prints the latest answered one).
+First line: the chosen option (or the access value). If there is a note, \xABnote: \u2026\xBB follows.
+Without --timeout it waits forever. Exit 2 when it runs out.`,
+      `Sin --blocker espera el \xFAltimo bloqueante abierto del nodo (o devuelve el \xFAltimo resuelto).
+Primera l\xEDnea: la opci\xF3n elegida (o el valor del acceso). Si hay nota, sigue \xABnota: \u2026\xBB.
+Sin --timeout espera para siempre. Exit 2 si vence.`
+    ],
+    flags: ["blocker", "timeout", ...GLOBAL_FLAGS],
+    bools: ["json"],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"]]);
+      const timeoutRaw = flag(args, "timeout");
+      const timeout = timeoutRaw === void 0 ? 0 : Number(timeoutRaw);
+      if (!Number.isFinite(timeout) || timeout < 0) throw new UsageError(t("--timeout is in seconds (\u22650)", "--timeout va en segundos (\u22650)"));
+      const sleep = io.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+      const api = client(io, args);
+      const proj = project(io, args);
+      const blockerId = flag(args, "blocker") ?? await blockerOf(api, proj, nodeId(id));
+      const deadline = timeout > 0 ? Date.now() + timeout * 1e3 : Infinity;
+      let failures = 0;
+      for (; ; ) {
+        const left = Math.ceil((deadline - Date.now()) / 1e3);
+        if (left <= 0) {
+          io.stderr(t(`dagyard: nobody answered the blocker on ${nodeId(id)} within ${timeout} s
+`, `dagyard: nadie resolvi\xF3 el bloqueante de ${nodeId(id)} en ${timeout} s
+`));
+          return EXIT.timeout;
+        }
+        let result;
+        try {
+          result = await api.waitOnce(proj, blockerId, Math.min(25, left));
+          failures = 0;
+        } catch (err) {
+          if (err instanceof ApiRequestError && waitTransient(err)) {
+            const backoff = WAIT_BACKOFF_MS[Math.min(failures++, WAIT_BACKOFF_MS.length - 1)];
+            await sleep(Math.max(0, Math.min(backoff, deadline - Date.now())));
+            continue;
+          }
+          throw err;
+        }
+        if (result) {
+          io.stdout(args.bools.has("json") ? `${JSON.stringify(result)}
+` : formatResolution(result));
+          return EXIT.ok;
+        }
+      }
+    }
+  },
+  msg: {
+    usage: ['dagyard msg <node> "\u2026" [--report <url>] [--from "\u2026"]', 'dagyard msg <nodo> "\u2026" [--report <url>] [--from "\u2026"]'],
+    summary: [`writes a short note to the PM (\u2264${LIMITS.message} characters)`, `le escribe al PM en corto (\u2264${LIMITS.message} caracteres)`],
+    help: ["By default the server fills in --from (the team name).", "--from por defecto lo pone el servidor (\xABEquipo de <equipo>\xBB)."],
+    flags: ["report", "from", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [id] = need(args, [["node", "nodo"], ["text", "texto"]]);
+      const text = args.positionals.slice(1).join(" ").trim();
+      if (!text) throw new UsageError(t("the message is empty", "el mensaje est\xE1 vac\xEDo"));
+      if ([...text].length > LIMITS.message) {
+        const len = [...text].length;
+        throw new UsageError(t(`the message has ${len} characters; the limit is ${LIMITS.message}`, `el mensaje tiene ${len} caracteres; el m\xE1ximo es ${LIMITS.message}`));
+      }
+      const input = { text };
+      const from = optional(args, "from", LIMITS.name);
+      if (from !== void 0) input.from = from;
+      const report = optional(args, "report", LIMITS.url);
+      if (report !== void 0) input.reportUrl = report;
+      const message = await client(io, args).postMessage(project(io, args), nodeId(id), input);
+      io.stdout(`${message?.id ?? "ok"}
+`);
+      return EXIT.ok;
+    }
+  },
+  next: {
+    usage: ["dagyard next [--project <p>] [--json]", "dagyard next [--project <p>] [--json]"],
+    summary: ["the next task ready to start, with its /goal line ready to paste", "la siguiente tarea arrancable, con su l\xEDnea /goal lista para pegar"],
+    help: [
+      `Prints a single line: /goal <mission>; the task's link in the sky goes separately, on stderr
+(\xABin the sky: \u2026\xBB), so the output pastes as is. --json carries it in \xABlink\xBB. Exit 3 when nothing is ready to start.`,
+      `Imprime una sola l\xEDnea: /goal <misi\xF3n>; el link de la tarea en el cielo va aparte, por stderr
+(\xABen el cielo: \u2026\xBB), as\xED la salida se pega tal cual. --json lo trae en \xABlink\xBB. Exit 3 si no hay nada arrancable.`
+    ],
+    flags: [...GLOBAL_FLAGS],
+    bools: ["json"],
+    async run({ io, args }) {
+      need(args, []);
+      const proj = project(io, args);
+      const srv = server(io, args);
+      const res = await client(io, args, srv).next(proj);
+      const link = res.node ? skyLink(srv.url, proj, res.node.id) : null;
+      if (args.bools.has("json")) {
+        io.stdout(`${JSON.stringify({ ...res, link })}
+`);
+        return res.goalLine ? EXIT.ok : EXIT.nothing;
+      }
+      if (!res.goalLine) {
+        io.stderr(t(`dagyard: no task is ready to start in ${proj}
+`, `dagyard: no hay tareas arrancables en ${proj}
+`));
+        return EXIT.nothing;
+      }
+      io.stdout(`${goalLine(res.goalLine)}
+`);
+      if (link) io.stderr(t(`in the sky: ${link}
+`, `en el cielo: ${link}
+`));
+      return EXIT.ok;
+    }
+  },
+  open: {
+    usage: ["dagyard open [<task>] [--print]", "dagyard open [<tarea>] [--print]"],
+    summary: ["the sky link to the project or to a task; on macOS it opens it", "el link del cielo al proyecto o a una tarea; en macOS lo abre"],
+    help: [
+      `Without <task>, the project; with <task>, the sky flies to it and opens its card.
+Prints the link (safe to send to anyone: the key is never in it) and on macOS opens it in the browser.
+--print only prints it. It does not use the API key or call the server.`,
+      `Sin <tarea>, el proyecto; con <tarea>, el cielo vuela a ella y abre su ficha.
+Imprime el link (se puede mandar a quien sea: la clave nunca va en \xE9l) y en macOS lo abre en el navegador.
+--print solo lo imprime. No usa la API key ni llama al servidor.`
+    ],
+    flags: [...GLOBAL_FLAGS],
+    bools: ["print"],
+    async run({ io, args }) {
+      if (args.positionals.length > 1) throw new UsageError(extra(args.positionals[1]));
+      const [task] = args.positionals;
+      const link = skyLink(server(io, args).url, project(io, args), task === void 0 ? void 0 : nodeId(task));
+      io.stdout(`${link}
+`);
+      if (!args.bools.has("print") && (io.platform ?? process.platform) === "darwin") {
+        try {
+          await (io.open ?? openInBrowser)(link);
+        } catch (err) {
+          const why = err instanceof Error ? err.message : String(err);
+          io.stderr(t(`dagyard: could not open the browser (${why}); copy the link
+`, `dagyard: no pude abrir el navegador (${why}); copia el link
+`));
+        }
+      }
+      return EXIT.ok;
+    }
+  },
+  import: {
+    usage: [
+      'dagyard import --from <path to .cofoundy/tasks> [--project <p>] [--name "\u2026"] [--lang en|es] [--titles <json>] [--replace] [--dry-run] [--json]',
+      'dagyard import --from <ruta a .cofoundy/tasks> [--project <p>] [--name "\u2026"] [--lang en|es] [--titles <json>] [--replace] [--dry-run] [--json]'
+    ],
+    summary: ["creates a new project from the orchestrator's tasks", "crea un proyecto nuevo desde las tareas del orchestrator"],
+    help: [
+      `deps and blockedBy become dependencies; status is normalized to ${NODE_STATUSES.join(", ")}.
+Stages: phase if every task has one; otherwise by depth (\xABGetting started\xBB, \xABNext\xBB, \xABThen\xBB, \u2026 \xABFinally\xBB).
+Stages and missions go in the project's language: --lang for a new one (default en); --replace keeps the
+existing project's language unless you pass --lang.
+If the project already exists it is not overwritten (the server decides on create): pick another with --project
+or pass --replace to replace it. With the agent key, replacing keeps the owner's questions and answers and the
+server rejects it (409) if the new graph drops a task that has any; with the owner token, --replace deletes them
+and recreates them from the files.
+--titles sets PM-friendly titles: a JSON object { "node id": "title" }, inline or the path to a .json file.
+They replace the ones taken from the tasks; unknown ids or titles over ${LIMITS.title} characters only warn.
+--dry-run only counts, sends nothing and needs no server (with --replace it reads the project's language if it can).`,
+      `deps y blockedBy se vuelven dependencias; status se normaliza a ${NODE_STATUSES.join(", ")}.
+Etapas: phase si todas las tareas lo traen; si no, por profundidad (\xABPara empezar\xBB, \xABDespu\xE9s\xBB, \xABLuego\xBB, \u2026 \xABAl final\xBB
+en un proyecto en espa\xF1ol). Etapas y misiones van en el idioma del proyecto: --lang para uno nuevo (default en);
+--replace conserva el del proyecto existente salvo que pases --lang.
+Si el proyecto ya existe no lo pisa (el servidor lo decide al crear): elige otro con --project o pasa
+--replace para reemplazarlo. Con la clave de agente, el reemplazo conserva las preguntas y respuestas
+del due\xF1o y el servidor lo rechaza (409) si el grafo nuevo quita una tarea que tiene alguna; con el token
+del due\xF1o, --replace las borra y las recrea desde el archivo.
+--titles pone los t\xEDtulos en lenguaje de PM: un objeto JSON { "id de nodo": "t\xEDtulo" }, en l\xEDnea o la ruta a un
+archivo .json. Reemplazan a los que se sacan de las tareas; ids desconocidos o t\xEDtulos de m\xE1s de ${LIMITS.title}
+caracteres solo avisan.
+--dry-run solo cuenta, no env\xEDa nada y no necesita servidor (con --replace lee el idioma del proyecto si puede).`
+    ],
+    flags: ["from", "name", "lang", "titles", ...GLOBAL_FLAGS],
+    bools: ["dry-run", "json", "replace"],
+    async run({ io, args }) {
+      need(args, []);
+      const from = required(args, "from");
+      const langFlag = flag(args, "lang");
+      if (langFlag !== void 0 && !LANGS.includes(langFlag)) {
+        throw new UsageError(t(`--lang is ${LANGS.join(" or ")}: \xAB${langFlag}\xBB`, `--lang va ${LANGS.join(" o ")}: \xAB${langFlag}\xBB`));
+      }
+      let files;
+      try {
+        files = readTasksDir(from);
+      } catch (err) {
+        const why = err instanceof Error ? err.message : String(err);
+        throw new UsageError(t(`could not read ${from}: ${why}`, `no pude leer ${from}: ${why}`));
+      }
+      if (!files.length) throw new UsageError(t(`no tasks (*.md) in ${from}`, `no hay tareas (*.md) en ${from}`));
+      const name = flag(args, "name");
+      const titlesRaw = flag(args, "titles");
+      let titles;
+      try {
+        titles = titlesRaw === void 0 ? void 0 : readTitles(titlesRaw);
+      } catch (err) {
+        throw new UsageError(`--titles: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      const where = { dirName: projectNameFromDir(from), ...flag(args, "project") ? { projectId: flag(args, "project") } : {} };
+      const dry = args.bools.has("dry-run");
+      const replace = args.bools.has("replace");
+      let dataLang = langFlag ?? DEFAULT_LANG;
+      let langNote = null;
+      if (langFlag === void 0 && replace) {
+        try {
+          dataLang = await existingProjectLang(client(io, args), importProjectId(where)) ?? DEFAULT_LANG;
+        } catch (err) {
+          if (!dry) throw err;
+          const why = err instanceof Error ? err.message : String(err);
+          langNote = t(`could not read the project's language (${why}); the preview uses English`, `no pude leer el idioma del proyecto (${why}); la simulaci\xF3n va en ingl\xE9s`);
+        }
+      }
+      const result = buildImport(files, { ...where, ...name ? { name } : {}, ...titles ? { titles } : {}, projectLang: dataLang });
+      if (langNote) result.warnings.unshift(langNote);
+      const check = parseProjectGraphInput(result.graph);
+      if (!check.ok) throw new Error(t(`the imported graph fails the model's validation: ${check.message}`, `el grafo importado no pasa la validaci\xF3n del modelo: ${check.message}`));
+      if (!dry) {
+        try {
+          await client(io, args).putProject(result.projectId, result.graph, { exclusive: !replace });
+        } catch (err) {
+          if (replace || !(err instanceof ApiRequestError) || err.status !== 409) throw err;
+          throw new ApiRequestError(
+            409,
+            "conflict",
+            t(
+              `the project \xAB${result.projectId}\xBB already exists and I will not overwrite it; use --project <other> to create a new one or --replace to replace it`,
+              `el proyecto \xAB${result.projectId}\xBB ya existe y no lo piso; usa --project <otro> para crear uno nuevo o --replace para reemplazarlo`
+            )
+          );
+        }
+      }
+      io.stdout(args.bools.has("json") ? `${JSON.stringify(result, null, 2)}
+` : formatImport(result, dry, replace));
+      return EXIT.ok;
+    }
+  },
+  "team start": {
+    usage: [
+      'dagyard team start <site> [--name "\u2026"] [--issues 45,46] [--at <iso date>]',
+      'dagyard team start <sitio> [--name "\u2026"] [--issues 45,46] [--at <fecha iso>]'
+    ],
+    summary: ["a factory site starts: its team appears on the timeline", "arranca un sitio de la f\xE1brica: su equipo aparece en la l\xEDnea de tiempo"],
+    help: [
+      `<site> is the site's slug (the one in the factory ledger). --name is its human name (\xABTimeline\xBB); without it
+the server derives one from the slug. --issues adds gh-<n> tasks to the team (repeat it or use commas).
+The start time is now (or --at); starting it again keeps the first one and reopens it if it was closed.`,
+      `<sitio> es el slug del sitio (el del ledger de la f\xE1brica). --name es su nombre humano (\xABTiempo\xBB); sin \xE9l
+el servidor lo saca del slug. --issues suma tareas gh-<n> al equipo (se repite o va con comas).
+La hora de arranque es ahora (o --at); volver a arrancarlo conserva la primera y lo reabre si estaba cerrado.`
+    ],
+    flags: ["name", "issues", "at", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [raw] = need(args, [["site", "sitio"]]);
+      const tid = siteId(raw);
+      const proj = project(io, args);
+      const api = client(io, args);
+      const at = atArg(args);
+      const issues = issuesArg(args);
+      const current2 = await currentTeam(api, proj, tid);
+      const patch = {};
+      const name = optional(args, "name", LIMITS.name);
+      if (name) patch.name = name;
+      const add = issues.filter((nid) => !current2?.nodeIds.includes(nid));
+      if (add.length) patch.addNodeIds = add;
+      if (at || !current2?.startedAt) patch.startedAt = at ?? (/* @__PURE__ */ new Date()).toISOString();
+      if (current2?.closedAt) {
+        patch.closedAt = null;
+        patch.outcome = null;
+      }
+      const team = await api.putTeam(proj, tid, patch);
+      io.stdout(`${team?.id ?? tid}
+`);
+      return EXIT.ok;
+    }
+  },
+  "team close": {
+    usage: [
+      "dagyard team close <site> --outcome <merged|pr-open|stopped> [--at <iso date>]",
+      "dagyard team close <sitio> --outcome <merged|pr-open|stopped> [--at <fecha iso>]"
+    ],
+    summary: ["a factory site closes, with how it ended", "cierra un sitio de la f\xE1brica, con c\xF3mo termin\xF3"],
+    help: [
+      `--outcome is how it ended: merged, pr-open or stopped (or a short note). The close time is now (or --at);
+closing it again with the same outcome changes nothing.`,
+      `--outcome es c\xF3mo termin\xF3: merged, pr-open o stopped (o una nota corta). La hora de cierre es ahora (o --at);
+volver a cerrarlo con el mismo desenlace no cambia nada.`
+    ],
+    flags: ["outcome", "at", ...GLOBAL_FLAGS],
+    async run({ io, args }) {
+      const [raw] = need(args, [["site", "sitio"]]);
+      const tid = siteId(raw);
+      const outcome = required(args, "outcome", TEAM_LIMITS.outcome);
+      const at = atArg(args);
+      const proj = project(io, args);
+      const api = client(io, args);
+      const current2 = await currentTeam(api, proj, tid);
+      const patch = { outcome };
+      if (at) patch.closedAt = at;
+      else if (!(current2?.closedAt && current2.outcome === outcome)) patch.closedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const team = await api.putTeam(proj, tid, patch);
+      io.stdout(`${team?.id ?? tid}
+`);
+      return EXIT.ok;
+    }
+  },
+  "import-ledger": {
+    usage: [
+      "dagyard import-ledger [<sites.jsonl>] [--repo <repo>] [--dry-run] [--json]",
+      "dagyard import-ledger [<sites.jsonl>] [--repo <repo>] [--dry-run] [--json]"
+    ],
+    summary: ["brings the factory's history in as teams, with its dates", "trae la historia de la f\xE1brica como equipos, con sus fechas"],
+    help: [
+      `By default it reads ~/cofoundy/.coordination/factory/sites.jsonl (JSONL, or a JSON array) and keeps the rows of
+--repo (by default the repo of the current folder, from its origin remote). Each site becomes a team: requested,
+started and closed with the site's own dates, its issues as gh-<n> tasks. The ledger wins on the dates it knows and
+never erases what it does not know. Idempotent: running it again sends nothing. --dry-run reads but writes nothing.`,
+      `Por defecto lee ~/cofoundy/.coordination/factory/sites.jsonl (JSONL, o un array JSON) y se queda con las filas de
+--repo (por defecto el repo de la carpeta actual, por su remoto origin). Cada sitio es un equipo: pedido, arrancado
+y cerrado con las fechas del sitio, sus issues como tareas gh-<n>. El ledger manda en las fechas que conoce y nunca
+borra lo que no conoce. Idempotente: correrlo otra vez no manda nada. --dry-run lee pero no escribe nada.`
+    ],
+    flags: ["repo", ...GLOBAL_FLAGS],
+    bools: ["dry-run", "json"],
+    async run({ io, args }) {
+      if (args.positionals.length > 1) throw new UsageError(extra(args.positionals[1]));
+      const file = args.positionals[0] ?? join3(io.env.HOME || homedir2(), "cofoundy", ".coordination", "factory", "sites.jsonl");
+      let parsed;
+      try {
+        parsed = parseLedger(readFileSync3(file, "utf8"));
+      } catch (err) {
+        const why = err instanceof Error ? err.message : String(err);
+        throw new UsageError(t(`could not read the ledger ${file}: ${why}`, `no pude leer el ledger ${file}: ${why}`));
+      }
+      const needsRepo = parsed.rows.some((r) => typeof r.repo === "string");
+      const repo = optional(args, "repo") || (needsRepo ? repoOf(io.cwd ?? process.cwd()) : null);
+      if (needsRepo && !repo) {
+        throw new UsageError(t("missing --repo: I could not tell the repo of the current folder", "falta --repo: no pude saber el repo de la carpeta actual"));
+      }
+      const { teams, skipped } = teamsFromLedger(parsed.rows, repo);
+      const proj = project(io, args);
+      const api = client(io, args);
+      const snap = await api.snapshot(proj);
+      const current2 = new Map((snap.teams ?? []).map((tm) => [tm.id, tm]));
+      const plan = teams.map((l) => {
+        const patch = teamPatchFromLedger(l, current2.get(l.id));
+        const isNew = !current2.has(l.id);
+        const name = isNew ? nameFromTasks(l, snap.nodes) : void 0;
+        if (patch && name) patch.name = name;
+        const action = isNew ? "created" : patch ? "updated" : "unchanged";
+        return { id: l.id, action, patch };
+      });
+      const dry = args.bools.has("dry-run");
+      if (!dry)
+        for (const p2 of plan) {
+          if (!p2.patch) continue;
+          try {
+            await api.putTeam(proj, p2.id, p2.patch);
+          } catch (err) {
+            if (!(err instanceof ApiRequestError)) throw err;
+            p2.action = "failed";
+            p2.error = `${err.code}: ${err.message}`;
+          }
+        }
+      const report = { file, repo, project: proj, dryRun: dry, skipped, invalid: parsed.invalid, teams: plan };
+      io.stdout(args.bools.has("json") ? `${JSON.stringify(report, null, 2)}
+` : formatLedger(report));
+      const failed = plan.filter((p2) => p2.action === "failed");
+      for (const p2 of failed) io.stderr(`dagyard: ${p2.id}: ${p2.error}
+`);
+      return failed.length ? EXIT.api : EXIT.ok;
+    }
+  },
+  sync: {
+    usage: [
+      "dagyard sync --github <owner/repo> [--label <l>] [--stage <stage>] [--all] [--dry-run] [--json]",
+      "dagyard sync --github <owner/repo> [--label <l>] [--stage <etapa>] [--all] [--dry-run] [--json]"
+    ],
+    summary: ["creates or updates the gh-<n> tasks from GitHub issues", "crea o actualiza las tareas gh-<n> desde los issues de GitHub"],
+    help: [
+      `Uses gh (GitHub CLI), signed in. It never replaces the graph: it only adds and moves forward, every change live.
+New task = open issue (with --all also the closed ones, already Done), in --stage, or the build stage (Build /
+Construcci\xF3n), or the first stage, with the link to the issue. --stage takes the id or the name, in either language,
+and sync never creates a stage. A decision with no options in the body offers Yes / No in the project's language.
+On an existing task it never changes title, stage, team or mission; the link, only if it
+has none. Status only moves forward: closed \u2192 Done; open with an open PR that says \xABcloses #n\xBB \u2192 In progress.
+\xABPart of #n\xBB \u2192 task n needs this one; \xABdepends on #n\xBB, \xABblocked by #n\xBB or \xABbloqueado por #n\xBB \u2192 this one needs n.
+The founder-input label opens a decision with the options from the body (- **A:** \u2026, - A) \u2026), only if the task
+has no decision yet (open or answered). The epic label creates no task.
+--dry-run reads but writes nothing.`,
+      `Usa gh (GitHub CLI) autenticado. Nunca reemplaza el grafo: solo agrega y avanza, cada cambio en vivo.
+Tarea nueva = issue abierto (con --all tambi\xE9n los cerrados, ya Listos), en --stage, o la de construcci\xF3n (Build /
+Construcci\xF3n), o la primera etapa, con el enlace al issue. --stage acepta el id o el nombre, en cualquiera de los dos
+idiomas, y sync nunca crea una etapa. Una decisi\xF3n sin opciones en el cuerpo ofrece S\xED / No en el idioma del proyecto.
+A una tarea que ya existe nunca le cambia t\xEDtulo, etapa, equipo ni misi\xF3n; el enlace, solo si
+no tiene. El estado solo avanza: cerrado \u2192 Lista; abierto con un PR abierto que dice \xABcloses #n\xBB \u2192 En progreso.
+\xABParte de #n\xBB \u2192 la tarea n necesita esta; \xABdepende de #n\xBB, \xABblocked by #n\xBB o \xABbloqueado por #n\xBB \u2192 esta necesita la n.
+La etiqueta founder-input abre una decisi\xF3n con las opciones del cuerpo (- **A:** \u2026, - A) \u2026), solo si la tarea
+no tiene ya una decisi\xF3n (abierta o respondida). La etiqueta epic no crea tarea.
+--dry-run lee pero no escribe nada.`
+    ],
+    flags: ["github", "label", "stage", ...GLOBAL_FLAGS],
+    bools: ["all", "dry-run", "json"],
+    async run({ io, args }) {
+      need(args, []);
+      const repo = required(args, "github");
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || repo.split("/").some((seg) => seg === "." || seg.includes(".."))) {
+        throw new UsageError(t(`--github goes as owner/repo: \xAB${repo}\xBB`, `--github va como owner/repo: \xAB${repo}\xBB`));
+      }
+      const label = optional(args, "label");
+      const stage = optional(args, "stage");
+      const report = await syncGithub(client(io, args), io.github ?? ghCliSource(), project(io, args), {
+        repo,
+        ...label ? { label } : {},
+        ...stage ? { stage } : {},
+        all: args.bools.has("all"),
+        dryRun: args.bools.has("dry-run")
+      });
+      io.stdout(args.bools.has("json") ? `${JSON.stringify(report, null, 2)}
+` : formatSync(report));
+      return EXIT.ok;
+    }
+  }
+};
+var SHORTCUTS = { start: "node start", progress: "node progress", done: "node done" };
+async function run(argv, io) {
+  return withLang(langFromEnv(io.env), () => runIn(argv, io));
+}
+async function runIn(argv, io) {
+  let key = null;
+  try {
+    key = loadKey(io.env);
+    const lead = leadingGlobals(argv);
+    argv = lead.rest;
+    const [first, second] = argv;
+    if (!first || first === "help" || first === "--help" || first === "-h") {
+      io.stdout(globalHelp());
+      return EXIT.ok;
+    }
+    if (first === "--version" || first === "-v" || first === "version") {
+      io.stdout(`${VERSION}
+`);
+      return EXIT.ok;
+    }
+    let name;
+    let rest;
+    if (first === "node" || first === "edge" || first === "team" || first === "goal" || first === "request") {
+      if (!second || second.startsWith("-")) {
+        io.stdout(groupHelp(first));
+        return second && !["--help", "-h"].includes(second) ? EXIT.usage : EXIT.ok;
+      }
+      name = `${first} ${second}`;
+      rest = argv.slice(2);
+    } else {
+      name = SHORTCUTS[first] ?? first;
+      rest = argv.slice(1);
+    }
+    const cmd = COMMANDS[name];
+    if (!cmd) throw new UsageError(t(`unknown command \xAB${name}\xBB`, `no conozco el comando \xAB${name}\xBB`));
+    const args = parseArgs([...lead.globals, ...rest], cmd.bools ?? []);
+    if (args.bools.has("help")) {
+      io.stdout(commandHelp(cmd));
+      return EXIT.ok;
+    }
+    assertKnownFlags(args, cmd.flags);
+    for (const b of args.bools) {
+      if (b !== "help" && !(cmd.bools ?? []).includes(b)) throw new UsageError(t(`unknown option: --${b}`, `opci\xF3n desconocida: --${b}`));
+    }
+    return await cmd.run({ io, args });
+  } catch (err) {
+    const redact = (s) => key ? s.split(key).join("***") : s;
+    if (err instanceof UsageError) {
+      const hint = t("See \xABdagyard --help\xBB or \xABdagyard <command> --help\xBB.", "Usa \xABdagyard --help\xBB o \xABdagyard <comando> --help\xBB.");
+      io.stderr(redact(`dagyard: ${err.message}
+${hint}
+`));
+      return EXIT.usage;
+    }
+    if (err instanceof ApiRequestError) {
+      io.stderr(redact(`dagyard: ${err.code}: ${err.message}
+`));
+      return EXIT.api;
+    }
+    io.stderr(redact(`dagyard: ${err instanceof Error ? err.message : String(err)}
+`));
+    return EXIT.api;
+  }
+}
+function leadingGlobals(argv) {
+  const globals = [];
+  let i = 0;
+  for (; i < argv.length; i++) {
+    const m = /^(?:--(project|url)|-(p))(=.*)?$/.exec(argv[i]);
+    if (!m) break;
+    globals.push(argv[i]);
+    if (m[3] !== void 0) continue;
+    const value = argv[i + 1];
+    const opt = m[1] ?? "project";
+    if (value === void 0) throw new UsageError(t(`--${opt} needs a value`, `a --${opt} le falta el valor`));
+    globals.push(value);
+    i++;
+  }
+  return { globals, rest: argv.slice(i) };
+}
+function config(io, skipRepoUrl) {
+  return loadConfig(io.env, io.cwd ?? process.cwd(), { warn: io.stderr, skipRepoUrl });
+}
+function server(io, args) {
+  const urlFlag = flag(args, "url");
+  const cfg = config(io, urlFlag !== void 0);
+  const url2 = urlFlag ?? cfg.url;
+  if (!url2) {
+    throw new UsageError(
+      t("missing server: --url, DAGYARD_URL, .dagyard.json or ~/.config/dagyard/url", "falta el servidor: --url, DAGYARD_URL, .dagyard.json o ~/.config/dagyard/url")
+    );
+  }
+  return { url: url2, key: cfg.key };
+}
+function client(io, args, srv = server(io, args)) {
+  if (!srv.key) throw new UsageError(t("missing API key: DAGYARD_KEY or ~/.config/dagyard/agent-key", "falta la API key: DAGYARD_KEY o ~/.config/dagyard/agent-key"));
+  return new DagyardClient({ baseUrl: srv.url, key: srv.key, ...io.fetch ? { fetch: io.fetch } : {}, ...io.sleep ? { sleep: io.sleep } : {} });
+}
+function openInBrowser(link) {
+  return new Promise((resolve3, reject) => {
+    const child = spawn("open", [link], { stdio: "ignore" });
+    child.on("error", reject);
+    child.on("exit", (code2) => code2 === 0 ? resolve3() : reject(new Error(t(`open exited with ${code2}`, `open sali\xF3 con ${code2}`))));
+  });
+}
+function project(io, args) {
+  const p2 = flag(args, "project") ?? config(io, true).project;
+  if (!p2) {
+    throw new UsageError(
+      t(
+        "missing project: --project, DAGYARD_PROJECT, .dagyard.json or ~/.config/dagyard/project",
+        "falta el proyecto: --project, DAGYARD_PROJECT, .dagyard.json o ~/.config/dagyard/project"
+      )
+    );
+  }
+  return slugify(p2);
+}
+function need(args, names) {
+  const missing = names.slice(args.positionals.length);
+  if (missing.length) {
+    const name = tx(missing[0]);
+    throw new UsageError(t(`missing <${name}>`, `falta <${name}>`));
+  }
+  if (names.length === 0 && args.positionals.length) throw new UsageError(extra(args.positionals[0]));
+  return args.positionals;
+}
+function siteId(raw) {
+  const v = raw.trim();
+  if (isSlug(v)) return v;
+  if (!/[a-z0-9]/i.test(raw.normalize("NFD"))) throw new UsageError(t(`\xAB${raw}\xBB is not a usable site id`, `\xAB${raw}\xBB no sirve como id de sitio`));
+  return slugify(raw.trim());
+}
+function atArg(args) {
+  const raw = optional(args, "at");
+  if (raw === void 0) return void 0;
+  const at = normalizeIso(raw);
+  if (!at) throw new UsageError(t(`--at is an ISO 8601 date with time and zone (2026-10-04T05:35:20Z): \xAB${raw}\xBB`, `--at va como fecha ISO 8601 con hora y zona (2026-10-04T05:35:20Z): \xAB${raw}\xBB`));
+  return at;
+}
+function issuesArg(args) {
+  const out = [];
+  for (const part of (args.flags.issues ?? []).flatMap((v) => v.split(","))) {
+    const n = part.trim().replace(/^(?:gh-|#)/i, "");
+    if (!n) continue;
+    if (!/^\d+$/.test(n)) throw new UsageError(t(`--issues takes issue numbers: \xAB${part.trim()}\xBB`, `--issues lleva n\xFAmeros de issue: \xAB${part.trim()}\xBB`));
+    if (!out.includes(`gh-${n}`)) out.push(`gh-${n}`);
+  }
+  return out;
+}
+async function currentTeam(api, proj, tid) {
+  return (await api.snapshot(proj)).teams?.find((tm) => tm.id === tid);
+}
+function repoOf(cwd) {
+  const git = (...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  try {
+    const m = /([^/:]+?)(?:\.git)?\/?$/.exec(git("remote", "get-url", "origin"));
+    if (m) return m[1];
+  } catch {
+  }
+  try {
+    return basename2(git("rev-parse", "--show-toplevel")) || null;
+  } catch {
+    return null;
+  }
+}
+function nameFromTasks(l, nodes) {
+  for (const id of l.nodeIds) {
+    const team = nodes.find((n) => n.id === id)?.team?.trim();
+    if (team && !/^(f[áa]brica|factory)$/i.test(team)) return team;
+  }
+  return void 0;
+}
+function formatLedger(r) {
+  const count = (a) => r.teams.filter((x) => x.action === a).length;
+  const head = r.dryRun ? t("(dry run, nothing sent) ", "(simulaci\xF3n, no envi\xE9 nada) ") : "";
+  const of = r.repo ? t(` of ${r.repo}`, ` de ${r.repo}`) : "";
+  const lines = [
+    head + t(
+      `${plural(r.teams.length, ["team", "teams"], ["equipo", "equipos"])} in the ledger${of} \u2192 ${r.project}: ${count("created")} new, ${count("updated")} updated, ${count("unchanged")} unchanged`,
+      `${plural(r.teams.length, ["team", "teams"], ["equipo", "equipos"])} en el ledger${of} \u2192 ${r.project}: ${count("created")} nuevos, ${count("updated")} actualizados, ${count("unchanged")} sin cambios`
+    )
+  ];
+  for (const x of r.teams) {
+    if (x.action === "created") lines.push(`  + ${x.id}${x.patch?.name ? ` \xAB${x.patch.name}\xBB` : ""}`);
+    else if (x.action === "updated") lines.push(`  ~ ${x.id} (${Object.keys(x.patch ?? {}).join(", ")})`);
+  }
+  for (const x of r.teams) if (x.action === "failed") lines.push(`  ! ${x.id}`);
+  if (count("failed")) lines.push(t(`  ${count("failed")} rejected by the server (see stderr)`, `  ${count("failed")} rechazados por el servidor (mira stderr)`));
+  if (r.invalid) lines.push(t(`  ${r.invalid} unreadable rows skipped`, `  ${r.invalid} filas ilegibles ignoradas`));
+  return `${lines.join("\n")}
+`;
+}
+function extra(arg) {
+  return t(`unexpected \xAB${arg}\xBB`, `sobra \xAB${arg}\xBB`);
+}
+function nodeId(raw) {
+  if (!/[a-z0-9]/i.test(raw.normalize("NFD"))) throw new UsageError(t(`\xAB${raw}\xBB is not a usable node id`, `\xAB${raw}\xBB no sirve como id de nodo`));
+  return slugify(raw);
+}
+var WAIT_BACKOFF_MS = [1e3, 2e3, 5e3, 1e4];
+var waitTransient = (err) => err.status === 0 || err.status >= 500 || err.status === 429;
+async function blockerOf(api, proj, node) {
+  const mine = (await api.snapshot(proj)).blockers.filter((b) => b.nodeId === node).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const pick = mine.filter((b) => b.status === "open").pop() ?? mine.pop();
+  if (!pick) throw new UsageError(t(`${node} has no blockers; open one with \xABdagyard block ${node} \u2026\xBB`, `${node} no tiene bloqueantes; \xE1brelo con \xABdagyard block ${node} \u2026\xBB`));
+  return pick.id;
+}
+function required(args, key, max) {
+  const v = optional(args, key, max);
+  if (v === void 0 || v === "") throw new UsageError(t(`missing --${key}`, `falta --${key}`));
+  return v;
+}
+function optional(args, key, max) {
+  const v = flag(args, key)?.trim();
+  if (v !== void 0 && max !== void 0 && [...v].length > max) {
+    throw new UsageError(t(`--${key} is at most ${max} characters`, `--${key} va hasta ${max} caracteres`));
+  }
+  return v;
+}
+function linkArg(args) {
+  const link = optional(args, "link", LIMITS.url);
+  if (link !== void 0 && !/^https?:\/\/\S+$/i.test(link)) {
+    throw new UsageError(t(`--link must be an http(s) URL (the issue or PR one): \xAB${link}\xBB`, `--link debe ser una URL http(s) (la del issue o del PR): \xAB${link}\xBB`));
+  }
+  return link;
+}
+function kindArg(args) {
+  const k = flag(args, "kind");
+  if (k === void 0) return void 0;
+  const kinds = NODE_KINDS.join(", ");
+  if (!NODE_KINDS.includes(k)) throw new UsageError(t(`--kind must be ${kinds}`, `--kind debe ser ${kinds}`));
+  return k;
+}
+function originsArg(args) {
+  const out = [];
+  for (const [k, v] of args.seq) {
+    if (k === "from") {
+      out.push({ from: nodeId(v) });
+      continue;
+    }
+    if (k !== "why") continue;
+    const last = out[out.length - 1];
+    if (!last || last.why !== void 0) throw new UsageError(t("each --why goes right after its --from", "cada --why va justo despu\xE9s de su --from"));
+    const why = v.trim();
+    if ([...why].length > LIMITS.originWhy) throw new UsageError(t(`--why is at most ${LIMITS.originWhy} characters`, `--why va hasta ${LIMITS.originWhy} caracteres`));
+    if (why) last.why = why;
+  }
+  return out;
+}
+function statusArg(s) {
+  if (s === "blocked") throw new UsageError(t("blocked is not set by hand: \xABdagyard block\xBB sets it", "blocked no se pone a mano: lo pone \xABdagyard block\xBB"));
+  if (!NODE_STATUSES.includes(s)) throw new UsageError(t(`--status must be ${MANUAL_STATUSES}`, `--status debe ser ${MANUAL_STATUSES}`));
+  return s;
+}
+var MANUAL_STATUSES = NODE_STATUSES.filter((s) => s !== "blocked").join(", ");
+function progressArg(raw) {
+  const pct = raw.trim().endsWith("%");
+  let n = Number(raw.trim().replace(/%$/, ""));
+  if (!Number.isFinite(n)) throw new UsageError(t(`invalid progress: \xAB${raw}\xBB`, `avance inv\xE1lido: \xAB${raw}\xBB`));
+  if (pct || n > 1) n /= 100;
+  if (n < 0 || n > 1) throw new UsageError(t(`progress goes from 0 to 1 (or 0% to 100%): \xAB${raw}\xBB`, `el avance va de 0 a 1 (o de 0% a 100%): \xAB${raw}\xBB`));
+  return Math.round(n * 1e3) / 1e3;
+}
+function skyLink(base, projectId, node) {
+  const p2 = `?p=${encodeURIComponent(projectId)}`;
+  return `${base.replace(/\/+$/, "")}/${p2}${node ? `&n=${encodeURIComponent(node)}` : ""}`;
+}
+function goalLine(raw) {
+  const line = oneLine(raw, 1e4);
+  return line.startsWith("/goal ") ? line : `/goal ${line.replace(/^\/goal\b\s*/, "")}`;
+}
+function formatResolution(r) {
+  const res = r.blocker.resolution;
+  const first = r.blocker.kind === "access" ? r.value ?? "" : res?.choice ?? "";
+  return `${first}
+${res?.note ? `${t("note", "nota")}: ${oneLine(res.note, 1e4)}
+` : ""}`;
+}
+async function existingProjectLang(api, pid) {
+  try {
+    return projectLang((await api.snapshot(pid)).project);
+  } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 404) return null;
+    throw err;
+  }
+}
+function formatImport(r, dry, replace) {
+  const s = r.stats;
+  const how = s.stageSource === "phase" ? t("by phase", "por fase") : t("by depth", "por profundidad");
+  const done = replace ? t(" \u2014 replaced", " \u2014 reemplazado") : t(" \u2014 imported", " \u2014 importado");
+  const st = s.status;
+  const lines = [
+    t(
+      `Project \xAB${r.graph.name}\xBB (${r.projectId})${dry ? " \u2014 dry run, nothing was sent" : done}`,
+      `Proyecto \xAB${r.graph.name}\xBB (${r.projectId})${dry ? " \u2014 simulaci\xF3n, no se envi\xF3 nada" : done}`
+    ),
+    [
+      plural(s.nodes, ["task", "tasks"], ["nodo", "nodos"]),
+      plural(s.edges, ["dependency", "dependencies"], ["arista", "aristas"]),
+      `${plural(s.stages.length, ["stage", "stages"], ["etapa", "etapas"])} (${how})`
+    ].join(" \xB7 "),
+    ...s.stages.map((stage) => `  ${stage.name}: ${stage.nodes}`),
+    // desde #35 el import nunca manda `blocked`: «te esperan» siempre daba 0 (#38); se cuentan los avisos
+    [
+      t(
+        `Status: ${st.pending} pending \xB7 ${st.working} in progress \xB7 ${st.done} done`,
+        `Estados: ${st.pending} pendientes \xB7 ${st.working} en progreso \xB7 ${st.done} listas`
+      ),
+      ...s.asksHuman ? [
+        s.asksHuman === 1 ? t("1 asks a person for something", "1 pide algo a una persona") : t(`${s.asksHuman} ask a person for something`, `${s.asksHuman} piden algo a una persona`)
+      ] : []
+    ].join(" \xB7 ")
+  ];
+  if (s.titled !== void 0) lines.push(t(`Titles from --titles: ${s.titled} of ${s.nodes}`, `T\xEDtulos de --titles: ${s.titled} de ${s.nodes}`));
+  if (r.warnings.length) {
+    lines.push(t(`Warnings (${r.warnings.length}):`, `Avisos (${r.warnings.length}):`), ...r.warnings.map((w) => `  - ${w}`));
+  }
+  return `${lines.join("\n")}
+`;
+}
+function globalHelp() {
+  const rows = Object.entries(COMMANDS).map(([name, c]) => `  ${name.padEnd(14)} ${tx(c.summary)}`);
+  return t(
+    `dagyard ${VERSION} \u2014 the factory's plan as a live DAG
+
+Usage: dagyard <command> [options]
+
+Commands:
+${rows.join("\n")}
+  start | progress | done   shortcuts for node start | node progress | node done
+
+${tx(HELP_GLOBAL)}
+`,
+    `dagyard ${VERSION} \u2014 el plan de la f\xE1brica como un DAG vivo
+
+Uso: dagyard <comando> [opciones]
+
+Comandos:
+${rows.join("\n")}
+  start | progress | done   atajos de node start | node progress | node done
+
+${tx(HELP_GLOBAL)}
+`
+  );
+}
+function groupHelp(group) {
+  const rows = Object.entries(COMMANDS).filter(([name]) => name.startsWith(`${group} `)).map(([, c]) => `  ${tx(c.usage)}
+      ${tx(c.summary)}`);
+  return `${t("Usage", "Uso")}:
+${rows.join("\n")}
+
+${tx(HELP_GLOBAL)}
+`;
+}
+function commandHelp(c) {
+  const summary = tx(c.summary);
+  return `${t("Usage", "Uso")}: ${tx(c.usage)}
+
+${summary.charAt(0).toUpperCase()}${summary.slice(1)}.
+${tx(c.help)}
+
+${tx(HELP_GLOBAL)}
+`;
+}
+
+// src/main.ts
+var code = await run(process.argv.slice(2), {
+  stdout: (s) => process.stdout.write(s),
+  stderr: (s) => process.stderr.write(s),
+  env: process.env
+});
+process.exitCode = code;
