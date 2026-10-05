@@ -33,7 +33,7 @@ la tapan con `***`).
 | `node add\|update\|start\|progress\|done`, `edge add` | mutan el DAG (`start`, `progress`, `done` también como atajo). `node add\|update --link <url>` cuelga el issue o el PR: la ficha lo muestra como «Detalle técnico ↗» |
 | `node close`, `goal add`, `request add` | #90: `node close <n> --as done\|replaced\|dropped\|learned --why …` cierra con motivo (nunca se borra un nodo); `goal add` y `request add --quote …` son atajos de `node add --kind`. `node add --from <n> --why …` dice de qué nació; `edge add <a> <b> --kind origin` también |
 | `block <nodo> --kind decision\|review\|access --q "…" [--opt …]` | abre un bloqueante e imprime su id |
-| `wait <nodo> [--blocker <id>]` | long-poll hasta que el humano resuelve; imprime la elección o el valor |
+| `wait <nodo> [--blocker <id>] [--timeout <seg>]` | long-poll hasta que el humano resuelve; imprime la elección o el valor. Un long-poll que falla por la red, un 5xx o un 429 se reintenta con backoff (1 s → 10 s) sin pasar el plazo; un 4xx corta con exit 1 (#94) |
 | `msg <nodo> "…" [--report <url>]` | mensaje ≤280 caracteres |
 | `next` | `/goal …` en una sola línea (exit 3 si no hay nada arrancable); el link de la tarea va por stderr (`en el cielo: …`) y en `--json` como `link` |
 | `open [<tarea>] [--print]` | imprime el link del cielo al proyecto (`<url>/?p=<proyecto>`) o a la tarea (`&n=<tarea>`, abre su ficha) y en macOS lo abre; `--print` solo lo imprime. No usa la key |

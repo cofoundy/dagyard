@@ -87,8 +87,8 @@ function addNodeCommand(fixed?: NodeKind): Command {
   const cmd = fixed ? `${fixed} add` : 'node add';
   return {
     usage: [
-      `dagyard ${cmd} <node> --title "…"${opts} [--from <node> [--why "…"]]… [--stage <stage>] [--goal "…"] [--team "…"] [--dep <node>]… [--status <status>] [--link <url>]`,
-      `dagyard ${cmd} <nodo> --title "…"${opts} [--from <nodo> [--why "…"]]… [--stage <etapa>] [--goal "…"] [--team "…"] [--dep <nodo>]… [--status <estado>] [--link <url>]`,
+      `dagyard ${cmd} <node> --title "…"${opts} [--from <node> [--why "…"]]… [--stage <stage>] [--goal "…"] [--team "…"] [--dep <node>]… [--status <status>] [--report <url>] [--link <url>]`,
+      `dagyard ${cmd} <nodo> --title "…"${opts} [--from <nodo> [--why "…"]]… [--stage <etapa>] [--goal "…"] [--team "…"] [--dep <nodo>]… [--status <estado>] [--report <url>] [--link <url>]`,
     ],
     summary:
       fixed === 'goal'
@@ -104,7 +104,8 @@ it), stream (ongoing work that spawns tasks). ${fixed ? `This is node add --kind
 --from <node> says which node this one was born from (repeat it); the --why right after it says why. Born-from is not
 a dependency: it never blocks. --dep is a dependency: this node needs <dep> closed.
 Without --stage it goes to the project's first stage. Statuses: pending, working, done (blocked is set by dagyard
-block). --link is the technical detail (the issue or PR URL). Prints only the id.`,
+block). --report attaches its report (Basalt or the PR); --link is the technical detail (the issue or PR URL).
+Prints only the id.`,
       `<nodo> es un id corto (T-314-A se guarda como t-314-a). --dep se repite o va separado por comas.
 Tipos: task (un dueño, una sesión, un /goal; la única que arranca), goal (un resultado vivo; nace En progreso y nunca
 se cierra como lista), request (el pedido de una persona: --quote es su cita literal, --author quién lo dijo), stream
@@ -112,7 +113,8 @@ se cierra como lista), request (el pedido de una persona: --quote es su cita lit
 --from <nodo> dice de qué nodo nació este (se repite); el --why que va justo después dice por qué. Nacer de no es
 depender: nunca bloquea. --dep sí es una dependencia: este nodo necesita <dep> cerrado.
 Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done (blocked lo pone dagyard block).
---link es el detalle técnico (URL del issue o del PR). Imprime solo el id.`,
+--report cuelga su informe (Basalt o el PR); --link es el detalle técnico (URL del issue o del PR). Imprime
+solo el id.`,
     ],
     flags: ['title', 'stage', 'goal', 'team', 'dep', 'status', 'report', 'link', 'from', 'why', ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
     async run({ io, args }) {
@@ -151,7 +153,7 @@ Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done 
   };
 }
 
-const COMMANDS: Record<string, Command> = {
+export const COMMANDS: Record<string, Command> = {
   'node add': addNodeCommand(),
   'goal add': addNodeCommand('goal'),
   'request add': addNodeCommand('request'),
@@ -303,8 +305,8 @@ cierran).`,
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"]',
-      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"]',
+      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--json]',
     ],
     summary: ['asks a person for a decision, a review or an access', 'le pide al humano una decisión, una revisión o un acceso'],
     help: [
@@ -368,6 +370,7 @@ Sin --timeout espera para siempre. Exit 2 si vence.`,
       const proj = project(io, args);
       const blockerId = flag(args, 'blocker') ?? (await blockerOf(api, proj, nodeId(id)));
       const deadline = timeout > 0 ? Date.now() + timeout * 1000 : Infinity;
+      let failures = 0;
       for (;;) {
         const left = Math.ceil((deadline - Date.now()) / 1000);
         if (left <= 0) {
@@ -377,9 +380,12 @@ Sin --timeout espera para siempre. Exit 2 si vence.`,
         let result: BlockerWaitResult | null;
         try {
           result = await api.waitOnce(proj, blockerId, Math.min(25, left));
+          failures = 0;
         } catch (err) {
-          if (err instanceof ApiRequestError && (err.status === 0 || err.status >= 502)) {
-            await sleep(2000); // red o proxy caídos: reintenta sin perder la espera
+          if (err instanceof ApiRequestError && waitTransient(err)) {
+            // un long-poll suelto que falla no corta la espera (#94): backoff corto, nunca más allá del plazo
+            const backoff = WAIT_BACKOFF_MS[Math.min(failures++, WAIT_BACKOFF_MS.length - 1)]!;
+            await sleep(Math.max(0, Math.min(backoff, deadline - Date.now())));
             continue;
           }
           throw err;
@@ -986,6 +992,16 @@ function nodeId(raw: string): string {
 }
 
 /** El último bloqueante abierto del nodo; si no hay, el último resuelto. */
+/** Esperas de `wait` entre long-polls fallidos (#94): crecen hasta 10 s y vuelven a 1 s tras una vuelta buena. */
+export const WAIT_BACKOFF_MS = [1000, 2000, 5000, 10_000];
+
+/**
+ * ¿Un long-poll fallido merece otra vuelta? Sí ante la red, cualquier 5xx (`internal`, `unavailable`,
+ * `overloaded`, el borde) o un 429: el bloqueante sigue ahí. Un 4xx (`not_found`, `unauthorized`,
+ * `forbidden`, una petición mal hecha) no cambia por esperar, así que corta.
+ */
+const waitTransient = (err: ApiRequestError) => err.status === 0 || err.status >= 500 || err.status === 429;
+
 async function blockerOf(api: DagyardClient, proj: string, node: string): Promise<string> {
   const mine = (await api.snapshot(proj)).blockers
     .filter((b) => b.nodeId === node)
