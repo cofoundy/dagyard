@@ -170,7 +170,8 @@ app.get('/api/projects', async (c) => {
   const db = dbOf(c.env);
   const [p, n, b] = await db.batch<Record<string, unknown>>([
     db.prepare('SELECT * FROM projects ORDER BY updated_at DESC'),
-    db.prepare('SELECT project_id, status, COUNT(*) AS n FROM nodes GROUP BY project_id, status'),
+    // solo las tareas: un goal, un request o un stream no se cuenta (#90)
+    db.prepare("SELECT project_id, status, COUNT(*) AS n FROM nodes WHERE kind = 'task' GROUP BY project_id, status"),
     db.prepare("SELECT project_id, COUNT(*) AS n FROM blockers WHERE status = 'open' GROUP BY project_id"),
   ]);
   const projects: ProjectSummary[] = p!.results.map((r) => {

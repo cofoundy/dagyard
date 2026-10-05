@@ -38,7 +38,7 @@ describe('cuatro tipos (#90)', () => {
     const r = await json(await addNode(pid, { id: 'r', title: 'Hazlo DAG', kind: 'request' }), 400);
     expect(r.error.message).toMatch(/cita/);
     const req = await json<DagNode>(await addNode(pid, { id: 'r', title: 'Hazlo DAG', kind: 'request', quote: 'no tenía que ser árbol, tenía que ser DAG', quoteBy: 'André' }), 201);
-    expect(req).toMatchObject({ kind: 'request', status: 'pending', quote: 'no tenía que ser árbol, tenía que ser DAG', quoteBy: 'André' });
+    expect(req).toMatchObject({ kind: 'request', status: 'working', quote: 'no tenía que ser árbol, tenía que ser DAG', quoteBy: 'André' });
     await json(await addNode(pid, { id: 't', title: 'T', quote: 'cita' }), 400);
     await json(await addNode(pid, { id: 'g2', title: 'G', kind: 'goal', status: 'done' }), 400);
   });
@@ -76,6 +76,78 @@ describe('cuatro tipos (#90)', () => {
     const r = await json(await patch(pid, 'g', { status: 'done' }), 400);
     expect(r.error.message).toMatch(/no se cierra como «done»/);
     await json(await patch(pid, 'g', { closedAs: 'dropped' }), 400);
+  });
+});
+
+describe('revisión adversarial (#90)', () => {
+  it('un request nace working; GET /api/projects cuenta solo las tasks', async () => {
+    const pid = await project();
+    expect((await json<DagNode>(await addNode(pid, { id: 'r', title: 'R', kind: 'request', quote: 'q' }), 201)).status).toBe('working');
+    await json(await addNode(pid, { id: 'g', title: 'G', kind: 'goal' }), 201);
+    await json(await addNode(pid, { id: 's', title: 'S', kind: 'stream' }), 201);
+    await json(await addNode(pid, { id: 't', title: 'T' }), 201);
+    const { projects } = await json<{ projects: Array<{ id: string; counts: Record<string, number> }> }>(await api('/api/projects'), 200);
+    expect(projects.find((p) => p.id === pid)!.counts).toEqual({ total: 1, pending: 1, working: 0, blocked: 0, done: 0 });
+  });
+
+  it('abrir un bloqueante sobre un nodo cerrado → 409 (no lo reabre en silencio)', async () => {
+    const pid = await project();
+    await json(await addNode(pid, { id: 'a', title: 'A' }), 201);
+    await json(await close(pid, 'a', { as: 'dropped', why: 'ya no' }), 200);
+    const r = await json(await api(`/api/projects/${pid}/nodes/a/blockers`, { method: 'POST', body: { kind: 'decision', question: '¿Sí?', options: ['Sí'] } }), 409);
+    expect(r.error.code).toBe('conflict');
+    expect(node(await snap(pid), 'a')).toMatchObject({ status: 'done', closedAs: 'dropped' });
+  });
+
+  it('reemplazar por algo cuya cadena termina en un goal o stream → 400; volver goal al destino de un reemplazo → 400', async () => {
+    const pid = await project();
+    for (const id of ['a', 'b', 'c']) await json(await addNode(pid, { id, title: id }), 201);
+    await json(await addNode(pid, { id: 'g', title: 'G', kind: 'goal' }), 201);
+    await json(await addNode(pid, { id: 's', title: 'S', kind: 'stream' }), 201);
+    expect((await json(await close(pid, 'a', { as: 'replaced', by: 'g', why: 'x' }), 400)).error.message).toMatch(/nunca se cierra/);
+    await json(await close(pid, 'a', { as: 'replaced', by: 's', why: 'x' }), 400);
+    // c es destino del reemplazo de b: volverla goal o stream dejaría a quien necesita b esperando para siempre
+    await json(await close(pid, 'b', { as: 'replaced', by: 'c', why: 'unidas' }), 200);
+    await json(await patch(pid, 'c', { kind: 'goal' }), 400);
+    await json(await patch(pid, 'c', { kind: 'stream' }), 400);
+    // por cadena: a reemplazada por b, que ya está reemplazada por c (task): vale; si la cadena terminara en goal, no
+    await json(await close(pid, 'a', { as: 'replaced', by: 'b', why: 'x' }), 200);
+    // un goal reemplazado por otro goal sí vale: nada puede necesitar a un goal, así que no bloquea a nadie
+    await json(await addNode(pid, { id: 'g2', title: 'G2', kind: 'goal' }), 201);
+    await json(await close(pid, 'g', { as: 'replaced', by: 'g2', why: 'nuevo norte' }), 200);
+  });
+
+  it('unir dos por la API: C necesita A, A se cierra reemplazada por C → next devuelve C', async () => {
+    const pid = await project();
+    await json(await addNode(pid, { id: 'a', title: 'A', status: 'working' }), 201);
+    await json(await addNode(pid, { id: 'c', title: 'C', deps: ['a'] }), 201);
+    expect((await next(pid)).node).toBeNull();
+    await json(await close(pid, 'a', { as: 'replaced', by: 'c', why: 'unidas' }), 200);
+    expect((await next(pid)).node?.id).toBe('c');
+  });
+
+  it('PUT: un node.updated por cada nodo que cierra como dropped, después de project.replaced', async () => {
+    const pid = uniquePid('m');
+    await json(await put(pid, { name: 'P', nodes: [{ id: 'a', title: 'A' }, { id: 'b', title: 'B' }, { id: 'c', title: 'C', status: 'done' }] }), 200);
+    const seq = (await snap(pid)).seq;
+    await json(await put(pid, { name: 'P', nodes: [{ id: 'a', title: 'A' }] }), 200);
+    const evs = await eventsSince(pid, seq);
+    expect(evs.map((e) => e.type)).toEqual(['project.replaced', 'node.updated']);
+    expect((evs[1] as Extract<DagEvent, { type: 'node.updated' }>).payload.node).toMatchObject({ id: 'b', closedAs: 'dropped' });
+  });
+
+  it('PUT: un nodo ausente que sigue abierto conserva sus «necesita» hacia nodos del cuerpo; si arman ciclo con los deps → 400', async () => {
+    const pid = uniquePid('m');
+    await json(await put(pid, { name: 'P', nodes: [{ id: 'x', title: 'X' }, { id: 'b', title: 'B', deps: ['x'] }, { id: 'c', title: 'C' }] }), 200);
+    await json(await api(`/api/projects/${pid}/edges`, { method: 'POST', body: { from: 'c', to: 'x' } }), 201);
+    // x espera al dueño: no se descarta
+    await json(await api(`/api/projects/${pid}/nodes/x/blockers`, { method: 'POST', body: { kind: 'decision', question: '¿Sí?', options: ['Sí'] } }), 201);
+    const s = await json<ProjectSnapshot>(await put(pid, { name: 'P', nodes: [{ id: 'b', title: 'B' }, { id: 'c', title: 'C' }] }), 200);
+    expect(node(s, 'x').status).toBe('blocked');
+    expect(s.edges.map((e) => [e.from, e.to]).sort()).toEqual([['c', 'x'], ['x', 'b']]);
+    // c necesita b por el cuerpo: c → x → b → c sería un ciclo
+    const r = await json(await put(pid, { name: 'P', nodes: [{ id: 'b', title: 'B' }, { id: 'c', title: 'C', deps: ['b'] }] }), 400);
+    expect(r.error.code).toBe('cycle');
   });
 });
 

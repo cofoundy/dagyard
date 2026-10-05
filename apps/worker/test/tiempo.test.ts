@@ -211,7 +211,7 @@ describe('startedAt / doneAt los pone el servidor en las transiciones (#75)', ()
     for (const k of ['startedAt', 'doneAt']) await json(await patchNode(pid, 'a', { [k]: '2026-10-04T10:00:00Z' }), 400);
   });
 
-  it('por bloqueantes: bloquear una lista le quita doneAt; responder la pone en marcha (startedAt si nunca arrancó)', async () => {
+  it('por bloqueantes: una lista no se bloquea (#90); reabrirla le quita doneAt; responder la pone en marcha (startedAt si nunca arrancó)', async () => {
     const pid = await project([{ id: 'a' }, { id: 'b', status: 'done' }]);
     const s0 = await snap(pid);
     expect(node(s0, 'b').doneAt).toEqual(expect.any(String));
@@ -219,6 +219,10 @@ describe('startedAt / doneAt los pone el servidor en las transiciones (#75)', ()
       api(`/api/projects/${pid}/nodes/${nid}/blockers`, { method: 'POST', body: { kind: 'decision', question: '¿Seguimos?', options: ['Sí', 'No'] } }).then((r) =>
         json<Blocker>(r, 201),
       );
+    // #90: una lista no se bloquea (409); se reabre primero, y ahí pierde doneAt
+    await json(await api(`/api/projects/${pid}/nodes/b/blockers`, { method: 'POST', body: { kind: 'decision', question: '¿Seguimos?', options: ['Sí'] } }), 409);
+    expect(node(await snap(pid), 'b')).toMatchObject({ status: 'done', doneAt: node(s0, 'b').doneAt });
+    await json(await api(`/api/projects/${pid}/nodes/b`, { method: 'PATCH', body: { status: 'working' } }), 200);
     const bb = await block('b');
     expect(node(await snap(pid), 'b')).toMatchObject({ status: 'blocked', doneAt: null });
     const ba = await block('a');

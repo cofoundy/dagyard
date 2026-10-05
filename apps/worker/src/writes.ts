@@ -320,13 +320,14 @@ class Tx {
 
 /**
  * Nodo nuevo con las reglas del servidor: `done` → progress 1 (y cerrado como `done`, #90). Sin etapa, la primera
- * del proyecto; un `goal` o `stream` nace `working` (está vivo); `bornAt` nunca en el futuro (se recorta a ahora).
+ * del proyecto; un `goal`, `request` o `stream` nace `working` (está vivo); `bornAt` nunca en el futuro (se recorta a ahora).
  */
 function newNode(pid: string, input: NodeInput, stages: Stage[], now: string, at = ''): DagNode {
   const stage = input.stage ?? stages[0]?.id ?? fail('invalid', `${at}stage: el proyecto no tiene etapas`);
   if (!stages.some((s) => s.id === stage)) fail('invalid', `${at}stage: «${stage}» no es una etapa del proyecto`);
   const kind = input.kind ?? 'task';
-  const status = input.status ?? (neverDone(kind) ? 'working' : 'pending');
+  // solo una task espera a arrancar: un goal, un request o un stream nace vivo
+  const status = input.status ?? (kind === 'task' ? 'pending' : 'working');
   if (status === 'done' && neverDone(kind)) fail('invalid', `${at}status: ${neverClosesDone(kind)}`);
   if (kind === 'request' && !input.quote) fail('invalid', `${at}quote: un pedido (request) lleva la cita literal de la persona`);
   if (kind !== 'request' && (input.quote || input.quoteBy)) fail('invalid', `${at}quote: solo un pedido (request) lleva cita`);
@@ -534,9 +535,14 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
       const k = kindOf.get(e.from)!;
       if (neverDone(k as NodeKind)) fail('invalid', `nodes: ${neverNeeded(e.from, k)}`);
     }
-    // las aristas «necesita» que llegan a un nodo del cuerpo salen de sus `deps`; las que llegan a uno que no viene se
-    // quedan (no arman ciclos: las que salen de él hacia el cuerpo ya no están)
-    const keptEdges = absent.length ? tx.edges(pid).filter((e) => absentIds.has(e.to)) : [];
+    // los que no vienen y siguen abiertos se descartan, salvo que esperen una respuesta del dueño (siguen esperándola)
+    const openAsked = new Set(keptOpen.map((b) => b.node_id as string));
+    const stillOpen = new Set(absent.filter((r) => r.status !== 'done' && openAsked.has(r.id as string)).map((r) => r.id as string));
+    // las aristas «necesita» que llegan a un nodo del cuerpo salen de sus `deps`, salvo las de un nodo que no viene y
+    // sigue abierto (lo siguen esperando); las que llegan a uno que no viene se quedan
+    const keptEdges = absent.length ? tx.edges(pid).filter((e) => absentIds.has(e.to) || stillOpen.has(e.from)) : [];
+    const cyc = findCycle([...nodes.map((n) => n.id), ...absentIds], [...edges, ...keptEdges]);
+    if (cyc) fail('cycle', `ciclo en las dependencias (con las tareas que el cuerpo no trae): ${cyc.join(' → ')}`);
     // «nació de»: los existentes se conservan y se suman los del cuerpo (#90)
     const prevOrigins = preserve ? tx.origins(pid) : [];
     const originKey = (from: string, to: string) => `${from}\u0000${to}`;
@@ -553,8 +559,6 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     const allIds = [...nodes.map((n) => n.id), ...absentIds];
     const ocyc = findCycle(allIds, [...prevOrigins, ...newOrigins]);
     if (ocyc) fail('cycle', `ciclo en «nació de»: ${ocyc.join(' → ')}`);
-    // los que no vienen y siguen abiertos se descartan, salvo que esperen una respuesta del dueño (siguen esperándola)
-    const openAsked = new Set(keptOpen.map((b) => b.node_id as string));
     const absentRows = absent.map((r) =>
       r.status === 'done' || openAsked.has(r.id as string)
         ? r
@@ -599,7 +603,9 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
       const from = m.from ?? signature(byId.get(m.nodeId)!, lang);
       tx.insertMessage({ id: randomId('m_'), projectId: pid, nodeId: m.nodeId, from, text: m.text, reportUrl: m.reportUrl ?? null, createdAt: tx.now });
     });
-    tx.emit(pid, actor, { type: 'project.replaced', payload: { project } });
+    // cada descarte es un cambio de su nodo: sale en el log, después del reemplazo
+    const dropped = absentRows.filter((r, i) => r !== absent[i]).map((r) => toNode(r));
+    tx.emit(pid, actor, { type: 'project.replaced', payload: { project } }, ...dropped.map((node) => ({ type: 'node.updated' as const, payload: { node } })));
     return null;
   },
 
@@ -676,6 +682,8 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
       fail('invalid', `kind: la tarea está cerrada como «done» y un ${kind} no se cierra así; reábrela antes de cambiarle el tipo`);
     if (neverDone(kind) && patch.kind !== undefined && tx.edges(pid).some((e) => e.from === nid))
       fail('invalid', `kind: otras tareas necesitan a «${nid}»; un ${kind} nunca se cierra y las bloquearía para siempre`);
+    if (neverDone(kind) && patch.kind !== undefined && tx.all("SELECT kind FROM nodes WHERE project_id = ? AND replaced_by = ?", pid, nid).some((r) => !neverDone(r.kind as NodeKind)))
+      fail('invalid', `kind: «${nid}» reemplaza a otra tarea; un ${kind} nunca se cierra y bloquearía a quien necesitaba la reemplazada`);
     if (kind === 'request') {
       if (!(patch.quote !== undefined ? patch.quote : prev.quote)) fail('invalid', 'quote: un pedido (request) lleva la cita literal de la persona');
     } else if (patch.quote || patch.quoteBy) fail('invalid', 'quote: solo un pedido (request) lleva cita');
@@ -722,10 +730,15 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
       // la cadena de reemplazos no puede volver a esta tarea (lo arrancable la sigue hasta el final)
       const replacedBy = new Map(tx.all('SELECT id, replaced_by FROM nodes WHERE project_id = ? AND replaced_by IS NOT NULL', pid).map((r) => [r.id as string, r.replaced_by as string]));
       const seen = new Set<string>();
+      let end = by;
       for (let n: string | undefined = by; n && !seen.has(n); n = replacedBy.get(n)) {
         if (n === nid) fail('cycle', `«${by}» ya está reemplazada (en cadena) por «${nid}»: ese reemplazo cerraría un ciclo`);
         seen.add(n);
+        end = n;
       }
+      // quien necesitaba esta tarea pasa a esperar al final de la cadena: un goal o stream nunca se cierra
+      const endKind = tx.kindOf(pid, end);
+      if (!neverDone(kind) && neverDone(endKind)) fail('invalid', `by: la cadena de reemplazos termina en «${end}», un ${endKind}: nunca se cierra y bloquearía para siempre a quien necesita «${nid}»`);
     }
     // una tarea lista exige evidencia: un porqué o un informe (el del cuerpo o el que ya tenía)
     if (input.as === 'done' && kind === 'task' && !why && !input.reportUrl && !prev.reportUrl)
@@ -779,7 +792,9 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
 
   openBlocker(tx, { pid, nid, input, actor }) {
     const { lang } = tx.project(pid);
-    tx.node(pid, nid);
+    // una pregunta no reabre en silencio un nodo cerrado (#90): primero se reabre, con su porqué en el log
+    const target = tx.node(pid, nid);
+    if (target.status === 'done') fail('conflict', `La tarea «${target.title}» está cerrada (${target.closedAs ?? 'done'}); reábrela antes de preguntar`);
     const blocker = newBlocker(pid, nid, withDefaultOptions(input, lang), tx.now);
     tx.insertBlocker(blocker);
     // solo la columna de estado: el resto del nodo queda como esté
