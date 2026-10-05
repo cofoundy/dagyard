@@ -88,6 +88,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return reply(res, 200, { id: nodeId });
   }
   if (req.method === 'POST' && kind === 'edges') return reply(res, 201, { projectId, ...(body as object) });
+  if (req.method === 'POST' && kind === 'nodes' && sub === 'close') return reply(res, 200, { id: nodeId, status: 'done', closedAs: (body as { as: string }).as });
   if (req.method === 'POST' && sub === 'messages') {
     const text = (body as { text: string }).text;
     if (text.length > 280) return reply(res, 400, { error: { code: 'invalid', message: 'largo' } });
@@ -191,6 +192,9 @@ describe('ayuda', () => {
     ['node', 'start'],
     ['node', 'progress'],
     ['node', 'done'],
+    ['node', 'close'],
+    ['goal', 'add'],
+    ['request', 'add'],
     ['edge', 'add'],
     ['block'],
     ['wait'],
@@ -253,6 +257,83 @@ describe('mutar el DAG', () => {
     const r = await cli(['edge', 'add', 'diseno', 'pagos', '-p', 'Otro Proyecto']);
     expect(r.code).toBe(0);
     expect(last()).toMatchObject({ method: 'POST', path: '/api/projects/otro-proyecto/edges', body: { from: 'diseno', to: 'pagos' } });
+  });
+});
+
+describe('el modelo del DAG (#90)', () => {
+  it('node add: --kind, --quote, --author y --from con su --why; sin --stage no la manda; imprime solo el id', async () => {
+    const r = await cli(['node', 'add', 'Pedido-11', '--title', 'Que sea un DAG', '--kind', 'request', '--quote', 'no tenía que ser árbol', '--author', 'André', '--from', 'G-1', '--why', 'para el panel', '--from', 'otra']);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe('pedido-11\n');
+    expect(last()).toMatchObject({ method: 'POST', path: '/api/projects/demo/nodes' });
+    expect(last().body).toEqual({
+      id: 'pedido-11',
+      title: 'Que sea un DAG',
+      kind: 'request',
+      quote: 'no tenía que ser árbol',
+      quoteBy: 'André',
+      origins: [{ from: 'g-1', why: 'para el panel' }, { from: 'otra' }],
+      deps: [],
+    });
+  });
+
+  it('goal add y request add son atajos de node add --kind', async () => {
+    expect((await cli(['goal', 'add', 'panel', '--title', 'Panel vivo'])).stdout).toBe('panel\n');
+    expect(last().body).toMatchObject({ id: 'panel', title: 'Panel vivo', kind: 'goal' });
+    const r = await cli(['request', 'add', 'p7', '--title', 'Hazlo DAG', '--quote', 'hazlo DAG', '--author', 'André', '--from', 'panel']);
+    expect(r.code).toBe(0);
+    expect(last().body).toMatchObject({ id: 'p7', kind: 'request', quote: 'hazlo DAG', quoteBy: 'André', origins: [{ from: 'panel' }] });
+  });
+
+  it('errores de uso sin llamar al servidor: request sin cita, cita fuera de un request, --why sin --from, --kind raro', async () => {
+    for (const argv of [
+      ['request', 'add', 'p', '--title', 'P'],
+      ['node', 'add', 'p', '--title', 'P', '--quote', 'q'],
+      ['goal', 'add', 'g', '--title', 'G', '--quote', 'q'],
+      ['goal', 'add', 'g', '--title', 'G', '--kind', 'task'],
+      ['node', 'add', 'p', '--title', 'P', '--why', 'sin origen', '--from', 'a'],
+      ['node', 'add', 'p', '--title', 'P', '--from', 'a', '--why', 'uno', '--why', 'dos'],
+      ['node', 'add', 'p', '--title', 'P', '--kind', 'epica'],
+    ]) {
+      const r = await cli(argv);
+      expect(r.code, argv.join(' ')).toBe(EXIT.usage);
+    }
+    expect(seen).toHaveLength(0);
+    const es = await cli(['request', 'add', 'p', '--title', 'P']);
+    expect(es.stderr).toContain('necesita --quote');
+    const en = await cli(['request', 'add', 'p', '--title', 'P'], { LANG: 'en_US.UTF-8' });
+    expect(en.stderr).toContain('needs --quote');
+  });
+
+  it('node close: manda {as, why, by, reportUrl} a …/close e imprime solo el id', async () => {
+    let r = await cli(['node', 'close', 'T-1', '--as', 'replaced', '--by', 'T-2', '--why', 'partida en dos']);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe('t-1\n');
+    expect(last()).toMatchObject({ method: 'POST', path: '/api/projects/demo/nodes/t-1/close', body: { as: 'replaced', by: 't-2', why: 'partida en dos' } });
+    r = await cli(['node', 'close', 'a', '--as', 'done', '--report', 'https://basalt.example/r']);
+    expect(last().body).toEqual({ as: 'done', reportUrl: 'https://basalt.example/r' });
+  });
+
+  it('node close: --as obligatorio y conocido, --by solo con replaced, porqué para replaced/dropped/learned', async () => {
+    for (const argv of [
+      ['node', 'close', 'a'],
+      ['node', 'close', 'a', '--as', 'borrada'],
+      ['node', 'close', 'a', '--as', 'replaced', '--why', 'x'],
+      ['node', 'close', 'a', '--as', 'done', '--by', 'b'],
+      ['node', 'close', 'a', '--as', 'dropped'],
+      ['node', 'close', 'a', '--as', 'learned'],
+    ]) {
+      expect((await cli(argv)).code, argv.join(' ')).toBe(EXIT.usage);
+    }
+    expect(seen).toHaveLength(0);
+  });
+
+  it('edge add --kind origin --why manda un «nació de»; --why sin origin es error', async () => {
+    const r = await cli(['edge', 'add', 'panel', 'p7', '--kind', 'origin', '--why', 'sale del panel']);
+    expect(r.code).toBe(0);
+    expect(last().body).toEqual({ from: 'panel', to: 'p7', kind: 'origin', why: 'sale del panel' });
+    expect((await cli(['edge', 'add', 'a', 'b', '--why', 'x'])).code).toBe(EXIT.usage);
+    expect((await cli(['edge', 'add', 'a', 'b', '--kind', 'nace'])).code).toBe(EXIT.usage);
   });
 });
 

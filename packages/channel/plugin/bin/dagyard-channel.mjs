@@ -14059,7 +14059,9 @@ var ROUTES = {
   nodes: (projectId) => `/api/projects/${p(projectId)}/nodes`,
   /** PATCH: actualiza un nodo. */
   node: (projectId, nodeId) => `/api/projects/${p(projectId)}/nodes/${p(nodeId)}`,
-  /** POST: crea una arista `{ from, to }`. */
+  /** POST: cierra un nodo con motivo `{ as, why?, by?, reportUrl? }` (#90). */
+  close: (projectId, nodeId) => `/api/projects/${p(projectId)}/nodes/${p(nodeId)}/close`,
+  /** POST: crea una arista `{ from, to, kind?, why? }`: «necesita» o, con `kind: 'origin'`, «nació de» (#90). */
   edges: (projectId) => `/api/projects/${p(projectId)}/edges`,
   /** POST: abre un bloqueante sobre el nodo. */
   blockers: (projectId, nodeId) => `/api/projects/${p(projectId)}/nodes/${p(nodeId)}/blockers`,
@@ -14116,8 +14118,14 @@ var DagyardClient = class {
   updateNode(projectId, nodeId, patch) {
     return this.json("PATCH", ROUTES.node(projectId, nodeId), patch);
   }
-  addEdge(projectId, from, to) {
-    return this.json("POST", ROUTES.edges(projectId), { from, to });
+  /** Sin `kind`, «necesita»; `kind: 'origin'` = «nació de», con su `why` (#90). */
+  addEdge(projectId, from, to, opts = {}) {
+    const body = opts.kind === "origin" ? { from, to, kind: "origin", ...opts.why ? { why: opts.why } : {} } : { from, to };
+    return this.json("POST", ROUTES.edges(projectId), body);
+  }
+  /** Cierra con motivo (#90): lista, reemplazada, descartada o «aprendimos». */
+  closeNode(projectId, nodeId, input) {
+    return this.json("POST", ROUTES.close(projectId, nodeId), input);
   }
   openBlocker(projectId, nodeId, input) {
     return this.json("POST", ROUTES.blockers(projectId, nodeId), input);
@@ -14219,7 +14227,11 @@ var LIMITS = {
   url: 2048,
   accessValue: 4096,
   note: 1e3,
-  nodesPerProject: 500
+  nodesPerProject: 500,
+  /** #90 */
+  quote: 1e3,
+  closedReason: 500,
+  originWhy: 280
 };
 
 // ../model/dist/validate.js
@@ -14236,6 +14248,7 @@ function slugify2(text2) {
   const s = text2.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, LIMITS.slug).replace(/-+$/g, "");
   return s || "x";
 }
+var BORN_AT_FUTURE_MS = TEAM_LIMITS.future;
 
 // ../model/dist/demo.js
 var IDS = { en: "booking-marketplace", es: "marketplace-reservas" };

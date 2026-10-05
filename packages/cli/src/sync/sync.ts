@@ -10,7 +10,8 @@
  * - La etiqueta `epic` no crea nodo; si ya existe, se sincroniza normal.
  * - Un nodo cuyo `link` es de otro issue (otro repo con el mismo número) se salta con aviso (#50).
  * - Completado = `state_reason` `completed` o null; `not_planned` y `duplicate` no cuentan (#50).
- * - Aristas solo si ambos nodos existen; nunca borra. `founder-input` → bloqueante `decision`, solo si el
+ * - Aristas solo si ambos nodos existen; nunca borra. «Parte de #n» y «depende de #n» son «necesita»; «sale de la
+ *   revisión de #n», «nace de #n» o «born from #n», «nació de» desde `gh-n` (#90). `founder-input` → bloqueante `decision`, solo si el
  *   nodo no tiene ninguna decisión (abierta o resuelta, con cualquier texto: contrato #31).
  * - Nunca crea etapas: la de `--stage` (o la de construcción) se reconoce por id o nombre en cualquier idioma, y
  *   las opciones por defecto van en el idioma del proyecto, no en el de `LANG` (#77).
@@ -74,6 +75,8 @@ export async function syncGithub(api: SyncApi, source: GithubSource, projectId: 
 
   const nodes = new Map<string, Pick<DagNode, 'id' | 'status' | 'link'>>(snap.nodes.map((n) => [n.id, n]));
   const edges: Array<Pick<Edge, 'from' | 'to'>> = snap.edges.map((e) => ({ from: e.from, to: e.to }));
+  // «nació de» (#90); un servidor previo no trae `origins`
+  const origins: Array<Pick<Edge, 'from' | 'to'>> = (snap.origins ?? []).map((o) => ({ from: o.from, to: o.to }));
   const report: SyncReport = {
     repo: opts.repo,
     project: projectId,
@@ -207,6 +210,32 @@ export async function syncGithub(api: SyncApi, source: GithubSource, projectId: 
       updated.add(self);
       report.actions.push(`${from} → ${to}`);
     }
+    // «nació de»: este nodo nació de gh-n
+    for (const n of refs.bornFrom) {
+      const from = nodeIdOf(n);
+      if (from === self || !nodes.has(from) || foreign.has(from) || foreign.has(self)) continue;
+      if (origins.some((o) => o.from === from && o.to === self)) continue;
+      if (dry) {
+        if (wouldCreateCycle(origins, from, self)) {
+          report.warnings.push(bornCycleWarning(from, self));
+          continue;
+        }
+      } else {
+        try {
+          await api.addEdge(projectId, from, self, { kind: 'origin' });
+        } catch (err) {
+          if (!(err instanceof ApiRequestError)) throw err;
+          if (err.status === 400 && err.code === 'cycle') report.warnings.push(bornCycleWarning(from, self));
+          else if (err.status === 409) report.warnings.push(t(`${self} was already born from ${from}`, `${self} ya nacía de ${from}`));
+          else if ([400, 404].includes(err.status)) report.warnings.push(t(`did not say ${self} was born from ${from}: ${err.message}`, `no dije que ${self} nació de ${from}: ${err.message}`));
+          else throw err;
+          continue;
+        }
+      }
+      origins.push({ from, to: self });
+      updated.add(self);
+      report.actions.push(t(`${self} born from ${from}`, `${self} nació de ${from}`));
+    }
   }
 
   // 3 · founder-input → decisión (sin re-preguntar)
@@ -260,6 +289,10 @@ function openQuestion(id: string, status: NodeStatus): string {
 
 function cycleWarning(from: string, to: string): string {
   return t(`did not add ${from} → ${to}: it would close a loop`, `no agregué ${from} → ${to}: cerraría un ciclo`);
+}
+
+function bornCycleWarning(from: string, to: string): string {
+  return t(`did not say ${to} was born from ${from}: it would close a loop`, `no dije que ${to} nació de ${from}: cerraría un ciclo`);
 }
 
 function hasOpenBlocker(blockers: Blocker[], nodeId: string): boolean {

@@ -4,23 +4,32 @@
  */
 import {
   BLOCKER_KINDS,
+  CLOSE_AS,
+  EDGE_KINDS,
+  NODE_KINDS,
   LANGS,
   LIMITS,
   NODE_STATUSES,
   type BlockerInput,
   type BlockerKind,
+  type CloseAs,
+  type CloseInput,
+  type EdgeInput,
+  type EdgeKind,
   type IsoDate,
   type Lang,
   type MessageInput,
   type NodeInput,
+  type NodeKind,
   type NodePatch,
   type NodeStatus,
+  type OriginInput,
   type ProjectGraphInput,
   type ProjectInput,
   type ResolveInput,
   type StageInput,
 } from './types.js';
-import { findCycle } from './graph.js';
+import { findCycle, neverDone } from './graph.js';
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; message: string };
 
@@ -182,6 +191,47 @@ function isoDate(v: unknown, field: string): IsoDate | null | undefined {
   return normalizeIso(v) ?? fail(`${field}: una fecha ISO 8601 con hora y zona, p. ej. 2026-10-04T05:35:20Z`);
 }
 
+function kind(v: unknown, field: string): NodeKind | undefined {
+  if (v === undefined) return undefined;
+  if (!NODE_KINDS.includes(v as NodeKind)) fail(`${field}: uno de ${NODE_KINDS.join(', ')}`);
+  return v as NodeKind;
+}
+
+/** Cuánto al futuro tolera un `bornAt` (relojes desfasados); el servidor lo recorta a su hora. */
+export const BORN_AT_FUTURE_MS = TEAM_LIMITS.future;
+
+function bornAt(v: unknown, field: string): IsoDate | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return fail(`${field}: una fecha ISO 8601, o no lo mandes`);
+  const d = isoDate(v, field)!;
+  if (d < TEAM_LIMITS.earliest || d > new Date(Date.now() + BORN_AT_FUTURE_MS).toISOString()) fail(`${field}: fuera de rango (desde 2020 hasta ahora): ${d}`);
+  return d;
+}
+
+function origins(v: unknown, field: string): OriginInput[] | undefined {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v)) return fail(`${field}: se esperaba una lista de {from, why?}`);
+  const seen = new Set<string>();
+  const out: OriginInput[] = [];
+  v.forEach((x, i) => {
+    const o = obj(x, `${field}[${i}]`);
+    const from = slug(o.from, `${field}[${i}].from`)!;
+    const why = nullableStr(o.why, `${field}[${i}].why`, LIMITS.originWhy);
+    if (seen.has(from)) return; // el mismo origen dos veces es uno
+    seen.add(from);
+    out.push(why !== undefined ? { from, why } : { from });
+  });
+  return out;
+}
+
+/** Las reglas de `kind` que no dependen del estado guardado: la cita de un pedido y el `done` de un objetivo. */
+function kindRules(n: { kind?: NodeKind; status?: NodeStatus; quote?: string | null }, at: string, creating: boolean): void {
+  const k = n.kind ?? 'task';
+  if (k === 'request' && creating && !n.quote) fail(`${at}quote: un pedido (request) lleva la cita literal de la persona`);
+  if (n.kind !== undefined && k !== 'request' && n.quote) fail(`${at}quote: solo un pedido (request) lleva cita`);
+  if (n.status === 'done' && neverDone(k)) fail(`${at}status: un ${k} no se cierra como «done»; ciérralo con otro motivo (replaced, dropped o learned)`);
+}
+
 function lang(v: unknown): Lang | undefined {
   if (v === undefined) return undefined;
   if (!LANGS.includes(v as Lang)) fail(`lang: uno de ${LANGS.join(', ')}`);
@@ -222,12 +272,19 @@ export function parseProjectInput(body: unknown): Parsed<ProjectInput> {
 }
 
 function nodeInput(o: Record<string, unknown>, at: string): NodeInput {
-  const n: NodeInput = {
-    stage: slug(o.stage, `${at}stage`)!,
-    title: str(o.title, `${at}title`, LIMITS.title)!,
-  };
+  const n: NodeInput = { title: str(o.title, `${at}title`, LIMITS.title)! };
+  const stage = slug(o.stage, `${at}stage`, true);
+  if (stage) n.stage = stage;
   const id = slug(o.id, `${at}id`, true);
   if (id) n.id = id;
+  const k = kind(o.kind, `${at}kind`);
+  if (k) n.kind = k;
+  const b = bornAt(o.bornAt, `${at}bornAt`);
+  if (b) n.bornAt = b;
+  const quote = nullableStr(o.quote, `${at}quote`, LIMITS.quote);
+  if (quote !== undefined) n.quote = quote;
+  const quoteBy = nullableStr(o.quoteBy, `${at}quoteBy`, LIMITS.name);
+  if (quoteBy !== undefined) n.quoteBy = quoteBy;
   const s = status(o.status);
   if (s) n.status = s;
   const p = progress(o.progress);
@@ -244,6 +301,10 @@ function nodeInput(o: Record<string, unknown>, at: string): NodeInput {
     if (!Array.isArray(o.deps)) fail(`${at}deps: se esperaba una lista`);
     n.deps = (o.deps as unknown[]).map((d, i) => slug(d, `${at}deps[${i}]`)!);
   }
+  const og = origins(o.origins, `${at}origins`);
+  if (og) n.origins = og;
+  // en un PUT, un nodo existente sin `kind` conserva el guardado: la cita obligatoria solo se exige si dice `request`
+  kindRules(n, at, n.kind === 'request');
   return n;
 }
 
@@ -254,10 +315,16 @@ export function parseNodeInput(body: unknown): Parsed<NodeInput> {
 export function parseNodePatch(body: unknown): Parsed<NodePatchInput> {
   return wrap(() => {
     const o = obj(body, 'body');
-    const allowed = ['stage', 'title', 'status', 'progress', 'team', 'goal', 'reportUrl', 'link', 'teamId'];
+    const allowed = ['stage', 'title', 'status', 'progress', 'team', 'goal', 'reportUrl', 'link', 'teamId', 'kind', 'quote', 'quoteBy'];
     const extra = Object.keys(o).filter((k) => !allowed.includes(k));
-    if (extra.length) fail(`campos no editables: ${extra.join(', ')}`);
+    if (extra.length) fail(`campos no editables: ${extra.join(', ')}${extra.includes('closedAs') ? ' (para cerrar con motivo, POST …/close)' : ''}`);
     const p: NodePatchInput = {};
+    const k = kind(o.kind, 'kind');
+    if (k) p.kind = k;
+    const quote = nullableStr(o.quote, 'quote', LIMITS.quote);
+    if (quote !== undefined) p.quote = quote;
+    const quoteBy = nullableStr(o.quoteBy, 'quoteBy', LIMITS.name);
+    if (quoteBy !== undefined) p.quoteBy = quoteBy;
     if (o.teamId !== undefined) p.teamId = o.teamId === null ? null : slug(o.teamId, 'teamId');
     if (o.stage !== undefined) p.stage = slug(o.stage, 'stage');
     if (o.title !== undefined) p.title = str(o.title, 'title', LIMITS.title);
@@ -274,7 +341,46 @@ export function parseNodePatch(body: unknown): Parsed<NodePatchInput> {
     const l = url(o.link, 'link');
     if (l !== undefined) p.link = l;
     if (Object.keys(p).length === 0) fail('nada que actualizar');
+    // con el `kind` guardado lo termina de validar el servidor
+    kindRules(p, '', false);
     return p;
+  });
+}
+
+/** `POST /api/projects/:pid/nodes/:nid/close` (#90). Las reglas que dependen del tipo del nodo las aplica el servidor. */
+export function parseCloseInput(body: unknown): Parsed<CloseInput> {
+  return wrap(() => {
+    const o = obj(body, 'body');
+    const allowed = ['as', 'why', 'by', 'reportUrl'];
+    const extra = Object.keys(o).filter((k) => !allowed.includes(k));
+    if (extra.length) fail(`campos desconocidos: ${extra.join(', ')}`);
+    if (!CLOSE_AS.includes(o.as as CloseAs)) fail(`as: uno de ${CLOSE_AS.join(', ')}`);
+    const c: CloseInput = { as: o.as as CloseAs };
+    const why = nullableStr(o.why, 'why', LIMITS.closedReason);
+    if (why !== undefined) c.why = why;
+    const by = o.by === undefined || o.by === null ? undefined : slug(o.by, 'by');
+    if (by) c.by = by;
+    const r = url(o.reportUrl, 'reportUrl');
+    if (r !== undefined) c.reportUrl = r;
+    if (c.as === 'replaced' && !c.by) fail('by: «replaced» necesita el nodo que la reemplaza');
+    if (c.as !== 'replaced' && c.by) fail(`by: solo con «replaced» (este cierre es «${c.as}»)`);
+    if (c.as !== 'done' && !c.why) fail(`why: cerrar como «${c.as}» necesita su porqué`);
+    return c;
+  });
+}
+
+/** `POST /api/projects/:pid/edges` (#90): `{from, to, kind?, why?}`; sin `kind`, «necesita». */
+export function parseEdgeInput(body: unknown): Parsed<EdgeInput> {
+  return wrap(() => {
+    const o = obj(body, 'body');
+    if (!isSlug(o.from) || !isSlug(o.to)) fail('from y to: ids de tareas');
+    if (o.kind !== undefined && !EDGE_KINDS.includes(o.kind as EdgeKind)) fail(`kind: uno de ${EDGE_KINDS.join(', ')}`);
+    const e: EdgeInput = { from: o.from as string, to: o.to as string };
+    if (o.kind !== undefined) e.kind = o.kind as EdgeKind;
+    const why = nullableStr(o.why, 'why', LIMITS.originWhy);
+    if (why && e.kind !== 'origin') fail('why: solo una arista «nació de» (kind: origin) lleva porqué');
+    if (why !== undefined && e.kind === 'origin') e.why = why;
+    return e;
   });
 }
 
@@ -412,15 +518,24 @@ export function checkGraph(g: ProjectGraphInput): string | null {
     if (seen.has(id)) return `nodes: id repetido «${id}»`;
     seen.add(id);
   }
+  const kindOf = new Map(g.nodes.map((n, i) => [ids[i]!, n.kind]));
   for (const [i, n] of g.nodes.entries()) {
-    if (g.stages && !stageIds.has(n.stage)) return `nodes[${i}].stage: «${n.stage}» no es una etapa del proyecto`;
-    for (const d of n.deps ?? []) if (!seen.has(d)) return `nodes[${i}].deps: «${d}» no existe`;
+    if (g.stages && n.stage !== undefined && !stageIds.has(n.stage)) return `nodes[${i}].stage: «${n.stage}» no es una etapa del proyecto`;
+    for (const d of n.deps ?? []) {
+      if (!seen.has(d)) return `nodes[${i}].deps: «${d}» no existe`;
+      const k = kindOf.get(d);
+      if (k && neverDone(k)) return `nodes[${i}].deps: «${d}» es un ${k}, nunca se cierra: nada puede necesitarlo`;
+    }
+    for (const o of n.origins ?? []) if (!seen.has(o.from)) return `nodes[${i}].origins: «${o.from}» no existe`;
   }
   for (const [i, b] of (g.blockers ?? []).entries()) if (!seen.has(b.nodeId)) return `blockers[${i}].nodeId: «${b.nodeId}» no existe`;
   for (const [i, m] of (g.messages ?? []).entries()) if (!seen.has(m.nodeId)) return `messages[${i}].nodeId: «${m.nodeId}» no existe`;
   const edges = g.nodes.flatMap((n, i) => (n.deps ?? []).map((d) => ({ from: d, to: ids[i]! })));
   const cyc = findCycle(ids, edges);
   if (cyc) return `ciclo en las dependencias: ${cyc.join(' → ')}`;
+  const born = g.nodes.flatMap((n, i) => (n.origins ?? []).map((o) => ({ from: o.from, to: ids[i]! })));
+  const ocyc = findCycle(ids, born);
+  if (ocyc) return `ciclo en «nació de»: ${ocyc.join(' → ')}`;
   return null;
 }
 

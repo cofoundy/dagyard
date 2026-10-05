@@ -55,10 +55,10 @@ describe('2 · nada se reescribe desde un estado viejo', () => {
         api(`/api/projects/${pid}/nodes/landing`, { method: 'PATCH', body: { status: 'done' } }),
         api(`/api/projects/${pid}/nodes/landing/blockers`, { method: 'POST', body: { kind: 'review', question: '¿Va?' } }),
       ]);
+      // gana uno (#90: una pregunta no reabre una tarea cerrada): lista sin pregunta, o bloqueada con ella
       const after = await snap(pid);
       const open = after.blockers.some((x) => x.nodeId === 'landing' && x.status === 'open');
-      expect(open).toBe(true);
-      expect(after.nodes.find((n) => n.id === 'landing')!.status).toBe('blocked');
+      expect(after.nodes.find((n) => n.id === 'landing')!.status).toBe(open ? 'blocked' : 'done');
     }
   });
 

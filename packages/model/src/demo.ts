@@ -200,13 +200,16 @@ const MESSAGES: Record<DemoLang, Array<[nodeId: string, text: string]>> = {
 };
 
 /** El grafo completo, listo para `PUT /api/projects/<demoProjectId(lang)>`. Devuelve una copia nueva. */
-export function demoProject(lang: DemoLang = 'es'): ProjectGraphInput {
+/** El grafo de la demo: cada nodo trae su etapa (desde #90 es opcional en `NodeInput`; la demo siempre la dice). */
+export type DemoGraph = Omit<ProjectGraphInput, 'nodes'> & { nodes: Array<NodeInput & { stage: string }> };
+
+export function demoProject(lang: DemoLang = 'es'): DemoGraph {
   const team = new Map(ROWS.map(([id, stage, , , staffed]) => [id, staffed ? TEAMS[lang][stage]! : null]));
   return {
     name: lang === 'en' ? 'Booking marketplace' : 'Marketplace de reservas',
     lang,
     stages: DEFAULT_STAGES.map((s, i) => ({ id: s.id, name: STAGE_NAMES[lang][i]! })),
-    nodes: ROWS.map(([id, s, status, deps, , progress]): NodeInput => {
+    nodes: ROWS.map(([id, s, status, deps, , progress]): NodeInput & { stage: string } => {
       const [title, goal] = TASKS[lang][id]!;
       return {
         id,

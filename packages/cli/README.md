@@ -31,6 +31,7 @@ la tapan con `***`).
 | Comando | Qué hace |
 |---|---|
 | `node add\|update\|start\|progress\|done`, `edge add` | mutan el DAG (`start`, `progress`, `done` también como atajo). `node add\|update --link <url>` cuelga el issue o el PR: la ficha lo muestra como «Detalle técnico ↗» |
+| `node close`, `goal add`, `request add` | #90: `node close <n> --as done\|replaced\|dropped\|learned --why …` cierra con motivo (nunca se borra un nodo); `goal add` y `request add --quote …` son atajos de `node add --kind`. `node add --from <n> --why …` dice de qué nació; `edge add <a> <b> --kind origin` también |
 | `block <nodo> --kind decision\|review\|access --q "…" [--opt …]` | abre un bloqueante e imprime su id |
 | `wait <nodo> [--blocker <id>]` | long-poll hasta que el humano resuelve; imprime la elección o el valor |
 | `msg <nodo> "…" [--report <url>]` | mensaje ≤280 caracteres |

@@ -200,15 +200,17 @@ describe('nodos y mensajes', () => {
     expect(linkOf(snap)).toBeNull();
   });
 
-  it('borrar un nodo se lleva sus aristas, bloqueantes y mensajes', async () => {
+  it('descartar un nodo (#90) lo cierra como dropped y conserva sus aristas y mensajes: la fila nunca se borra', async () => {
     const s = await seedDemo();
     const pid = s.project.id;
-    expect((await api(`/api/projects/${pid}/nodes/comision`, { method: 'DELETE', headers: OWNER })).status).toBe(204);
+    const edges = s.edges.filter((e) => e.from === 'landing' || e.to === 'landing');
+    expect((await api(`/api/projects/${pid}/nodes/landing`, { method: 'DELETE', headers: OWNER })).status).toBe(200);
     const snap = await json<ProjectSnapshot>(await api(`/api/projects/${pid}`), 200);
-    expect(snap.nodes).toHaveLength(19);
-    expect(snap.edges.some((e) => e.from === 'comision' || e.to === 'comision')).toBe(false);
-    expect(snap.blockers.some((b: Blocker) => b.nodeId === 'comision')).toBe(false);
-    await json(await api(`/api/projects/${pid}/nodes/comision`, { method: 'DELETE', headers: OWNER }), 404);
+    expect(snap.nodes).toHaveLength(20);
+    expect(snap.nodes.find((n) => n.id === 'landing')).toMatchObject({ status: 'done', closedAs: 'dropped', closedReason: null });
+    expect(snap.edges.filter((e) => e.from === 'landing' || e.to === 'landing')).toEqual(edges);
+    expect(snap.messages.filter((m) => m.nodeId === 'landing')).toEqual(s.messages.filter((m) => m.nodeId === 'landing'));
+    await json(await api(`/api/projects/${pid}/nodes/nadie`, { method: 'DELETE', headers: OWNER }), 404);
   });
 
   it('borrar un proyecto es solo del owner', async () => {

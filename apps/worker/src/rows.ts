@@ -1,5 +1,5 @@
 /** Filas de SQLite → tipos del contrato. */
-import { LANGS, LEGACY_LANG, demoLang, type Blocker, type BlockerResolution, type DagEvent, type DagEventType, type DagNode, type Edge, type Lang, type Message, type Project, type Role, type Team } from '@dagyard/model';
+import { DEFAULT_KIND, LANGS, LEGACY_LANG, demoLang, type Blocker, type BlockerResolution, type DagEvent, type DagEventType, type DagNode, type Edge, type Lang, type Message, type Origin, type Project, type Role, type Team } from '@dagyard/model';
 import type { Row } from './db.js';
 
 const s = (v: unknown) => v as string;
@@ -30,6 +30,15 @@ export const toNode = (r: Row): DagNode => ({
   startedAt: ns(r.started_at),
   doneAt: ns(r.done_at),
   teamId: ns(r.team_id),
+  // #90: siempre presentes
+  kind: (r.kind as DagNode['kind']) ?? DEFAULT_KIND,
+  bornAt: ns(r.born_at) ?? s(r.created_at),
+  quote: ns(r.quote),
+  quoteBy: ns(r.quote_by),
+  closedAs: ns(r.closed_as) as DagNode['closedAs'],
+  closedReason: ns(r.closed_reason),
+  replacedBy: ns(r.replaced_by),
+  closedAt: ns(r.closed_at),
   createdAt: s(r.created_at),
   updatedAt: s(r.updated_at),
 });
@@ -50,6 +59,8 @@ export const toTeam = (r: Row): Team => ({
 export const TEAMS_ORDER = 'ORDER BY started_at IS NULL, started_at, rowid';
 
 export const toEdge = (r: Row): Edge => ({ projectId: s(r.project_id), from: s(r.from_id), to: s(r.to_id) });
+
+export const toOrigin = (r: Row): Origin => ({ projectId: s(r.project_id), from: s(r.from_id), to: s(r.to_id), why: ns(r.why), createdAt: s(r.created_at) });
 
 /** Nunca lee `access_value`: el valor no sale por aquí. */
 export const toBlocker = (r: Row): Blocker => ({
