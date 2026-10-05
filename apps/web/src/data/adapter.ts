@@ -17,6 +17,7 @@ import type {
 import { REVIEW_OPTIONS } from '@dagyard/model';
 import type { Blocker, DagEvent, DagNode, Edge, Message, ProjectSummary, Resolution, Snapshot, Stage } from './types';
 import { t } from '../i18n';
+import { readD12Event, readD12Node, readOrigins } from './d12';
 
 export type {
   WireBlocker,
@@ -50,6 +51,8 @@ export function toNode(n: WireNode): DagNode {
     goal: opt(n.goal),
     reportUrl: opt(n.reportUrl),
     link: opt(n.link),
+    // #90 (kind, bornAt, cita, cierre con motivo) si el servidor lo manda; si no, al menos cuándo nació
+    ...readD12Node(n),
   };
 }
 
@@ -118,6 +121,7 @@ export function toSnapshot(w: WireSnapshot): Snapshot {
     stages: w.project.stages.map(toStage),
     nodes: w.nodes.map(toNode),
     edges: w.edges.map(toEdge),
+    origins: readOrigins(w),
     blockers: w.blockers.map(toBlocker),
     messages: w.messages.map(toMessage),
     seq: w.seq,
@@ -133,6 +137,9 @@ export function toProjectSummary(p: WireProjectSummary): ProjectSummary {
  * snapshot (`project.replaced`, `project.updated`: cambian etapas o nombre).
  */
 export function toEvent(e: WireEvent): DagEvent | null {
+  // «nació de» (#90): el cable de esta rama todavía no lo tipa
+  const d12 = readD12Event(e as { type: string; seq: number; payload?: unknown });
+  if (d12 !== undefined) return d12;
   switch (e.type) {
     case 'node.added':
       return { seq: e.seq, type: 'node.added', node: toNode(e.payload.node) };

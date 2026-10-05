@@ -31,6 +31,7 @@ export function reduce(s: Snapshot, e: DagEvent): Snapshot {
       const id = e.nodeId;
       next.nodes = s.nodes.filter((n) => n.id !== id);
       next.edges = s.edges.filter((x) => x.from !== id && x.to !== id);
+      if (s.origins) next.origins = s.origins.filter((x) => x.from !== id && x.to !== id);
       next.blockers = s.blockers.filter((b) => b.nodeId !== id);
       next.messages = s.messages.filter((m) => m.nodeId !== id);
       break;
@@ -40,6 +41,16 @@ export function reduce(s: Snapshot, e: DagEvent): Snapshot {
       break;
     case 'edge.removed':
       next.edges = s.edges.filter((x) => !(x.from === e.edge.from && x.to === e.edge.to));
+      break;
+    case 'origin.added': {
+      // El primer origen que llega de un servidor con #90 deja de lado lo derivado: desde aquí los orígenes son reales.
+      const list = s.origins ?? [];
+      const i = list.findIndex((x) => x.from === e.origin.from && x.to === e.origin.to);
+      next.origins = i < 0 ? [...list, e.origin] : list.map((x, j) => (j === i ? e.origin : x));
+      break;
+    }
+    case 'origin.removed':
+      next.origins = (s.origins ?? []).filter((x) => !(x.from === e.origin.from && x.to === e.origin.to));
       break;
     case 'blocker.opened':
     case 'blocker.resolved':

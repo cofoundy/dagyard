@@ -15,7 +15,8 @@ async function boot() {
   // en tiempo de build, así que el fixture no entra al bundle de producción.
   if (import.meta.env.VITE_FIXTURE) {
     const { FixtureApi } = await import('./data/fixture');
-    const fixture = new FixtureApi({ latency: 220 });
+    // con los proyectos de la vista DAG: el real del 4 oct (#90), el de estrés y uno vacío
+    const fixture = new FixtureApi({ latency: 220, extra: true });
     // Simulador del CLI desde la consola del navegador, p. ej.:
     //   dagyard.message('marketplace-reservas', 'pagos-con-tarjeta', 'Ya conecté la pasarela.')
     //   dagyard.done('marketplace-reservas', 'registro-e-inicio-de-sesion')

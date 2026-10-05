@@ -3,19 +3,27 @@
 // «Marketplace de reservas», el grafo del preview (design/preview-constelacion.html): 20 tareas, 5 etapas y
 // 3 pedidos abiertos (una decisión, una revisión y un acceso). Se le suman informes de ejemplo.
 // `FixtureApi` se porta como el servidor de docs/api.md: emite eventos con `seq`, persiste lo que resuelves
-// durante la sesión del navegador y deja simular comandos del CLI (`dagyard msg|start|done|block|node add`).
+// durante la sesión del navegador y deja simular comandos del CLI (`dagyard msg|start|done|block|node add|close`).
+// Con `extra` (solo `pnpm dev:fixture`) suma tres proyectos para la vista DAG (#75): «Dagyard» con los datos reales del
+// 4 oct ya en la forma de #90 (meta, pedidos con su cita, «nació de» con su porqué), el de estrés y uno vacío.
+// Se generan con `node apps/web/scripts/arbol-fixtures.mjs` y sus fechas se corren para que lo último pase «ahora».
 
 import { demoProject, demoProjectId, demoSignature } from '@dagyard/model';
 import { lang, type Lang } from '../i18n';
 import { RESOLVED_BY_YOU, resolutionSummary } from './adapter';
 import { reduce } from './reduce';
+import dagyardOct4 from './fixtures/dagyard-oct4.json';
+import estres from './fixtures/estres.json';
 import { ApiError, type AppApi } from './session';
 import {
   UnauthorizedError,
   type Blocker,
   type BlockerKind,
+  type CloseAs,
   type DagEvent,
   type DagNode,
+  type NodeKind,
+  type Origin,
   type Message,
   type ProjectSummary,
   type Resolution,
@@ -128,6 +136,7 @@ export function marketplaceSnapshot(now = Date.now(), l: Lang = lang()): Snapsho
     reportUrl: done.has(n.id!) ? DEMO_REPORTS[n.id!] : undefined,
   }));
   const edges = d.nodes.flatMap((n) => (n.deps ?? []).map((from) => ({ from, to: n.id! })));
+  bornByGeneration(nodes, edges, now);
   const blockers: Blocker[] = (d.blockers ?? []).map((b, i) => ({
     id: `b_${id.slice(0, 4)}${i + 1}`,
     nodeId: b.nodeId,
@@ -153,6 +162,59 @@ export function marketplaceSnapshot(now = Date.now(), l: Lang = lang()): Snapsho
     }
   }
   return { project: { id, name: d.name }, stages: (d.stages ?? []).map((s) => ({ id: s.id!, name: s.name })), nodes, edges, blockers, messages, seq: 0 };
+}
+
+/**
+ * La demo no trae cuándo nació cada tarea: nace cuando el plan llegó a ella. Generación = la más larga de sus
+ * dependencias + 1; la primera, hace 5 h; cada generación, ~50 min después; dentro de una, unos minutos entre sí.
+ */
+function bornByGeneration(nodes: DagNode[], edges: { from: string; to: string }[], now: number): void {
+  const gen = new Map<string, number>();
+  const depsOf = (id: string) => edges.filter((e) => e.to === id).map((e) => e.from);
+  const g = (id: string, seen = new Set<string>()): number => {
+    if (gen.has(id)) return gen.get(id)!;
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const v = Math.max(-1, ...depsOf(id).map((d) => g(d, seen))) + 1;
+    gen.set(id, v);
+    return v;
+  };
+  const rank = new Map<number, number>();
+  for (const n of nodes) {
+    const k = g(n.id);
+    const r = rank.get(k) ?? 0;
+    rank.set(k, r + 1);
+    n.bornAt = new Date(now - 5 * 3600e3 + k * 50 * 60e3 + r * 4 * 60e3).toISOString();
+  }
+}
+
+/** Corre las fechas de un fixture para que su último momento (`asOf`) caiga hace 90 s. */
+function shifted(raw: unknown, now: number): Snapshot {
+  const snap = structuredClone(raw) as Snapshot & { asOf?: string };
+  const delta = now - 90_000 - Date.parse(snap.asOf ?? new Date(now).toISOString());
+  const move = (v: string | undefined) => (v ? new Date(Date.parse(v) + delta).toISOString() : v);
+  for (const n of snap.nodes) {
+    n.bornAt = move(n.bornAt);
+    n.closedAt = move(n.closedAt);
+  }
+  for (const b of snap.blockers) b.resolvedAt = move(b.resolvedAt);
+  for (const m of snap.messages) m.at = move(m.at)!;
+  delete snap.asOf;
+  return snap;
+}
+
+/** «Dagyard» del 4 oct con la forma de #90 (meta, pedidos con su cita y «nació de» con su porqué). */
+export function dagyardSnapshot(now = Date.now()): Snapshot {
+  return shifted(dagyardOct4, now);
+}
+
+/** Datos hostiles: 185 tareas en 3 días, títulos de 90 caracteres, emoji, RTL, markup, 4 esperas. */
+export function estresSnapshot(now = Date.now()): Snapshot {
+  return shifted(estres, now);
+}
+
+export function vacioSnapshot(): Snapshot {
+  return { project: { id: 'vacio', name: 'Proyecto vacío' }, stages: [{ id: 'construccion', name: 'Construcción' }], nodes: [], edges: [], origins: [], blockers: [], messages: [], seq: 0 };
 }
 
 export function renovacionSnapshot(now = Date.now()): Snapshot {
@@ -183,6 +245,8 @@ export interface FixtureOptions {
   /** Latencia simulada de cada llamada (ms). */
   latency?: number;
   now?: () => number;
+  /** Suma los proyectos de la vista DAG (real del 4 oct, estrés y vacío). Solo `pnpm dev:fixture`. */
+  extra?: boolean;
 }
 
 export class FixtureApi implements AppApi {
@@ -199,7 +263,8 @@ export class FixtureApi implements AppApi {
     this.latency = o.latency ?? 0;
     this.now = o.now ?? Date.now;
     const t = this.now();
-    for (const snap of [marketplaceSnapshot(t, this.lang), renovacionSnapshot(t)]) {
+    const extra = o.extra ? [dagyardSnapshot(t), estresSnapshot(t), vacioSnapshot()] : [];
+    for (const snap of [marketplaceSnapshot(t, this.lang), renovacionSnapshot(t), ...extra]) {
       this.projects.set(snap.project.id, { snap, log: [], listeners: new Set() });
     }
     this.persisted = this.load();
@@ -332,12 +397,56 @@ export class FixtureApi implements AppApi {
     return blocker;
   }
 
-  /** `dagyard node add` */
-  addNode(projectId: string, input: { id: string; title: string; stageId: string; deps?: string[]; team?: string }): void {
+  /** `dagyard node add <id> --title … [--kind …] [--from <nodo> --why …]… [--quote …]` (#90: nace con su porqué) */
+  addNode(
+    projectId: string,
+    input: {
+      id: string;
+      title: string;
+      stageId?: string;
+      deps?: string[];
+      team?: string;
+      kind?: NodeKind;
+      status?: DagNode['status'];
+      origins?: Array<Omit<Origin, 'to'>>;
+      quote?: string;
+      quoteBy?: string;
+    },
+  ): void {
     const p = this.state(projectId);
     if (p.snap.nodes.some((n) => n.id === input.id)) throw new ApiError(409, 'conflict', 'Ya existe.');
-    this.emit(p, { type: 'node.added', node: { id: input.id, stageId: input.stageId, title: input.title, status: 'pending', progress: 0, team: input.team } });
+    const node: DagNode = {
+      id: input.id,
+      stageId: input.stageId ?? p.snap.stages[0]?.id ?? 'construccion',
+      title: input.title,
+      status: input.status ?? (input.kind === 'goal' || input.kind === 'stream' ? 'working' : 'pending'),
+      progress: 0,
+      team: input.team,
+      kind: input.kind ?? 'task',
+      bornAt: new Date(this.now()).toISOString(),
+      ...(input.quote ? { quote: input.quote, quoteBy: input.quoteBy } : {}),
+    };
+    this.emit(p, { type: 'node.added', node });
     for (const from of input.deps ?? []) this.emit(p, { type: 'edge.added', edge: { from, to: input.id } });
+    // un proyecto sin orígenes guardados (servidor sin #90) los deriva: no se le mezclan orígenes sueltos
+    if (p.snap.origins) for (const o of input.origins ?? []) this.emit(p, { type: 'origin.added', origin: { from: o.from, to: input.id, ...(o.why ? { why: o.why } : {}) } });
+  }
+
+  /** `dagyard edge add|rm <from> <to>`: «to necesita a from». */
+  edge(projectId: string, from: string, to: string, remove = false): void {
+    const p = this.state(projectId);
+    this.node(p, from);
+    this.node(p, to);
+    this.emit(p, { type: remove ? 'edge.removed' : 'edge.added', edge: { from, to } });
+  }
+
+  /** `dagyard node close <nodo> --as done|replaced|dropped|learned [--why …] [--by <nodo>]` (#90) */
+  close(projectId: string, nodeId: string, as: CloseAs, why?: string, by?: string): void {
+    const p = this.state(projectId);
+    const node = this.node(p, nodeId);
+    if (this.openBlocker(p, nodeId)) throw new ApiError(409, 'conflict', 'La tarea tiene un pedido abierto.');
+    const at = new Date(this.now()).toISOString();
+    this.emit(p, { type: 'node.updated', node: { ...node, status: 'done', progress: as === 'done' ? 1 : node.progress, closedAs: as, closedReason: why, replacedBy: by, closedAt: at } });
   }
 
   /** `dagyard node rm` */

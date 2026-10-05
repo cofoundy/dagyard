@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { toBlocker, toResolveInput, toSnapshot, type WireBlocker, type WireEvent, type WireNode, type WireSnapshot } from './adapter';
+import { toBlocker, toEvent, toResolveInput, toSnapshot, type WireBlocker, type WireEvent, type WireNode, type WireSnapshot } from './adapter';
 import { HttpApi } from './http';
 import { ApiError } from './session';
 import { UnauthorizedError, type DagEvent } from './types';
@@ -83,9 +83,27 @@ describe('adapter', () => {
     const s = toSnapshot(wsnap());
     expect(s.project).toEqual({ id: 'p', name: 'Marketplace de reservas' });
     expect(s.stages).toEqual([{ id: 'diseno', name: 'Diseño' }]);
-    expect(s.nodes[0]).toEqual({ id: 'modelo-de-comisiones', stageId: 'diseno', title: 'Modelo de comisiones', status: 'blocked', progress: 0, team: 'Diseño', goal: undefined, reportUrl: undefined });
+    // sin #90 en el cable: nació cuando se creó y los orígenes quedan por deducir (undefined, no [])
+    expect(s.nodes[0]).toEqual({ id: 'modelo-de-comisiones', stageId: 'diseno', title: 'Modelo de comisiones', status: 'blocked', progress: 0, team: 'Diseño', goal: undefined, reportUrl: undefined, bornAt: T });
+    expect(s.origins).toBeUndefined();
     expect(s.messages[0]).toMatchObject({ at: T, reportUrl: undefined });
     expect(s.seq).toBe(7);
+  });
+
+  it('lee el modelo del DAG (#90) si el servidor lo manda: tipo, nacimiento, cita, cierre y «nació de»', () => {
+    const w = wsnap();
+    const born = '2026-10-04T05:24:00.000Z';
+    Object.assign(w.nodes[0]!, { kind: 'request', bornAt: born, quote: 'quiero ver el grafo', quoteBy: 'André', closedAs: 'dropped', closedReason: 'ya no hace falta', replacedBy: null, closedAt: T });
+    Object.assign(w, { origins: [{ projectId: 'p', from: 'meta', to: 'modelo-de-comisiones', why: 'la pidió André', createdAt: T }, { from: '', to: 'x' }] });
+    const s = toSnapshot(w);
+    expect(s.nodes[0]).toMatchObject({ kind: 'request', bornAt: born, quote: 'quiero ver el grafo', quoteBy: 'André', closedAs: 'dropped', closedReason: 'ya no hace falta', closedAt: T });
+    expect(s.nodes[0]!.replacedBy).toBeUndefined();
+    expect(s.origins).toEqual([{ from: 'meta', to: 'modelo-de-comisiones', why: 'la pidió André' }]);
+    const added = toEvent({ seq: 8, type: 'origin.added', payload: { origin: { projectId: 'p', from: 'a', to: 'b', why: null, createdAt: T } } } as never);
+    expect(added).toEqual({ seq: 8, type: 'origin.added', origin: { from: 'a', to: 'b' } });
+    expect(toEvent({ seq: 9, type: 'origin.removed', payload: { origin: { projectId: 'p', from: 'a', to: 'b' } } } as never)).toEqual({ seq: 9, type: 'origin.removed', origin: { from: 'a', to: 'b' } });
+    // ilegible: la UI recarga el snapshot
+    expect(toEvent({ seq: 10, type: 'origin.added', payload: {} } as never)).toBeNull();
   });
 
   it('resume la resolución en humano y nunca expone el valor de un acceso', () => {

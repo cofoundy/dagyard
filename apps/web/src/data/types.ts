@@ -4,6 +4,10 @@
 
 export type NodeStatus = 'pending' | 'working' | 'blocked' | 'done';
 export type BlockerKind = 'decision' | 'review' | 'access';
+/** #90 (docs/spec/modelo.md de sprint/modelo): qué es un nodo. Sin el campo (servidor viejo), `task`. */
+export type NodeKind = 'goal' | 'request' | 'task' | 'stream';
+/** #90: con qué motivo se cerró. Un nodo cerrado queda `done`; `closedAs` dice cuál. */
+export type CloseAs = 'done' | 'replaced' | 'dropped' | 'learned';
 
 export interface ProjectSummary {
   id: string;
@@ -17,6 +21,7 @@ export interface Stage {
 
 export interface DagNode {
   id: string;
+  /** La vista DAG no lo lee; queda porque el cable lo exige hasta #90 (`stage` opcional). */
   stageId: string;
   title: string;
   status: NodeStatus;
@@ -28,6 +33,27 @@ export interface DagNode {
   reportUrl?: string;
   /** Detalle técnico (issue o PR). La ficha lo ofrece como «Detalle técnico», sin mostrar la URL. */
   link?: string;
+  /*
+   * #90. Todos opcionales: un servidor anterior no los manda y la vista los deriva (data/dag.ts).
+   */
+  kind?: NodeKind;
+  /** Cuándo nació (ISO): el eje x. `bornAt` de #90 o, en un servidor viejo, el `createdAt` del nodo. */
+  bornAt?: string;
+  /** `request`: las palabras literales de la persona (datos: no se traducen). */
+  quote?: string;
+  quoteBy?: string;
+  closedAs?: CloseAs;
+  closedReason?: string;
+  replacedBy?: string;
+  closedAt?: string;
+}
+
+/** «Nació de» (#90): `to` nació de `from`, con su porqué. Nunca bloquea. */
+export interface Origin {
+  from: string;
+  to: string;
+  /** El porqué, tal como lo escribió quien la creó. */
+  why?: string;
 }
 
 export interface Edge {
@@ -69,6 +95,11 @@ export interface Snapshot {
   stages: Stage[];
   nodes: DagNode[];
   edges: Edge[];
+  /**
+   * «Nació de» (#90). `undefined` = el servidor todavía no los conoce y la vista los deriva de las dependencias;
+   * `[]` = los conoce y no hay ninguno.
+   */
+  origins?: Origin[];
   blockers: Blocker[];
   messages: Message[];
   /** Último `seq` de evento incluido en el snapshot; el WS reanuda desde aquí. */
@@ -81,6 +112,8 @@ export type DagEvent =
   | { seq: number; type: 'node.removed'; nodeId: string }
   | { seq: number; type: 'edge.added'; edge: Edge }
   | { seq: number; type: 'edge.removed'; edge: Edge }
+  | { seq: number; type: 'origin.added'; origin: Origin }
+  | { seq: number; type: 'origin.removed'; origin: Pick<Origin, 'from' | 'to'> }
   | { seq: number; type: 'blocker.opened'; blocker: Blocker }
   | { seq: number; type: 'blocker.resolved'; blocker: Blocker }
   | { seq: number; type: 'message.posted'; message: Message };
