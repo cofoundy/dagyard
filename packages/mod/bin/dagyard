@@ -1820,8 +1820,8 @@ function addNodeCommand(fixed) {
   const cmd = fixed ? `${fixed} add` : "node add";
   return {
     usage: [
-      `dagyard ${cmd} <node> --title "\u2026"${opts} [--from <node> [--why "\u2026"]]\u2026 [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--link <url>]`,
-      `dagyard ${cmd} <nodo> --title "\u2026"${opts} [--from <nodo> [--why "\u2026"]]\u2026 [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--link <url>]`
+      `dagyard ${cmd} <node> --title "\u2026"${opts} [--from <node> [--why "\u2026"]]\u2026 [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--report <url>] [--link <url>]`,
+      `dagyard ${cmd} <nodo> --title "\u2026"${opts} [--from <nodo> [--why "\u2026"]]\u2026 [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--report <url>] [--link <url>]`
     ],
     summary: fixed === "goal" ? ["adds a goal: a living outcome, the root of the whys", "agrega un objetivo: un resultado vivo, ra\xEDz de los porqu\xE9s"] : fixed === "request" ? ["adds a person's request or decision, with their exact words", "agrega el pedido o la decisi\xF3n de una persona, con su cita"] : ["adds a node to the plan (a task by default)", "agrega un nodo al plan (una tarea por defecto)"],
     help: [
@@ -1832,7 +1832,8 @@ it), stream (ongoing work that spawns tasks). ${fixed ? `This is node add --kind
 --from <node> says which node this one was born from (repeat it); the --why right after it says why. Born-from is not
 a dependency: it never blocks. --dep is a dependency: this node needs <dep> closed.
 Without --stage it goes to the project's first stage. Statuses: pending, working, done (blocked is set by dagyard
-block). --link is the technical detail (the issue or PR URL). Prints only the id.`,
+block). --report attaches its report (Basalt or the PR); --link is the technical detail (the issue or PR URL).
+Prints only the id.`,
       `<nodo> es un id corto (T-314-A se guarda como t-314-a). --dep se repite o va separado por comas.
 Tipos: task (un due\xF1o, una sesi\xF3n, un /goal; la \xFAnica que arranca), goal (un resultado vivo; nace En progreso y nunca
 se cierra como lista), request (el pedido de una persona: --quote es su cita literal, --author qui\xE9n lo dijo), stream
@@ -1840,7 +1841,8 @@ se cierra como lista), request (el pedido de una persona: --quote es su cita lit
 --from <nodo> dice de qu\xE9 nodo naci\xF3 este (se repite); el --why que va justo despu\xE9s dice por qu\xE9. Nacer de no es
 depender: nunca bloquea. --dep s\xED es una dependencia: este nodo necesita <dep> cerrado.
 Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done (blocked lo pone dagyard block).
---link es el detalle t\xE9cnico (URL del issue o del PR). Imprime solo el id.`
+--report cuelga su informe (Basalt o el PR); --link es el detalle t\xE9cnico (URL del issue o del PR). Imprime
+solo el id.`
     ],
     flags: ["title", "stage", "goal", "team", "dep", "status", "report", "link", "from", "why", ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
     async run({ io, args }) {
@@ -2037,8 +2039,8 @@ cierran).`
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"]',
-      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"]'
+      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--json]'
     ],
     summary: ["asks a person for a decision, a review or an access", "le pide al humano una decisi\xF3n, una revisi\xF3n o un acceso"],
     help: [
@@ -2103,6 +2105,7 @@ Sin --timeout espera para siempre. Exit 2 si vence.`
       const proj = project(io, args);
       const blockerId = flag(args, "blocker") ?? await blockerOf(api, proj, nodeId(id));
       const deadline = timeout > 0 ? Date.now() + timeout * 1e3 : Infinity;
+      let failures = 0;
       for (; ; ) {
         const left = Math.ceil((deadline - Date.now()) / 1e3);
         if (left <= 0) {
@@ -2114,9 +2117,11 @@ Sin --timeout espera para siempre. Exit 2 si vence.`
         let result;
         try {
           result = await api.waitOnce(proj, blockerId, Math.min(25, left));
+          failures = 0;
         } catch (err) {
-          if (err instanceof ApiRequestError && (err.status === 0 || err.status >= 502)) {
-            await sleep(2e3);
+          if (err instanceof ApiRequestError && waitTransient(err)) {
+            const backoff = WAIT_BACKOFF_MS[Math.min(failures++, WAIT_BACKOFF_MS.length - 1)];
+            await sleep(Math.max(0, Math.min(backoff, deadline - Date.now())));
             continue;
           }
           throw err;
@@ -2701,6 +2706,8 @@ function nodeId(raw) {
   if (!/[a-z0-9]/i.test(raw.normalize("NFD"))) throw new UsageError(t(`\xAB${raw}\xBB is not a usable node id`, `\xAB${raw}\xBB no sirve como id de nodo`));
   return slugify(raw);
 }
+var WAIT_BACKOFF_MS = [1e3, 2e3, 5e3, 1e4];
+var waitTransient = (err) => err.status === 0 || err.status >= 500 || err.status === 429;
 async function blockerOf(api, proj, node) {
   const mine = (await api.snapshot(proj)).blockers.filter((b) => b.nodeId === node).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const pick = mine.filter((b) => b.status === "open").pop() ?? mine.pop();
