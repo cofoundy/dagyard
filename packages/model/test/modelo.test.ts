@@ -4,7 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyEvent,
+  countNodes,
   depSatisfied,
+  liveStages,
   nextStartable,
   parseCloseInput,
   parseEdgeInput,
@@ -76,8 +78,30 @@ describe('lo arrancable (#90): solo tasks pending y solo «necesita»', () => {
     expect(depSatisfied(byId, 'nadie')).toBe(false);
   });
 
+  it('unir dos: C necesita A y A se reemplaza por C → C arranca (la cadena llega al propio dependiente)', () => {
+    const nodes = [node('a', { status: 'done', closedAs: 'replaced', replacedBy: 'c' }), node('c')];
+    expect(ids(startable(nodes, [edge('a', 'c')]))).toEqual(['c']);
+    // también por una cadena: A → B → C
+    const chain = [node('a', { status: 'done', closedAs: 'replaced', replacedBy: 'b' }), node('b', { status: 'done', closedAs: 'replaced', replacedBy: 'c' }), node('c')];
+    expect(ids(startable(chain, [edge('a', 'c')]))).toEqual(['c']);
+  });
+
   it('un done viejo (sin closedAs) cuenta como cerrado', () => {
     expect(ids(startable([node('a', { status: 'done' }), node('b')], [edge('a', 'b')]))).toEqual(['b']);
+  });
+});
+
+describe('conteos (#90): goals, requests y streams no son tareas', () => {
+  it('countNodes y liveStages cuentan solo kind task', () => {
+    const nodes = [
+      node('g', { kind: 'goal', status: 'working' }),
+      node('r', { kind: 'request', status: 'working', stage: 'diseno' }),
+      node('s', { kind: 'stream', status: 'working', stage: 'pruebas' }),
+      node('t', { status: 'working' }),
+      node('viejo', { status: 'done' }),
+    ];
+    expect(countNodes(nodes)).toEqual({ total: 2, pending: 0, working: 1, blocked: 0, done: 1 });
+    expect(liveStages(DEFAULT_STAGES, nodes).map((s) => s.id)).toEqual(['construccion']);
   });
 });
 

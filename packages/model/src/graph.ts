@@ -79,11 +79,14 @@ type Closable = Pick<DagNode, 'id' | 'status' | 'closedAs' | 'replacedBy'>;
 /**
  * ¿La dependencia `id` está satisfecha? Si está cerrada; si se cerró como `replaced`, cuenta la última de la cadena
  * de `replacedBy` (sin ciclos: una cadena que vuelve sobre sí misma o que lleva a un nodo que no está, no satisface).
+ * Si la cadena llega a `dependent` (unir dos: C necesita A y A se reemplaza por C), está satisfecha: esperarse a sí
+ * mismo no tiene sentido.
  */
-export function depSatisfied(byId: ReadonlyMap<string, Closable>, id: string): boolean {
+export function depSatisfied(byId: ReadonlyMap<string, Closable>, id: string, dependent?: string): boolean {
   const seen = new Set<string>();
   let n = byId.get(id);
   while (n) {
+    if (n.id === dependent) return true;
     if (seen.has(n.id)) return false;
     seen.add(n.id);
     if (n.status !== 'done') return false;
@@ -100,7 +103,7 @@ export function depSatisfied(byId: ReadonlyMap<string, Closable>, id: string): b
 export function startable(nodes: readonly DagNode[], edges: readonly E[]): DagNode[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   return nodes.filter(
-    (n) => nodeKind(n) === 'task' && n.status === 'pending' && depsOf(n.id, edges).every((d) => depSatisfied(byId, d)),
+    (n) => nodeKind(n) === 'task' && n.status === 'pending' && depsOf(n.id, edges).every((d) => depSatisfied(byId, d, n.id)),
   );
 }
 
@@ -158,13 +161,15 @@ export function nextStartable(
   return node ? { node, goalLine: goalLine(node) } : { node: null, goalLine: null };
 }
 
-export function countNodes(nodes: readonly Pick<DagNode, 'status'>[]): ProjectCounts {
-  const c: ProjectCounts = { total: nodes.length, pending: 0, working: 0, blocked: 0, done: 0 };
-  for (const n of nodes) c[n.status]++;
+/** Los conteos por estado de las tareas: un goal, un request o un stream no es una tarea (#90). */
+export function countNodes(nodes: readonly Pick<DagNode, 'status' | 'kind'>[]): ProjectCounts {
+  const tasks = nodes.filter((n) => nodeKind(n) === 'task');
+  const c: ProjectCounts = { total: tasks.length, pending: 0, working: 0, blocked: 0, done: 0 };
+  for (const n of tasks) c[n.status]++;
   return c;
 }
 
-/** Etapas «vivas» (con algo en progreso o esperando al humano), para el «ahora en …» de la UI. */
+/** Etapas «vivas» (con una tarea en progreso o esperando al humano), para el «ahora en …» de la UI. */
 export function liveStages(stages: readonly Stage[], nodes: readonly DagNode[]): Stage[] {
-  return stages.filter((s) => nodes.some((n) => n.stage === s.id && (n.status === 'working' || n.status === 'blocked')));
+  return stages.filter((s) => nodes.some((n) => nodeKind(n) === 'task' && n.stage === s.id && (n.status === 'working' || n.status === 'blocked')));
 }
