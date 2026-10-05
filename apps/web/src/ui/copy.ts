@@ -1,9 +1,10 @@
 // Todo lo que lee el PM pasa por aquí, y aquí solo hay claves del catálogo (`../i18n/messages.ts`, #73).
 // Cada texto se lee en el momento de pintar (getters), así un cambio de idioma se ve sin recargar.
 
-import type { BlockerKind, NodeStatus } from '../data/types';
+import type { BlockerKind, CloseAs, NodeStatus } from '../data/types';
+import type { DagCounts } from '../data/dag';
 import { isDefaultReviewOptions } from '../data/adapter';
-import { fmtRelative, t, type MessageKey } from '../i18n';
+import { fmtRelative, fmtTime, t, type MessageKey } from '../i18n';
 
 /** Un objeto cuyos campos leen su clave del catálogo en el idioma actual cada vez que se consultan. */
 function fromCatalog<K extends string>(keys: Record<K, MessageKey>): Readonly<Record<K, string>> {
@@ -28,6 +29,21 @@ export const STATUS_CLASS: Record<NodeStatus, 'done' | 'working' | 'blocked' | '
   pending: 'queued',
 };
 
+/** Cómo se cerró una tarea (#90). */
+export const CLOSE_TEXT = fromCatalog<CloseAs>({
+  done: 'close.done',
+  replaced: 'close.replaced',
+  dropped: 'close.dropped',
+  learned: 'close.learned',
+});
+
+/** Lo que no es una tarea común se nombra en la ficha: meta, pedido o trabajo continuo. */
+export const KIND_TEXT = fromCatalog<'goal' | 'request' | 'stream'>({
+  goal: 'kind.goal',
+  request: 'kind.request',
+  stream: 'kind.stream',
+});
+
 export const BLOCK_TEXT = fromCatalog<BlockerKind>({
   decision: 'block.decision',
   review: 'block.review',
@@ -48,34 +64,48 @@ export const ANSWER_VERB = fromCatalog<BlockerKind>({
   access: 'answer.access',
 });
 
-const ROMAN: Array<[number, string]> = [
-  [10, 'X'],
-  [9, 'IX'],
-  [5, 'V'],
-  [4, 'IV'],
-  [1, 'I'],
-];
-
-/** 0 → «I», 3 → «IV». */
-export function roman(index: number): string {
-  let n = index + 1;
-  let out = '';
-  for (const [v, s] of ROMAN) while (n >= v) ((out += s), (n -= v));
-  return out;
-}
-
-export function stageLabel(index: number, name: string): string {
-  return `${roman(index)} · ${name}`;
-}
-
-/** «3 de 5 listas» / «3 of 5 done»; sin tareas, «Sin tareas». */
-export function listas(done: number, total: number): string {
-  return t('count.done', { count: total, done, total });
-}
-
 /** «Nada te espera», «1 te espera», «2 te esperan». */
 export function waitingText(n: number): string {
   return t('count.waiting', { count: n });
+}
+
+/** El resumen del HUD: «51 tareas · 4 en curso · 6 sin empezar · 1 cabo suelto» (el último solo si hay). */
+export function summary(c: DagCounts): { tasks: string; working: string; pending: string; loose: string | null } {
+  return {
+    tasks: t('count.tasks', { count: c.total }),
+    working: t('count.inProgress', { count: c.working }),
+    pending: t('count.notStarted', { count: c.pending }),
+    loose: c.loose ? t('count.loose', { count: c.loose }) : null,
+  };
+}
+
+/** «10:18 PM» o, si no es de hoy, «Sat 10:18 PM». */
+export function clock(ms: number, now = Date.now()): string {
+  const sameDay = new Date(ms).toDateString() === new Date(now).toDateString();
+  return fmtTime(ms, sameDay ? { hour: 'numeric', minute: '2-digit' } : { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
+/** «Nació 10:18 PM · hace 5 min». */
+export function bornLine(ms: number, now = Date.now()): string {
+  return t('card.born', { when: clock(ms, now), ago: fmtRelative(ms, now) });
+}
+
+/** «André lo pidió»; sin nombre, «Alguien lo pidió». */
+export function askedBy(who: string | undefined): string {
+  return who ? t('card.askedBy', { who }) : COPY.asked;
+}
+
+export function chainMore(n: number): string {
+  return t('card.chainMore', { count: n });
+}
+
+/** «La lleva el Equipo de Diseño.» */
+export function builtBy(team: string): string {
+  return t('card.builtBy', { team });
+}
+
+export function findMore(shown: number, total: number): string {
+  return t('find.more', { shown, total });
 }
 
 /** «hace un momento», «hace 5 min», «hace 2 h», «ayer», «3 oct» — en el idioma actual. */
@@ -116,7 +146,6 @@ export const COPY = fromCatalog({
   entryOffline: 'entry.offline',
   entryFine: 'entry.fine',
   langSwitch: 'lang.switch',
-  overview: 'hud.overview',
   loading: 'hud.loading',
   loadError: 'hud.loadError',
   retry: 'hud.retry',
@@ -125,12 +154,9 @@ export const COPY = fromCatalog({
   projectsTitle: 'hud.projects',
   logout: 'hud.logout',
   demoNote: 'hud.demoNote',
-  liveIn: 'hud.liveIn',
-  stagesLabel: 'hud.stages',
   skyLabel: 'hud.sky',
   close: 'card.close',
   needs: 'card.needs',
-  unlocks: 'card.unlocks',
   notStarted: 'card.notStarted',
   waitsYou: 'card.waitsYou',
   report: 'card.report',
@@ -160,6 +186,41 @@ export const COPY = fromCatalog({
   started: 'toast.started',
   added: 'toast.added',
   removed: 'toast.removed',
+  // la vista DAG (#75)
+  answer: 'hud.answer',
+  emptyTitle: 'hud.emptyTitle',
+  emptyText: 'hud.emptyText',
+  how: 'foot.how',
+  howShort: 'foot.howShort',
+  replay: 'foot.replay',
+  replayHint: 'foot.replayHint',
+  legendDone: 'legend.done',
+  legendWorking: 'legend.working',
+  legendWaiting: 'legend.waiting',
+  legendPending: 'legend.pending',
+  legendNeeds: 'legend.needs',
+  legendBorn: 'legend.born',
+  findPlaceholder: 'find.placeholder',
+  findLabel: 'find.label',
+  findResults: 'find.results',
+  findNone: 'find.none',
+  forSec: 'card.for',
+  forGoal: 'card.forGoal',
+  toward: 'card.toward',
+  forLoose: 'card.forLoose',
+  forLooseLegacy: 'card.forLooseLegacy',
+  forUnset: 'card.forUnset',
+  whySec: 'card.why',
+  asked: 'card.asked',
+  bornFrom: 'card.bornFrom',
+  inferred: 'card.inferred',
+  noOrigin: 'card.noOrigin',
+  root: 'card.root',
+  closedSec: 'card.closed',
+  bornHere: 'card.bornHere',
+  chain: 'card.chain',
+  offline: 'card.offline',
+  replacedBy: 'close.replacedBy',
   // avisos fuera de la pantalla (#47)
   noticeTitle: 'notice.title',
   notifyMe: 'notice.notifyMe',

@@ -111,13 +111,15 @@ describe('idioma de la interfaz', () => {
     expect(host.querySelector('.block .kind')?.textContent).toBe('Needs your review');
     // las opciones por defecto del servidor se pintan en el idioma de la interfaz
     expect(buttons()).toEqual(expect.arrayContaining(['Approve', 'Request changes']));
-    expect(text()).toContain('Diseño team · waiting for your answer');
+    expect(text()).toContain('Built by the Diseño team.');
+    expect(text()).toContain("What it's for");
+    expect(text()).toContain('Why it exists');
     expect(text()).toContain('just now');
     // datos del usuario: sin traducir
     expect(text()).toContain('Pantalla de pago');
     expect(text()).toContain('¿Va así el pago en 3 pantallas?');
     expect(text()).toContain('Te dejé las 3 pantallas.');
-    expect(text()).toContain('I · Diseño');
+    expect(text()).toMatch(/Born \d/);
     expect(host.querySelector('.x')?.getAttribute('aria-label')).toBe('Close');
   });
 
@@ -127,7 +129,9 @@ describe('idioma de la interfaz', () => {
     expect(host.querySelector('.chip')?.textContent).toBe('Te espera');
     expect(host.querySelector('.block .kind')?.textContent).toBe('Necesita tu revisión');
     expect(buttons()).toEqual(expect.arrayContaining(['Aprobar', 'Pedir cambios']));
-    expect(text()).toContain('Equipo de Diseño · espera tu respuesta');
+    expect(text()).toContain('La lleva el Equipo de Diseño.');
+    expect(text()).toContain('Para qué existe');
+    expect(text()).toContain('Por qué existe');
     expect(text()).toContain('hace un momento');
   });
 

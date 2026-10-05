@@ -26,7 +26,10 @@ vi.mock('../scene', () => ({
       setGraph: rec('setGraph'),
       pulse: rec('pulse'),
       overview: rec('overview'),
-      flyStage: rec('flyStage'),
+      replay: rec('replay'),
+      // la ficha y la búsqueda las llaman al pintar: no se registran para no tapar lo que se prueba
+      mark: () => {},
+      setCardArea: () => {},
       focus: rec('focus'),
       setSafeArea: rec('setSafeArea'),
       dispose: rec('dispose'),
@@ -159,7 +162,7 @@ describe('abrir un enlace', () => {
     store.set(PROJECT_KEY, DEMO);
     open(`/?p=${OTHER}`);
     await mount(new FixtureApi({ storage: null }));
-    await until(() => project() === 'Renovación del sitio web' && !!host.querySelector('.rail'), 'abre el proyecto del enlace');
+    await until(() => project() === 'Renovación del sitio web' && !!host.querySelector('.foot .tools'), 'abre el proyecto del enlace');
     expect(store.get(PROJECT_KEY)).toBe(OTHER);
     expect(card()).toBeNull();
     expect(params()).toEqual({ p: OTHER });
@@ -199,7 +202,7 @@ describe('abrir un enlace', () => {
   it('una tarea que no existe se ignora: vista general y el enlace pierde la tarea', async () => {
     open(`/?p=${OTHER}&n=ya-no-existe`);
     await mount(new FixtureApi({ storage: null }));
-    await until(() => project() === 'Renovación del sitio web' && !!host.querySelector('.rail'), 'abre el proyecto');
+    await until(() => project() === 'Renovación del sitio web' && !!host.querySelector('.foot .tools'), 'abre el proyecto');
     await settle(2);
     expect(card()).toBeNull();
     expect(calls('focus')).toEqual([]);
@@ -209,7 +212,7 @@ describe('abrir un enlace', () => {
   it('un proyecto que no existe abre la demo; sin enlace también', async () => {
     open('/?p=ya-no-existe&n=portada-nueva');
     await mount(new FixtureApi({ storage: null }));
-    await until(() => text().includes('Descubrimiento'), 'abre la demo');
+    await until(() => !!host.querySelector('.foot .tools'), 'abre la demo');
     expect(project()).toBe('Marketplace de reservas');
     expect(card()).toBeNull();
     expect(params()).toEqual({ p: DEMO });
@@ -219,7 +222,7 @@ describe('abrir un enlace', () => {
     store.clear();
     open('/');
     await mount(new FixtureApi({ storage: null }));
-    await until(() => text().includes('Descubrimiento'), 'abre la demo sin enlace');
+    await until(() => !!host.querySelector('.foot .tools'), 'abre la demo sin enlace');
     expect(project()).toBe('Marketplace de reservas');
   });
 });
@@ -228,7 +231,7 @@ describe('la URL sigue a lo que miras', () => {
   it('al abrir una tarea, volver a la vista general o cambiar de proyecto, sin perder otros parámetros', async () => {
     open('/?debug=1');
     await mount(new FixtureApi({ storage: null }));
-    await until(() => text().includes('Descubrimiento') && !!scene.opts, 'carga la demo');
+    await until(() => !!host.querySelector('.foot .tools') && !!scene.opts, 'carga la demo');
     expect(params()).toEqual({ debug: '1', p: DEMO });
 
     act(() => scene.opts!.handlers.onPick('pagos'));

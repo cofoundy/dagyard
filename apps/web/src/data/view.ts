@@ -1,61 +1,52 @@
-// Selectores puros sobre el snapshot: lo que la escena y la interfaz leen.
+// Selectores puros sobre el snapshot y el DAG: lo que la escena y la interfaz leen.
 
 import type { SceneGraph } from '../scene/contract';
-import type { Blocker, DagNode, Message, Snapshot, Stage } from './types';
+import type { DagModel } from './dag';
+import type { Blocker, DagNode, Message, Snapshot } from './types';
 
-export function stageIndex(s: Snapshot): Map<string, number> {
-  return new Map(s.stages.map((st, i) => [st.id, i]));
-}
-
-export function toSceneGraph(s: Snapshot): SceneGraph {
-  const idx = stageIndex(s);
-  const ids = new Set(s.nodes.map((n) => n.id));
+/** El DAG en la forma que dibuja la escena. */
+export function toSceneGraph(m: DagModel, activity?: number[]): SceneGraph {
   return {
-    stages: s.stages.map((st) => ({ id: st.id, name: st.name })),
-    nodes: s.nodes.map((n) => ({
-      id: n.id,
-      stage: idx.get(n.stageId) ?? 0,
-      title: n.title,
-      status: n.status,
-      progress: n.progress,
+    nodes: m.tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      kind: t.kind,
+      born: t.born,
+      closedAs: t.closedAs,
+      loose: t.loose,
+      parent: t.origins[0]?.from ?? null,
+      children: [...t.children],
     })),
-    edges: s.edges.filter((e) => ids.has(e.from) && ids.has(e.to)).map((e) => ({ from: e.from, to: e.to })),
+    edges: m.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
+    now: m.now,
+    activity,
   };
 }
 
-export const EMPTY_GRAPH: SceneGraph = { stages: [], nodes: [], edges: [] };
-
-export interface StageStat {
-  index: number;
-  stage: Stage;
-  total: number;
-  done: number;
-  /** blocked = algo te espera; active = hay trabajo en curso */
-  state: 'blocked' | 'active' | 'idle';
-}
-
-export function stageStats(s: Snapshot): StageStat[] {
-  const idx = stageIndex(s);
-  const stats = s.stages.map<StageStat>((stage, index) => ({ index, stage, total: 0, done: 0, state: 'idle' }));
-  for (const n of s.nodes) {
-    const st = stats[idx.get(n.stageId) ?? 0];
-    if (!st) continue;
-    st.total++;
-    if (n.status === 'done') st.done++;
-    if (n.status === 'blocked') st.state = 'blocked';
-    else if (n.status === 'working' && st.state !== 'blocked') st.state = 'active';
+/** Momentos con actividad del proyecto (mensajes y respuestas): el eje no los pliega como silencio. */
+export function activityOf(s: Snapshot): number[] {
+  const out: number[] = [];
+  for (const m of s.messages) {
+    const t = Date.parse(m.at);
+    if (Number.isFinite(t)) out.push(t);
   }
-  return stats;
+  for (const b of s.blockers) {
+    const t = b.resolvedAt ? Date.parse(b.resolvedAt) : NaN;
+    if (Number.isFinite(t)) out.push(t);
+  }
+  return out.sort((a, b) => a - b);
 }
+
+export const EMPTY_GRAPH: SceneGraph = { nodes: [], edges: [], now: 0 };
 
 export function isOpen(b: Blocker): boolean {
   return !b.resolvedAt;
 }
 
-/** Pedidos abiertos de tareas que existen, en el orden del plan (etapa, luego aparición). */
+/** Pedidos abiertos de tareas que existen, en el orden del snapshot. */
 export function openBlockers(s: Snapshot): Blocker[] {
-  const idx = stageIndex(s);
-  const order = new Map(s.nodes.map((n, i) => [n.id, (idx.get(n.stageId) ?? 0) * 10_000 + i]));
+  const order = new Map(s.nodes.map((n, i) => [n.id, i]));
   return s.blockers.filter((b) => isOpen(b) && order.has(b.nodeId)).sort((a, b) => order.get(a.nodeId)! - order.get(b.nodeId)!);
 }
 
@@ -76,23 +67,4 @@ export function messagesOf(s: Snapshot, nodeId: string): Message[] {
 
 export function nodeById(s: Snapshot, id: string | null | undefined): DagNode | undefined {
   return id ? s.nodes.find((n) => n.id === id) : undefined;
-}
-
-export function depsOf(s: Snapshot, nodeId: string): DagNode[] {
-  const ids = s.edges.filter((e) => e.to === nodeId).map((e) => e.from);
-  return s.nodes.filter((n) => ids.includes(n.id));
-}
-
-export function dependentsOf(s: Snapshot, nodeId: string): DagNode[] {
-  const ids = s.edges.filter((e) => e.from === nodeId).map((e) => e.to);
-  return s.nodes.filter((n) => ids.includes(n.id));
-}
-
-/** Etapas con trabajo en curso o esperándote: «ahora en …». */
-export function liveStages(s: Snapshot): StageStat[] {
-  return stageStats(s).filter((st) => st.state !== 'idle');
-}
-
-export function doneCount(s: Snapshot): number {
-  return s.nodes.filter((n) => n.status === 'done').length;
 }

@@ -25,7 +25,10 @@ vi.mock('../scene', () => ({
       setGraph: rec('setGraph'),
       pulse: rec('pulse'),
       overview: rec('overview'),
-      flyStage: rec('flyStage'),
+      replay: rec('replay'),
+      // la ficha y la búsqueda las llaman al pintar: no se registran para no tapar lo que se prueba
+      mark: () => {},
+      setCardArea: () => {},
       focus: rec('focus'),
       setSafeArea: rec('setSafeArea'),
       dispose: rec('dispose'),
@@ -120,7 +123,7 @@ const click = (el: Element) => act(() => void el.dispatchEvent(new MouseEvent('c
 async function mount(api: FixtureApi = new FixtureApi({ storage: null })) {
   await api.login('clave-de-prueba');
   act(() => root.render(<App api={api} demo />));
-  await until(() => text().includes('Descubrimiento') && !!scene.opts, 'carga el plan');
+  await until(() => !!host.querySelector('.foot .tools') && !!scene.opts, 'carga el plan');
   await settle(2);
   return api;
 }

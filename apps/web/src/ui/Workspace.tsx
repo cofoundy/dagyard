@@ -1,5 +1,6 @@
 // El espacio de trabajo: elige el proyecto, mantiene el estado vivo (snapshot + eventos) y conecta la
-// escena con el HUD, la ficha y los avisos. Eventos del servidor → reducer → setGraph + pulse + aviso.
+// escena con el HUD, la ficha y los avisos. Eventos del servidor → reducer → DAG → setGraph + pulse + aviso.
+// Una sola vista (#75): el DAG que crece; abrir una tarea hace volar la cámara hasta ella y cerrarla la trae de vuelta.
 
 import { DEMO_PROJECT_IDS, demoProjectId } from '@dagyard/model';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
@@ -7,7 +8,8 @@ import type { Pulse, SceneHandlers, Sky } from '../scene/contract';
 import { ApiError, type AppApi } from '../data/session';
 import { ProjectStore, type StoreChange, type StoreState } from '../data/store';
 import { UnauthorizedError, type Blocker, type ProjectSummary, type Resolution } from '../data/types';
-import { nodeById, openBlockers, stageIndex, toSceneGraph } from '../data/view';
+import { buildDag, dagCounts } from '../data/dag';
+import { activityOf, nodeById, openBlockers, toSceneGraph } from '../data/view';
 import { lang, type Lang } from '../i18n';
 import {
   isLooking,
@@ -21,13 +23,15 @@ import {
 import { Card } from './Card';
 import { COPY } from './copy';
 import { feedbackFor, resolvedToast, type ToastSpec } from './feedback';
-import { Actions, Brand, Rail, Toasts, type ToastItem } from './Hud';
+import { Actions, Brand, Footer, Toasts, type ToastItem } from './Hud';
 import { readLink, writeLink } from './link';
 import { useSafeArea } from './useSafeArea';
 
 const PROJECT_KEY = 'dagyard:project';
 const TOAST_MS = 4200;
 const MAX_TOASTS = 3;
+/** «Ahora» avanza solo: el borde derecho del eje y la edad de lo terminado se recalculan cada minuto. */
+const NOW_TICK = 60_000;
 
 /**
  * Proyecto que se abre al entrar: el del enlace (`?p=`), si existe; si no, el que el usuario eligió la última vez; si no
@@ -67,12 +71,11 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
   const [projectId, setProjectId] = useState<string | null>(null);
   const [store, setStore] = useState<ProjectStore | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [stageSel, setStageSel] = useState<number | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const brandRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
-  const railRef = useRef<HTMLElement>(null);
+  const footRef = useRef<HTMLElement>(null);
   const noteRef = useRef<HTMLDivElement>(null);
 
   const onUnauthorizedRef = useRef(onUnauthorized);
@@ -145,7 +148,6 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
     }
     pendingFocus.current = null;
     setFocusId(null);
-    setStageSel(null);
     setProjectId(id);
   };
 
@@ -210,7 +212,15 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
 
   /* ---------------------------------------------------------------- escena */
 
-  const graph = useMemo(() => (snapshot ? toSceneGraph(snapshot) : null), [snapshot]);
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setTick(Date.now()), NOW_TICK);
+    return () => clearInterval(id);
+  }, []);
+  // el DAG se recalcula con cada evento; «ahora» es el reloj, salvo que el último nacimiento sea más nuevo
+  const model = useMemo(() => (snapshot ? buildDag(snapshot, Math.max(tick, Date.now())) : null), [snapshot, tick]);
+  const graph = useMemo(() => (model && snapshot ? toSceneGraph(model, activityOf(snapshot)) : null), [model, snapshot]);
+  const counts = useMemo(() => (model ? dagCounts(model) : null), [model]);
   const shownProject = useRef<string | null>(null);
   useEffect(() => {
     const s = sky.current;
@@ -236,7 +246,6 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
       const n = nodeById(snapshot, id);
       if (!n) return;
       setFocusId(id);
-      setStageSel(stageIndex(snapshot).get(n.stageId) ?? null);
       sky.current?.focus(id);
     },
     [snapshot, sky],
@@ -254,20 +263,17 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
 
   const overview = useCallback(() => {
     setFocusId(null);
-    setStageSel(null);
     sky.current?.overview();
   }, [sky]);
 
-  const flyStage = useCallback(
-    (i: number) => {
-      setFocusId(null);
-      setStageSel(i);
-      sky.current?.flyStage(i);
-    },
-    [sky],
-  );
+  const replay = useCallback(() => {
+    setFocusId(null);
+    sky.current?.replay();
+  }, [sky]);
 
-  const engaged = focusId !== null || stageSel !== null;
+  const mark = useCallback((id: string | null) => sky.current?.mark(id), [sky]);
+
+  const engaged = focusId !== null;
   useLayoutEffect(() => {
     handlers.current = {
       onPick: (id) => {
@@ -275,10 +281,7 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
         else if (engaged) overview();
       },
       onModeChange: (m) => {
-        if (m === 'overview') {
-          setFocusId(null);
-          setStageSel(null);
-        }
+        if (m === 'overview') setFocusId(null);
       },
     };
   }, [handlers, focus, overview, engaged]);
@@ -302,10 +305,26 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
 
   useSafeArea(
     [brandRef, actionsRef],
-    [railRef, noteRef],
+    [footRef, noteRef],
     (area) => sky.current?.setSafeArea(area),
-    [!!snapshot, demo, snapshot?.stages.length],
+    [!!snapshot, demo, !!model?.tasks.length],
   );
+
+  // lo que tapa la ficha: el vuelo a una tarea la deja en el centro de lo que queda a la vista
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = document.querySelector('.card.open');
+      const r = el?.getBoundingClientRect();
+      if (!r || !focusId) return sky.current?.setCardArea({ right: 0, bottom: 0 });
+      const vw = window.innerWidth, vh = window.innerHeight;
+      // escritorio: a la derecha; móvil: hoja inferior
+      if (vw <= 720) sky.current?.setCardArea({ right: 0, bottom: Math.round(vh - r.top + 8) });
+      else sky.current?.setCardArea({ right: Math.round(vw - r.left + 16), bottom: 0 });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [focusId, sky]);
 
   /* ---------------------------------------------------------------- acciones */
 
@@ -399,13 +418,20 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
         <p>{COPY.loading}</p>
       </div>
     );
+  } else if (!snapshot.nodes.length) {
+    center = (
+      <div className="center-note empty">
+        <h2>{COPY.emptyTitle}</h2>
+        <p>{COPY.emptyText}</p>
+      </div>
+    );
   }
 
   return (
     <>
       <Brand
         ref={brandRef}
-        snapshot={snapshot}
+        counts={counts}
         projectName={projectName}
         projects={projects ?? []}
         currentId={projectId}
@@ -417,17 +443,26 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
         ref={actionsRef}
         waiting={waitingIds.length}
         onWaiting={nextWaiting}
-        onOverview={overview}
         onNotify={permission === 'default' ? askPermission : undefined}
       />
       <Toasts items={toasts} onOpen={focus} />
-      {snapshot && <Card snapshot={snapshot} node={focusedNode} onClose={overview} onFocus={focus} onResolve={resolve} />}
+      {snapshot && (
+        <Card
+          snapshot={snapshot}
+          model={model ?? undefined}
+          node={focusedNode}
+          offline={state.status === 'reconnecting'}
+          onClose={overview}
+          onFocus={focus}
+          onResolve={resolve}
+        />
+      )}
       {demo && (
         <div className="hud note" ref={noteRef}>
           {COPY.demoNote}
         </div>
       )}
-      {snapshot && <Rail ref={railRef} snapshot={snapshot} selected={stageSel} onStage={flyStage} />}
+      {snapshot && <Footer ref={footRef} model={model} carded={!!focusedNode} onPick={focus} onMark={mark} onReplay={replay} />}
       {center}
     </>
   );
