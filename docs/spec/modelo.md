@@ -57,8 +57,9 @@ volver a `pending` o `working` reabre (limpia los cuatro campos de cierre; el lo
 | `task` | un dueño, una sesión, un `/goal`, evidencia de cierre | sí | cualquier motivo |
 | `stream` | trabajo continuo (deuda técnica, monitoreo); suelta tareas | nunca | no se cierra como `done`; sí `replaced`, `dropped` o `learned` |
 
-Un `goal` o `stream` nuevo nace `working` si no se dice otra cosa (está vivo). `stage` pasa a ser opcional
-en la API: sin él, la primera etapa del proyecto.
+Un `goal`, `request` o `stream` nuevo nace `working` si no se dice otra cosa (está vivo): solo una `task` espera
+a arrancar. No son tareas: los conteos (`countNodes`, `GET /api/projects`) y las etapas vivas (`liveStages`)
+cuentan solo `kind: 'task'`. `stage` pasa a ser opcional en la API: sin él, la primera etapa del proyecto.
 
 ### Aristas
 
@@ -80,7 +81,10 @@ Un nodo puede nacer de varios (es un DAG, no un árbol) y puede tener las dos ar
 
 `startable` y `nextStartable` miran solo `kind: 'task'`, `status: 'pending'` y solo `edges`. Una dependencia
 está satisfecha si está cerrada; si se cerró como `replaced`, se sigue `replacedBy` (en cadena, sin ciclos)
-y cuenta el estado del último. `origins` nunca entra.
+y cuenta el estado del último. Si la cadena llega al propio dependiente (unir dos: C necesita A y A se reemplaza por
+C), está satisfecha. `origins` nunca entra. Por eso la cadena de reemplazos de una `task` o un `request` nunca puede
+terminar en un `goal` o `stream`: `close` con un `by` así → 400, y volver `goal`/`stream` a un nodo que reemplaza a
+otra tarea → 400 (un goal sí puede reemplazar a otro goal).
 
 ### Propósito
 
@@ -94,11 +98,11 @@ marcarlos.
 |---|---|---|---|
 | `POST` | `/api/projects/:pid/nodes` | ambos | acepta `kind`, `bornAt`, `quote`, `quoteBy` y `origins: [{from, why?}]` (además de `deps`) |
 | `PATCH` | `/api/projects/:pid/nodes/:nid` | ambos | acepta `kind`, `quote`, `quoteBy`; `status: 'done'` cierra como `done`; no acepta `closedAs` (para eso, `close`) |
-| `POST` | `/api/projects/:pid/nodes/:nid/close` | ambos | `{as, why?, by?, reportUrl?}`: cierra con motivo; emite `node.updated`. Reglas de la tabla de tipos; una `task` cerrada como `done` necesita evidencia (`why`, `reportUrl` en el cuerpo o el que ya tenía) → si no, 400; cerrar un nodo ya cerrado → 409; con una pregunta abierta → 409 (como `done` hoy) |
+| `POST` | `/api/projects/:pid/nodes/:nid/close` | ambos | `{as, why?, by?, reportUrl?}`: cierra con motivo; emite `node.updated`. Reglas de la tabla de tipos; una `task` cerrada como `done` necesita evidencia (`why`, `reportUrl` en el cuerpo o el que ya tenía) → si no, 400; cerrar un nodo ya cerrado → 409; con una pregunta abierta → 409 (como `done` hoy). Abrir un bloqueante sobre un nodo cerrado → 409: una pregunta no lo reabre en silencio |
 | `DELETE` | `/api/projects/:pid/nodes/:nid` | solo el dueño | **descartar**: cierra como `dropped` (motivo opcional en `?why=`), con las reglas de `close` (ya cerrado o con pregunta abierta → 409). Nunca borra la fila. Agente → 403 |
 | `POST` | `/api/projects/:pid/edges` | ambos | `{from, to, kind?: 'requires' \| 'origin', why?}`; sin `kind`, `requires` |
 | `DELETE` | `/api/projects/:pid/edges?from&to[&kind=origin]` | `requires`: ambos; `origin`: dueño | |
-| `PUT` | `/api/projects/:pid` | ambos | en un proyecto existente que no es demo, un nodo que el cuerpo no trae ya no se borra: queda con sus aristas, orígenes, preguntas y mensajes, cerrado como `dropped` («no está en el import») si estaba abierto y sin una pregunta abierta (con una, queda como está). Si el cuerpo cambia las etapas y uno de esos nodos usa una que desaparece → 400. Un nodo que el cuerpo sí trae conserva su `kind`, `quote`, `quoteBy` y `bornAt` si no los manda (como `link`). Las aristas «necesita» que llegan a un nodo del cuerpo salen de sus `deps`; los orígenes existentes se conservan y se suman los del cuerpo. Los nodos del cuerpo aceptan `kind`, `bornAt`, `quote`, `quoteBy`, `origins` |
+| `PUT` | `/api/projects/:pid` | ambos | en un proyecto existente que no es demo, un nodo que el cuerpo no trae ya no se borra: queda con sus aristas, orígenes, preguntas y mensajes, cerrado como `dropped` («no está en el import») si estaba abierto y sin una pregunta abierta (con una, queda como está). Si el cuerpo cambia las etapas y uno de esos nodos usa una que desaparece → 400. Un nodo que el cuerpo sí trae conserva su `kind`, `quote`, `quoteBy` y `bornAt` si no los manda (como `link`). Las aristas «necesita» que llegan a un nodo del cuerpo salen de sus `deps`, salvo las que salen de un nodo ausente que sigue abierto (se conservan; si arman ciclo con los `deps` → 400 `cycle`); los orígenes existentes se conservan y se suman los del cuerpo. Emite `project.replaced` y después un `node.updated` por cada nodo que cerró como `dropped`. Los nodos del cuerpo aceptan `kind`, `bornAt`, `quote`, `quoteBy`, `origins` |
 
 - Ningún camino de escritura borra la fila de un nodo, salvo dos que no son caminos de nodo y quedan
   documentados como tales: re-sembrar una **demo** (la demo es una fixture que vuelve a su guion) y borrar

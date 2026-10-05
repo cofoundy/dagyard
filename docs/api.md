@@ -104,7 +104,7 @@ Sin auth: solo `GET /api/health` → `200 {"ok": true, "version": "<sha corto>"}
 
 | Método y ruta | Body | Respuesta |
 |---|---|---|
-| `GET /api/projects` | — | `{"projects": ProjectSummary[]}` (con conteos por estado y bloqueantes abiertos) |
+| `GET /api/projects` | — | `{"projects": ProjectSummary[]}` (con conteos por estado de las tareas, `kind: "task"`, y bloqueantes abiertos) |
 | `POST /api/projects` | `ProjectInput` (`name`, `id?`, `lang?`, `stages?`) | `201 Project`. Sin `lang`, `en`; sin `stages` usa las 5 por defecto con su nombre en ese idioma (los ids son los mismos en los dos: `descubrimiento`, `diseno`, `construccion`, `pruebas`, `lanzamiento`) |
 | `GET /api/projects/:pid` | — | `ProjectSnapshot` (ver abajo) |
 | `PUT /api/projects/:pid` | `ProjectGraphInput` | `200 ProjectSnapshot`. Crea el proyecto o reescribe su grafo (idempotente). Lo usan la semilla (con el token del dueño) y `dagyard import`. Con `If-None-Match: *` solo crea: `409` si el proyecto ya existe, sin tocarlo. En un proyecto existente que no es demo **ningún nodo desaparece** (#90, ver abajo). Si quien llama es `agent` conserva los bloqueantes, los mensajes y la antigüedad de las tareas (ver abajo). Emite `project.replaced` |
@@ -128,8 +128,10 @@ los últimos 200 mensajes en orden cronológico y el `seq` del último evento. C
 **PUT sin borrar (#90).** En un proyecto existente que no es una de las dos demos, un nodo que el cuerpo no trae ya
 no se borra: queda con sus aristas, orígenes, preguntas y mensajes, y si estaba abierto se cierra como `dropped`
 («no está en el import» / «not in the import», en el idioma del proyecto). Uno con una pregunta abierta para el
-dueño no se cierra: sigue esperándola. Las aristas «necesita» que llegan a un nodo del cuerpo salen de sus `deps`;
-las que llegan a uno que no viene se quedan. Los orígenes existentes se conservan y se suman los del cuerpo. Un nodo
+dueño no se cierra: sigue esperándola, y sus aristas «necesita» hacia nodos del cuerpo se conservan (si arman ciclo
+con los `deps` del cuerpo, `400 cycle`). Las demás aristas «necesita» que llegan a un nodo del cuerpo salen de sus
+`deps`; las que llegan a uno que no viene se quedan. Después de `project.replaced` sale un `node.updated` por cada nodo
+que se cerró como `dropped`. Los orígenes existentes se conservan y se suman los del cuerpo. Un nodo
 del cuerpo que ya existía y no trae `kind`, `quote`, `quoteBy` o `bornAt` conserva los guardados (un import no los
 conoce y no debe volver tarea a un objetivo), y si sigue `done` conserva su cierre. Si el `PUT` cambia las etapas y
 un nodo que no viene usa una que desaparece, `400`. Las demos son fixtures que vuelven a su guion: ahí el `PUT` sigue
@@ -210,8 +212,9 @@ La intención y sus siete principios viven en `docs/spec/modelo.md`. En la API:
 | `closedAs` | `done`, `replaced`, `dropped`, `learned` o `null` (abierto). Un nodo cerrado queda en `status: "done"` |
 | `closedReason`, `replacedBy`, `closedAt` | el porqué (≤500), el nodo que lo reemplaza (solo con `replaced`) y cuándo se cerró |
 
-Todos vienen en cada snapshot (en el tipo son opcionales solo para leer servidores viejos). Un `goal` o `stream`
-nuevo nace `working` si no se dice otra cosa.
+Todos vienen en cada snapshot (en el tipo son opcionales solo para leer servidores viejos). Un `goal`, `request` o
+`stream` nuevo nace `working` si no se dice otra cosa: solo una `task` espera a arrancar. No son tareas: los conteos de
+`GET /api/projects` (y `countNodes`, `liveStages` del modelo) cuentan solo `kind: "task"`.
 
 | `kind` | Arranca (`next`) | Cómo se cierra |
 |---|---|---|
@@ -221,7 +224,11 @@ nuevo nace `working` si no se dice otra cosa.
 | `stream` | nunca | no como `done`; sí `replaced`, `dropped` o `learned` |
 
 `close`: `why` es obligatorio para `replaced`, `dropped` y `learned`; `by` es obligatorio con `replaced` (un nodo que
-existe, no él mismo, sin cerrar un ciclo de reemplazos) y prohibido con los demás. Partir un nodo = cerrarlo como
+existe, no él mismo, sin cerrar un ciclo de reemplazos) y prohibido con los demás. Una `task` o un `request` no se
+reemplaza por algo cuya cadena termine en un `goal` o `stream` (`400`: quien la necesitaba esperaría para siempre), ni
+un nodo que reemplaza a una tarea se vuelve `goal`/`stream` por `PATCH` (`400`). Un `goal` sí puede reemplazar a otro.
+Si la cadena de reemplazos de una dependencia llega al propio dependiente (unir dos: C necesita A y A se reemplaza por
+C), la dependencia cuenta como satisfecha. Partir un nodo = cerrarlo como
 `replaced` por una de las partes y hacer nacer las demás de él (`origins`); unir dos = cerrar uno como `replaced` por el
 otro. Reabrir (`PATCH status: pending|working`) limpia los cuatro campos de cierre; el log guarda el anterior.
 
@@ -255,7 +262,7 @@ ahora): así recrear un proyecto no pierde la hora real de sus preguntas.
 
 | Método y ruta | Body | Respuesta |
 |---|---|---|
-| `POST /api/projects/:pid/nodes/:nid/blockers` | `BlockerInput` | `201 Blocker`. El nodo pasa a `blocked`. Emite `blocker.opened` + `node.updated` |
+| `POST /api/projects/:pid/nodes/:nid/blockers` | `BlockerInput` | `201 Blocker`. El nodo pasa a `blocked`. Sobre un nodo cerrado → `409` (#90: reábrelo antes). Emite `blocker.opened` + `node.updated` |
 | `GET /api/projects/:pid/blockers/:bid` | — | `200 Blocker` (sin valor) |
 | `POST /api/projects/:pid/blockers/:bid/resolve` | `ResolveInput` | `200 Blocker`. **Solo `owner`**. Ya resuelto → `409`. Emite `blocker.resolved` + `node.updated` |
 | `GET /api/projects/:pid/blockers/:bid/wait?timeout=<s>` | — | long-poll hasta `timeout` (default 25, máx. 25): `200 BlockerWaitResult` |
