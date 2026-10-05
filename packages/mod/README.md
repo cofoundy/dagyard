@@ -49,9 +49,9 @@ después: `dagyard msg pagos "listo el cobro" --project mi-proyecto`.
 ### La skill del protocolo
 
 `skills/protocol/SKILL.md` (`dagyard:protocol`) le enseña a cualquier agente a trabajar a la vista: arrancar su nodo, dejar un
-mensaje en cada hito, pedir lo que es de una persona con `block` y cerrar con motivo. Carga sola cuando el
-repo tiene `.dagyard.json` o cuando el pedido habla de Dagyard; los comandos que piden el modelo nuevo (#90)
-están marcados.
+mensaje en cada hito, pedir lo que es de una persona con `block`, hacer nacer cada nodo de otro o de un
+objetivo con su porqué, anotar lo que pidió una persona con sus palabras y cerrar con motivo. Carga sola cuando
+el repo tiene `.dagyard.json` o cuando el pedido habla de Dagyard.
 
 ### El canal (opcional, apagado por defecto)
 
