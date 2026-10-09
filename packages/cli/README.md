@@ -35,13 +35,14 @@ la tapan con `***`).
 | `node add\|goal add\|request add\|edge add … --if-absent` | #110: «agregar si no existe», para re-correr sin duplicar ni fallar. Si el id (o la arista) ya existe, no escribe nada, imprime `<id> exists` (o `<de> → <a> exists`) y sale 0. Solo el 409 que el servidor marca `reason: "exists"` cuenta como «ya existe»: cualquier otro 409 (un bloqueante abierto, el tope de un equipo) sigue saliendo 1. La marca `exists` no se traduce. Sin el flag, un duplicado sigue siendo `conflict` y exit 1 |
 | `block <nodo> --kind decision\|review\|access --q "…" [--opt …]` | abre un bloqueante e imprime su id |
 | `wait <nodo> [--blocker <id>] [--timeout <seg>]` | long-poll hasta que el humano resuelve; imprime la elección o el valor. Un long-poll que falla por la red, un 5xx o un 429 se reintenta con backoff (1 s → 10 s) sin pasar el plazo; un 4xx corta con exit 1 (#94) |
+| `watch [--since <seq>] [--cursor <archivo>] [--interval <seg>] [--once] [--json]` | #121: para quien orquesta. Sigue `GET /api/projects/:p/events?since=` y emite una línea por bloqueante abierto (`#seq <nodo> pregunta (tipo): «…» [opciones] · <id>`) o respondido (`#seq <nodo> respondieron «…»: <opción> — nota: … · <id>`); `--json`, una línea JSON (`type`, `seq`, `node`, `blocker`, `choice`, `note`, `by`). Sin `--since` empieza ahora y antes lista lo que ya espera; `--cursor` guarda el último seq y reanuda desde él. Ante `resync` lo avisa y sigue desde el snapshot. Si el servidor deja de responder (~1,5 min de backoff) sale 4 y dice cómo reanudar; un 4xx sale 1. El valor de un acceso nunca sale: se lee con `wait` |
 | `msg <nodo> "…" [--report <url>]` | mensaje ≤280 caracteres |
 | `next` | `/goal …` en una sola línea (exit 3 si no hay nada arrancable); el link de la tarea va por stderr (`en el cielo: …`) y en `--json` como `link` |
 | `open [<tarea>] [--print]` | imprime el link del cielo al proyecto (`<url>/?p=<proyecto>`) o a la tarea (`&n=<tarea>`, abre su ficha) y en macOS lo abre; `--print` solo lo imprime. No usa la key |
 | `sync --github <owner/repo> [--label <l>] [--stage <etapa>] [--all] [--dry-run] [--json]` | crea o actualiza las tareas `gh-<n>` desde los issues (ver abajo) |
 | `import --from <.cofoundy/tasks> [--lang en\|es] [--replace] [--dry-run]` | crea el proyecto desde las tareas del orchestrator; si ya existe, falla (`PUT` con `If-None-Match: *`) salvo `--replace` (`PUT` del grafo entero; con la clave de agente conserva las preguntas y respuestas del dueño y da 409 si quita una tarea que tiene alguna, con el token del dueño las recrea desde el archivo) |
 
-Exit codes: 0 ok · 1 API o red · 2 `wait` venció · 3 `next` vacío · 64 uso.
+Exit codes: 0 ok · 1 API o red · 2 `wait` venció · 3 `next` vacío · 4 `watch`: el servidor dejó de responder · 64 uso.
 
 ## Idioma
 

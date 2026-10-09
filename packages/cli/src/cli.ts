@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { ApiRequestError, DagyardClient } from './api.js';
 import { assertKnownFlags, flag, parseArgs, UsageError, type ParsedArgs } from './args.js';
 import { loadConfig, loadKey } from './config.js';
@@ -13,6 +13,7 @@ import { buildImport, importProjectId, projectNameFromDir, readTasksDir, readTit
 import { oneLine } from './tasks/parse.js';
 import { ghCliSource, type GithubSource } from './sync/github.js';
 import { formatSync, syncGithub } from './sync/sync.js';
+import { watch } from './watch.js';
 
 export const VERSION = '0.1.0';
 
@@ -32,8 +33,11 @@ export interface Io {
   platform?: NodeJS.Platform;
 }
 
-/** Exit codes: 0 ok · 1 error de la API o de red · 2 `wait` venció · 3 `next` sin nada arrancable · 64 uso. */
-export const EXIT = { ok: 0, api: 1, timeout: 2, nothing: 3, usage: 64 } as const;
+/**
+ * Exit codes: 0 ok · 1 error de la API o de red · 2 `wait` venció · 3 `next` sin nada arrancable · 4 `watch`: el
+ * servidor dejó de responder · 64 uso.
+ */
+export const EXIT = { ok: 0, api: 1, timeout: 2, nothing: 3, unreachable: 4, usage: 64 } as const;
 
 interface Ctx {
   io: Io;
@@ -424,6 +428,53 @@ Sin --timeout espera para siempre. Exit 2 si vence.`,
           return EXIT.ok;
         }
       }
+    },
+  },
+  watch: {
+    usage: [
+      'dagyard watch [--since <seq>] [--cursor <file>] [--interval <sec>] [--once] [--json]',
+      'dagyard watch [--since <seq>] [--cursor <archivo>] [--interval <seg>] [--once] [--json]',
+    ],
+    summary: ["listens to the project's questions and answers, one line each", 'escucha las preguntas y respuestas del proyecto, una línea por cada una'],
+    help: [
+      `For whoever orchestrates: one line per blocker opened («asks») or answered («answered», with the option and the
+note), each with its event number (#seq). Runs until killed.
+Without --since it starts now and first lists the blockers already open («still waiting»); --since <seq> replays
+what came after that event. --cursor <file> keeps the last event seen there and, without --since, resumes from it.
+If the server no longer has the events after --since («resync»), it says so and goes on from the current state.
+Checks every --interval seconds (default 5). --once catches up and exits 0.
+If the server stops answering it retries with backoff; after ~1.5 min it exits 4 saying how to resume.`,
+      `Para quien orquesta: una línea por bloqueante abierto («pregunta») o respondido («respondieron», con la opción y
+la nota), cada una con su número de evento (#seq). Corre hasta que lo maten.
+Sin --since empieza ahora y antes lista los bloqueantes ya abiertos («sigue esperando»); --since <seq> repite lo
+que vino después de ese evento. --cursor <archivo> guarda ahí el último evento visto y, sin --since, reanuda desde él.
+Si el servidor ya no tiene los eventos después de --since («resync»), lo avisa y sigue desde el estado actual.
+Mira cada --interval segundos (5 por defecto). --once se pone al día y sale 0.
+Si el servidor deja de responder reintenta con backoff; tras ~1,5 min sale 4 y dice cómo reanudar.`,
+    ],
+    flags: ['since', 'cursor', 'interval', ...GLOBAL_FLAGS],
+    bools: ['once', 'json'],
+    async run({ io, args }) {
+      const sinceRaw = flag(args, 'since');
+      const cursor = flag(args, 'cursor');
+      let since: number | null = sinceRaw === undefined ? null : seqArg(sinceRaw, '--since');
+      if (since === null && cursor !== undefined) since = readCursor(cursor);
+      const intervalRaw = flag(args, 'interval');
+      const interval = intervalRaw === undefined ? 5 : Number(intervalRaw);
+      if (!Number.isFinite(interval) || interval < 1) throw new UsageError(t('--interval is in seconds (≥1)', '--interval va en segundos (≥1)'));
+      const result = await watch({
+        api: client(io, args),
+        project: project(io, args),
+        since,
+        intervalMs: interval * 1000,
+        once: args.bools.has('once'),
+        json: args.bools.has('json'),
+        out: io.stdout,
+        err: io.stderr,
+        sleep: io.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))),
+        ...(cursor !== undefined ? { saveCursor: (seq: number) => writeCursor(cursor, seq) } : {}),
+      });
+      return result === 'ok' ? EXIT.ok : EXIT.unreachable;
     },
   },
   msg: {
@@ -1038,6 +1089,31 @@ async function blockerOf(api: DagyardClient, proj: string, node: string): Promis
   const pick = mine.filter((b) => b.status === 'open').pop() ?? mine.pop();
   if (!pick) throw new UsageError(t(`${node} has no blockers; open one with «dagyard block ${node} …»`, `${node} no tiene bloqueantes; ábrelo con «dagyard block ${node} …»`));
   return pick.id;
+}
+
+function seqArg(raw: string, name: string): number {
+  if (!/^\d+$/.test(raw.trim())) throw new UsageError(t(`${name} is an event number (an integer ≥0)`, `${name} es un número de evento (un entero ≥0)`));
+  return Number(raw.trim());
+}
+
+/** El cursor de `watch --cursor`: sin archivo, `null` (empieza ahora). */
+function readCursor(file: string): number | null {
+  let raw: string;
+  try {
+    raw = readFileSync(file, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+  return seqArg(raw, file);
+}
+
+/** Escritura atómica (tmp + rename): un `watch` que muere a mitad nunca deja un cursor a medias. */
+function writeCursor(file: string, seq: number): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, `${seq}\n`);
+  renameSync(tmp, file);
 }
 
 function required(args: ParsedArgs, key: string, max?: number): string {

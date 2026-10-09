@@ -7,6 +7,7 @@ import type {
   BlockerInput,
   BlockerWaitResult,
   CloseInput,
+  DagEvent,
   DagNode,
   Edge,
   EdgeKind,
@@ -33,6 +34,11 @@ export const ROUTES = {
    * 409 si el grafo nuevo quita una tarea que tiene alguno.
    */
   project: (projectId: string) => `/api/projects/${p(projectId)}`,
+  /**
+   * GET `?since=<seq>`: los eventos con `seq > since` (≤500 por página). `resync: true` = el log ya no llega
+   * hasta `since`: vuelve a pedir el snapshot.
+   */
+  events: (projectId: string) => `/api/projects/${p(projectId)}/events`,
   /** GET: el siguiente nodo arrancable y su línea `/goal`. */
   next: (projectId: string) => `/api/projects/${p(projectId)}/next`,
   /** POST: crea un nodo. */
@@ -117,6 +123,11 @@ export class DagyardClient {
 
   snapshot(projectId: string): Promise<ProjectSnapshot> {
     return this.json('GET', ROUTES.project(projectId));
+  }
+
+  /** Una página del log de eventos después de `since` (`dagyard watch`, #121). */
+  events(projectId: string, since: number): Promise<{ events: DagEvent[]; resync?: boolean }> {
+    return this.json('GET', `${ROUTES.events(projectId)}?since=${since}`);
   }
 
   next(projectId: string): Promise<NextResult> {
