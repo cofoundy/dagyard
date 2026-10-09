@@ -50,6 +50,8 @@ export class HttpApi implements AppApi {
   private readonly opts: Required<Pick<HttpApiOptions, 'pingEvery' | 'staleAfter' | 'backoff' | 'quickAfter'>>;
   /** El contrato resuelve por id de bloqueante; la ruta necesita el proyecto. */
   private readonly blockerProject = new Map<string, string>();
+  /** Lo que `prefetch` dejó en vuelo (#112): de un solo uso y solo con una sesión que `check()` confirmó. */
+  private warm: { projects: Promise<ProjectSummary[]> | null; projectId: string; snapshot: Promise<Snapshot> } | null = null;
 
   constructor(o: HttpApiOptions = {}) {
     this.base = o.base ?? '/api';
@@ -71,16 +73,20 @@ export class HttpApi implements AppApi {
       await this.request('GET', '/me');
       return true;
     } catch (e) {
+      // Sin sesión, lo adelantado se tira: nunca llega a pintarse un plan que la sesión no respalda.
+      this.warm = null;
       if (e instanceof UnauthorizedError) return false;
       throw e;
     }
   }
 
   async login(token: string): Promise<void> {
+    this.warm = null;
     await this.request('POST', '/session', { token: token.trim() });
   }
 
   async logout(): Promise<void> {
+    this.warm = null;
     try {
       await this.request('DELETE', '/session');
     } catch {
@@ -88,14 +94,56 @@ export class HttpApi implements AppApi {
     }
   }
 
+  prefetch(projectId: string): void {
+    const quiet = <T>(p: Promise<T>) => {
+      p.catch(() => {}); // si nadie lo usa, su error no queda suelto
+      return p;
+    };
+    this.warm = {
+      projects: quiet(this.fetchProjects()),
+      projectId,
+      snapshot: quiet(this.fetchSnapshot(projectId)),
+    };
+  }
+
   /* ---------------------------------------------------------------- lecturas y escrituras */
 
   async listProjects(): Promise<ProjectSummary[]> {
+    // Lo adelantado se toma una vez; si falló, se pide de nuevo como siempre.
+    const warm = this.warm?.projects;
+    if (warm) {
+      this.warm!.projects = null;
+      try {
+        return await warm;
+      } catch (e) {
+        if (e instanceof UnauthorizedError) throw e;
+        /* otro fallo: se pide de nuevo */
+      }
+    }
+    return this.fetchProjects();
+  }
+
+  async getSnapshot(projectId: string): Promise<Snapshot> {
+    // El primer plan que se pide consume lo adelantado, sea o no de ese proyecto: uno viejo nunca se reusa más tarde.
+    const w = this.warm;
+    this.warm = null;
+    if (w?.projectId === projectId) {
+      try {
+        return await w.snapshot;
+      } catch (e) {
+        if (e instanceof UnauthorizedError) throw e;
+        /* otro fallo: se pide de nuevo */
+      }
+    }
+    return this.fetchSnapshot(projectId);
+  }
+
+  private async fetchProjects(): Promise<ProjectSummary[]> {
     const r = await this.request<{ projects: WireProjectSummary[] }>('GET', '/projects');
     return r.projects.map(toProjectSummary);
   }
 
-  async getSnapshot(projectId: string): Promise<Snapshot> {
+  private async fetchSnapshot(projectId: string): Promise<Snapshot> {
     const w = await this.request<WireSnapshot>('GET', `/projects/${enc(projectId)}`);
     for (const b of w.blockers) this.blockerProject.set(b.id, w.project.id);
     return toSnapshot(w);
