@@ -405,8 +405,14 @@ export type ErrorCode =
   /** el servidor se reinició a mitad de la escritura y no sabe si quedó: revisa antes de repetirla */
   | 'uncertain';
 
+/**
+ * Afina un código sin cambiarlo (#110): `exists` = el 409 de algo que ya existe (el id de una tarea o de un
+ * proyecto, una arista), para que un cliente distinga «ya estaba» de cualquier otro 409 sin leer el mensaje.
+ */
+export type ErrorReason = 'exists';
+
 export interface ApiError {
-  error: { code: ErrorCode; message: string };
+  error: { code: ErrorCode; message: string; reason?: ErrorReason };
 }
 
 /* ------------------------------------------------------------------ constantes */

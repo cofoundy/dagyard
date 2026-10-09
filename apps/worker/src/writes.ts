@@ -6,6 +6,7 @@
  * Un `ApiFailure` lanzado aquí revierte la transacción entera (no queda ni la escritura ni sus eventos).
  */
 import {
+  type ApiError,
   DEFAULT_LANG,
   REVIEW_OPTIONS,
   TEAM_LIMITS,
@@ -51,7 +52,7 @@ import {
 } from '@dagyard/model';
 import { randomId } from './crypto.js';
 import type { Row } from './db.js';
-import { fail, notFound } from './http.js';
+import { exists, fail, notFound } from './http.js';
 import { toBlocker, toEdge, toNode, toOrigin, toProject, toTeam } from './rows.js';
 
 export type EventSpec = { [K in DagEventType]: { type: K; payload: Extract<DagEvent, { type: K }>['payload'] } }[DagEventType];
@@ -116,7 +117,7 @@ export interface WriteValues {
 
 export type WriteResult =
   | { ok: true; value: WriteValues[keyof WriteValues]; events: DagEvent[]; incarnation: string | null }
-  | { ok: false; error: { code: Parameters<typeof fail>[0]; message: string } };
+  | { ok: false; error: ApiError['error'] };
 
 const RESUME_TEXT = 'Gracias. Sigo desde donde me quedé.';
 const RESUME_TEXT_EN = 'Thanks. Picking up where I left off.';
@@ -403,7 +404,7 @@ const messageKey = (nodeId: unknown, text: unknown, reportUrl: unknown) => JSON.
 
 const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>) => WriteValues[K] } = {
   createProject(tx, { pid, name, lang = DEFAULT_LANG, stages }) {
-    if (tx.one('SELECT 1 FROM projects WHERE id = ?', pid)) fail('conflict', `Ya existe un proyecto «${pid}»`);
+    if (tx.one('SELECT 1 FROM projects WHERE id = ?', pid)) exists(`Ya existe un proyecto «${pid}»`);
     const project: Project = { id: pid, name, lang, stages: toStages(stages, lang), createdAt: tx.now, updatedAt: tx.now };
     tx.all(
       'INSERT INTO projects (id, name, lang, stages, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -414,7 +415,7 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
 
   replaceGraph(tx, { pid, graph: g, actor, exclusive }) {
     const prevRow = tx.one('SELECT * FROM projects WHERE id = ?', pid);
-    if (prevRow && exclusive) fail('conflict', `Ya existe un proyecto «${pid}»; no lo piso`);
+    if (prevRow && exclusive) exists(`Ya existe un proyecto «${pid}»; no lo piso`);
     const prev = prevRow ? toProject(prevRow) : null;
     // sin `lang`, uno existente conserva el suyo tal cual está guardado (NULL incluido) y uno nuevo nace en inglés
     const langCol = g.lang ?? (prevRow ? ((prevRow.lang as Lang | null) ?? null) : DEFAULT_LANG);
@@ -640,9 +641,10 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     const project = tx.project(pid);
     if (input.status === 'blocked') fail('invalid', BLOCKED_BY_HAND);
     const ids = tx.nodeIds(pid);
-    if (ids.size >= LIMITS.nodesPerProject) fail('invalid', `nodes: máximo ${LIMITS.nodesPerProject} por proyecto`);
     const node = newNode(pid, input, project.stages, tx.now);
-    if (ids.has(node.id)) fail('conflict', `Ya existe una tarea «${node.id}»`);
+    // el duplicado antes que el tope: re-agregar una tarea que ya está es «ya existe» aunque el proyecto esté lleno (#110)
+    if (ids.has(node.id)) exists(`Ya existe una tarea «${node.id}»`);
+    if (ids.size >= LIMITS.nodesPerProject) fail('invalid', `nodes: máximo ${LIMITS.nodesPerProject} por proyecto`);
     const deps = [...new Set(input.deps ?? [])];
     for (const d of deps) if (!ids.has(d)) fail('invalid', `deps: «${d}» no existe`);
     for (const d of deps) {
@@ -757,7 +759,7 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     for (const id of [from, to]) if (!ids.has(id)) notFound(`La tarea «${id}»`);
     if (edgeKind === 'origin') {
       const origins = tx.origins(pid);
-      if (origins.some((o) => o.from === from && o.to === to)) fail('conflict', 'Ese «nació de» ya existe');
+      if (origins.some((o) => o.from === from && o.to === to)) exists('Ese «nació de» ya existe');
       if (wouldCreateCycle(origins, from, to)) fail('cycle', `«${from}» ya nació (en cadena) de «${to}»: ese «nació de» cerraría un ciclo`);
       const origin: Origin = { projectId: pid, from, to, why: why ?? null, createdAt: tx.now };
       tx.insertOrigin(origin);
@@ -767,7 +769,7 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     const k = tx.kindOf(pid, from);
     if (neverDone(k)) fail('invalid', neverNeeded(from, k));
     const edges = tx.edges(pid);
-    if (edges.some((e) => e.from === from && e.to === to)) fail('conflict', 'Esa dependencia ya existe');
+    if (edges.some((e) => e.from === from && e.to === to)) exists('Esa dependencia ya existe');
     if (wouldCreateCycle(edges, from, to)) fail('cycle', `«${from}» ya depende de «${to}»: esa dependencia cerraría un ciclo`);
     const edge: Edge = { projectId: pid, from, to };
     tx.insertEdge(edge);

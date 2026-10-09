@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@dagyard/model';
+import type { ApiError, ErrorCode, ErrorReason } from '@dagyard/model';
 
 const STATUS: Record<ErrorCode, number> = {
   invalid: 400,
@@ -13,11 +13,12 @@ const STATUS: Record<ErrorCode, number> = {
   uncertain: 503,
 };
 
-/** Error con la forma del contrato: `{"error": {"code", "message"}}`, mensaje en español. */
+/** Error con la forma del contrato: `{"error": {"code", "message", "reason"?}}`, mensaje en español. */
 export class ApiFailure extends Error {
   constructor(
     readonly code: ErrorCode,
     message: string,
+    readonly reason?: ErrorReason,
   ) {
     super(message);
   }
@@ -26,12 +27,16 @@ export class ApiFailure extends Error {
   }
 }
 
-export const fail = (code: ErrorCode, message: string): never => {
-  throw new ApiFailure(code, message);
+export const fail = (code: ErrorCode, message: string, reason?: ErrorReason): never => {
+  throw new ApiFailure(code, message, reason);
 };
 
-export function errorResponse(code: ErrorCode, message: string, headers?: HeadersInit): Response {
-  return Response.json({ error: { code, message } }, { status: STATUS[code], headers });
+/** El 409 de un duplicado: `conflict` como siempre, con `reason: 'exists'` (#110). */
+export const exists = (message: string): never => fail('conflict', message, 'exists');
+
+export function errorResponse(code: ErrorCode, message: string, headers?: HeadersInit, reason?: ErrorReason): Response {
+  const body: ApiError = { error: { code, message, ...(reason ? { reason } : {}) } };
+  return Response.json(body, { status: STATUS[code], headers });
 }
 
 export const notFound = (what: string): never => fail('not_found', `${what} no existe`);

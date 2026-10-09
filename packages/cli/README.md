@@ -32,6 +32,7 @@ la tapan con `***`).
 |---|---|
 | `node add\|update\|start\|progress\|done`, `edge add` | mutan el DAG (`start`, `progress`, `done` también como atajo). `node add\|update --link <url>` cuelga el issue o el PR: la ficha lo muestra como «Detalle técnico ↗» |
 | `node close`, `goal add`, `request add` | #90: `node close <n> --as done\|replaced\|dropped\|learned --why …` cierra con motivo (nunca se borra un nodo); `goal add` y `request add --quote …` son atajos de `node add --kind`. `node add --from <n> --why …` dice de qué nació; `edge add <a> <b> --kind origin` también |
+| `node add\|goal add\|request add\|edge add … --if-absent` | #110: «agregar si no existe», para re-correr sin duplicar ni fallar. Si el id (o la arista) ya existe, no escribe nada, imprime `<id> exists` (o `<de> → <a> exists`) y sale 0. Solo el 409 que el servidor marca `reason: "exists"` cuenta como «ya existe»: cualquier otro 409 (un bloqueante abierto, el tope de un equipo) sigue saliendo 1. La marca `exists` no se traduce. Sin el flag, un duplicado sigue siendo `conflict` y exit 1 |
 | `block <nodo> --kind decision\|review\|access --q "…" [--opt …]` | abre un bloqueante e imprime su id |
 | `wait <nodo> [--blocker <id>] [--timeout <seg>]` | long-poll hasta que el humano resuelve; imprime la elección o el valor. Un long-poll que falla por la red, un 5xx o un 429 se reintenta con backoff (1 s → 10 s) sin pasar el plazo; un 4xx corta con exit 1 (#94) |
 | `msg <nodo> "…" [--report <url>]` | mensaje ≤280 caracteres |
