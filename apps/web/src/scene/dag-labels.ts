@@ -36,6 +36,7 @@ const CSS = `
 .sky-more-item.blocked { color: #ffb547; }
 .sky-more-item .pre { color: #6b7a93; }
 @media (pointer: coarse) { .sky-more { padding: 10px 14px; } .sky-more-item { padding: 11px 10px; } }
+.sky-fold.flat { letter-spacing: .04em; color: #48556b; text-transform: none; }
 .sky-hit { position: absolute; left: 0; top: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; border: 0;
   background: transparent; padding: 0; cursor: pointer; pointer-events: auto; display: none; }
 .sky-hit:focus-visible { outline: 1px solid #9fd3ff; outline-offset: 2px; }

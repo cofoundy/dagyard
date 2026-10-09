@@ -366,6 +366,8 @@ export function createSky(opts: CreateSkyOptions): Sky {
   function colorOf(n: SceneNode): number {
     if (isEnded(n)) return COL.ended;
     if (n.loose) return COL.loose;
+    // brújula: un pedido o un objetivo «vivo» no es trabajo en curso: luz quieta, no el azul que late
+    if (graph.strict && n.kind !== 'task' && n.kind !== 'goal' && n.status === 'working') return 0xd9e1ec;
     return COL[n.status];
   }
 
@@ -503,13 +505,14 @@ export function createSky(opts: CreateSkyOptions): Sky {
     }
     const width = mobile() ? Math.max(w, 900) : w;
     const prev = L;
-    const edge = nowEdge(graph.nodes, { now: graph.now });
+    // brújula: al borde de «ahora» solo llegan tareas (un pedido o la meta vivos no son trabajo en curso)
+    const edge = nowEdge(graph.strict ? graph.nodes.filter((n) => n.tail) : graph.nodes, { now: graph.now });
     named.clear();
     for (const id of edge.named) named.add(id);
     grouped = edge.grouped;
     renderGroup();
     L = layoutDag(
-      graph.nodes.map((n) => ({ id: n.id, born: n.born, parent: n.parent, children: n.children, status: n.status, toNow: named.has(n.id), labelled: named.has(n.id) || n.kind !== 'task' })),
+      graph.nodes.map((n) => ({ id: n.id, born: n.born, parent: n.parent, children: n.children, status: n.status, toNow: named.has(n.id), labelled: graph.strict ? named.has(n.id) || !!n.named || n.kind === 'goal' : named.has(n.id) || n.kind !== 'task' })),
       { width, now: graph.now, activity: graph.activity, padL: mobile() ? 24 : 40, padR: mobile() ? 150 : 230, labelReserve: mobile() ? 120 : 150, prevRows: prev?.row ?? null },
     );
     const nRows = L.rows[1] - L.rows[0] + 1;
@@ -584,9 +587,19 @@ export function createSky(opts: CreateSkyOptions): Sky {
       for (const x of [f.x0 + 6, f.x1 - 6]) fpts.push(x * K, -top * K, -0.5, x * K, -(bottom - 22) * K, -0.5);
       const el = doc.createElement('div');
       el.className = 'sky-fold';
-      el.textContent = t('scene.quiet', { dur: fmtDuration(f.to - f.from) });
-      root.appendChild(el);
-      axisLabels.push({ el, x: (f.x0 + f.x1) / 2 - 7, y: bottom - 30, rot: true });
+      if (graph.strict) {
+        // brújula: el silencio se dice corto y en horizontal, en la línea de las horas («5 d», «10 h»)
+        const hrs = (f.to - f.from) / 36e5;
+        el.textContent = hrs >= 36 ? t('gap.days', { count: Math.round(hrs / 24) }) : t('gap.hours', { count: Math.round(hrs) });
+        el.title = t('scene.quiet', { dur: fmtDuration(f.to - f.from) });
+        el.classList.add('flat');
+        root.appendChild(el);
+        axisLabels.push({ el, x: (f.x0 + f.x1) / 2, y: bottom - 16 });
+      } else {
+        el.textContent = t('scene.quiet', { dur: fmtDuration(f.to - f.from) });
+        root.appendChild(el);
+        axisLabels.push({ el, x: (f.x0 + f.x1) / 2 - 7, y: bottom - 30, rot: true });
+      }
     }
     if (fpts.length) {
       const g = new BufferGeometry();
@@ -688,6 +701,12 @@ export function createSky(opts: CreateSkyOptions): Sky {
     if (n.status === 'blocked') return 900;
     if (rel?.has(n.id)) return 850;
     if (named.has(n.id)) return 800;
+    if (graph.strict) {
+      // brújula: además de lo que tiene hilo, solo la meta, los cabos sueltos y lo que sigue; pedidos al pasar el mouse
+      if (n.kind === 'goal' || n.loose) return 700;
+      if (n.named) return 650;
+      return 0;
+    }
     if (n.kind === 'goal' || n.loose) return 700;
     if (n.kind === 'request' || n.kind === 'stream') return 600;
     if (graph.now - n.born < 45 * 60e3) return 500;
@@ -867,7 +886,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
 
   // ---------- reconciliación ----------
   function setGraph(next: SceneGraph) {
-    graph = { nodes: next.nodes.map((n) => ({ ...n, children: [...n.children] })), edges: next.edges.map((e) => ({ ...e })), now: next.now, activity: next.activity };
+    graph = { nodes: next.nodes.map((n) => ({ ...n, children: [...n.children] })), edges: next.edges.map((e) => ({ ...e })), now: next.now, activity: next.activity, strict: next.strict };
     byId.clear();
     for (const n of graph.nodes) byId.set(n.id, n);
     computeAlive();
@@ -1204,6 +1223,11 @@ export function createSky(opts: CreateSkyOptions): Sky {
         size = (big ? 17 : 12) * (fresh ? 1.12 : 1 - age * 0.3);
         spike = fresh ? (big ? 0.65 : 0.48) : big ? 0.32 : 0.16;
         glowO = fresh ? 0.95 : 0.62 - age * 0.2;
+      } else if (graph.strict && n.status === 'working' && !n.tail) {
+        // brújula: pedido u objetivo abierto, quieto (lo que late es solo el trabajo en curso)
+        size = 13;
+        spike = 0.18;
+        glowO = 0.55;
       } else if (n.status === 'working') {
         const b = REDUCED ? 0.5 : 0.5 + 0.5 * Math.sin(tt * 2.2 + v.seed);
         size = 14 + b * 5;

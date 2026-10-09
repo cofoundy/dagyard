@@ -5,9 +5,16 @@ import type { DagModel } from './dag';
 import type { Blocker, DagNode, Message, Snapshot } from './types';
 
 /** El DAG en la forma que dibuja la escena. */
-export function toSceneGraph(m: DagModel, activity?: number[], touched?: Map<string, number>): SceneGraph {
+export function toSceneGraph(
+  m: DagModel,
+  activity?: number[],
+  touched?: Map<string, number>,
+  strict?: { named: ReadonlySet<string> },
+): SceneGraph {
   return {
+    strict: !!strict,
     nodes: m.tasks.map((t) => ({
+      ...(strict ? { tail: t.kind === 'task' && (t.status === 'working' || t.status === 'blocked'), named: strict.named.has(t.id) } : {}),
       id: t.id,
       title: t.title,
       status: t.status,

@@ -8,6 +8,7 @@ import type { ProjectSummary } from '../data/types';
 import { clock, COPY, findMore, summary, waitingText } from './copy';
 import type { ToastKind } from './feedback';
 import { LangSwitch } from './LangSwitch';
+import { t } from '../i18n';
 
 /* ------------------------------------------------------------------ marca */
 
@@ -19,10 +20,12 @@ interface BrandProps {
   reconnecting: boolean;
   onPick: (projectId: string) => void;
   onLogout: () => void;
+  /** Brújula (#109): el resumen en números se va; lo dice la brújula, con nombres. */
+  noSummary?: boolean;
 }
 
 export const Brand = forwardRef<HTMLDivElement, BrandProps>(function Brand(
-  { counts, projectName, projects, currentId, reconnecting, onPick, onLogout },
+  { counts, projectName, projects, currentId, reconnecting, onPick, onLogout, noSummary },
   ref,
 ) {
   const [open, setOpen] = useState(false);
@@ -88,7 +91,7 @@ export const Brand = forwardRef<HTMLDivElement, BrandProps>(function Brand(
           </div>
         )}
       </div>
-      <div className="now sum" aria-live="polite">
+      {!noSummary && <div className="now sum" aria-live="polite">
         {reconnecting ? (
           <span className="amber">{COPY.reconnecting}</span>
         ) : sum && counts?.total === 0 ? (
@@ -114,7 +117,7 @@ export const Brand = forwardRef<HTMLDivElement, BrandProps>(function Brand(
         ) : (
           ' '
         )}
-      </div>
+      </div>}
     </div>
   );
 });
@@ -126,9 +129,11 @@ interface ActionsProps {
   onWaiting: () => void;
   /** Solo si el navegador puede avisar y todavía no le pediste permiso: el clic lo pide. */
   onNotify?: () => void;
+  /** Brújula (#109): el botón «te espera» vive en la brújula, junto a su respuesta. */
+  noWaiting?: boolean;
 }
 
-export const Actions = forwardRef<HTMLDivElement, ActionsProps>(function Actions({ waiting, onWaiting, onNotify }, ref) {
+export const Actions = forwardRef<HTMLDivElement, ActionsProps>(function Actions({ waiting, onWaiting, onNotify, noWaiting }, ref) {
   return (
     <div className="hud actions" ref={ref}>
       {onNotify && (
@@ -146,11 +151,13 @@ export const Actions = forwardRef<HTMLDivElement, ActionsProps>(function Actions
           <span className="lbl">{COPY.notifyMe}</span>
         </button>
       )}
-      <button type="button" className={`btn waiting${waiting ? '' : ' calm'}`} onClick={onWaiting} disabled={!waiting} aria-disabled={!waiting}>
-        <span className="dot" aria-hidden="true" />
-        <span>{waitingText(waiting)}</span>
-        {waiting > 0 && <span className="cta">{COPY.answer}</span>}
-      </button>
+      {!noWaiting && (
+        <button type="button" className={`btn waiting${waiting ? '' : ' calm'}`} onClick={onWaiting} disabled={!waiting} aria-disabled={!waiting}>
+          <span className="dot" aria-hidden="true" />
+          <span>{waitingText(waiting)}</span>
+          {waiting > 0 && <span className="cta">{COPY.answer}</span>}
+        </button>
+      )}
     </div>
   );
 });
@@ -163,13 +170,28 @@ interface FooterProps {
   onPick: (id: string) => void;
   onMark: (id: string | null) => void;
   onReplay: () => void;
+  /** Brújula (#109): la brújula ya lleva los colores de estado; el pie solo enseña las líneas. */
+  brief?: boolean;
 }
 
-export const Footer = forwardRef<HTMLElement, FooterProps>(function Footer({ model, carded, onPick, onMark, onReplay }, ref) {
+export const Footer = forwardRef<HTMLElement, FooterProps>(function Footer({ model, carded, onPick, onMark, onReplay, brief }, ref) {
   const empty = !model || !model.tasks.length;
   return (
     <footer className={`hud foot${carded ? ' carded' : ''}`} ref={ref}>
-      {!empty && (
+      {!empty && brief && (
+        <p className="hint">
+          <span className="how">{t('foot.howBrief')}</span>
+          <span className="lg">
+            <i className="ln" />
+            {COPY.legendNeeds}
+          </span>
+          <span className="lg">
+            <i className="lo" />
+            {COPY.legendBorn}
+          </span>
+        </p>
+      )}
+      {!empty && !brief && (
         <p className="hint">
           <span className="how">
             <span className="long">{COPY.how}</span>

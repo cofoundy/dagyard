@@ -62,7 +62,7 @@ export function looseText(source: string, fileName: string): string[] {
 
 function uiFiles(): string[] {
   return readdirSync(UI_DIR)
-    .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f) && f !== 'copy.ts')
+    .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f) && f !== 'copy.ts' && f !== 'proto.tsx') // proto.tsx: barra del prototipo #109, solo dev:fixture
     .sort();
 }
 
