@@ -9,6 +9,11 @@ export interface SessionApi {
   /** Cambia la clave por una sesión. Lanza `UnauthorizedError` si la clave no sirve. */
   login(token: string): Promise<void>;
   logout(): Promise<void>;
+  /**
+   * Adelanta la lista y el plan de `projectId` mientras `check()` pregunta por la sesión, en vez de esperar su respuesta
+   * (#112). Se usan una sola vez; si la sesión no sirve, se descartan sin mostrarse.
+   */
+  prefetch?(projectId: string): void;
 }
 
 export type AppApi = DagyardApi & SessionApi;

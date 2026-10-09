@@ -12,7 +12,10 @@
 - Ids: slugs `[a-z0-9][a-z0-9-]*` de hasta 64 caracteres (`marketplace-reservas`, `pagos`). Si creas un
   nodo o proyecto sin `id`, el servidor lo deriva del título con `slugify()` y responde `409` si ya existe.
   Bloqueantes y mensajes llevan ids generados (`b_…`, `m_…`).
-- Errores: siempre `{"error": {"code": "…", "message": "…"}}`, con el mensaje en español.
+- Errores: siempre `{"error": {"code": "…", "message": "…"}}`, con el mensaje en español. Algunos llevan además
+  `reason`, que afina el `code` sin cambiarlo (#110): hoy solo `"reason": "exists"` en el `409 conflict` de algo
+  que ya existe (ver abajo). Un cliente distingue «ya estaba» de cualquier otro `409` por `reason`, nunca por el
+  texto del mensaje; uno que solo lee `code` sigue viendo `conflict`.
 
 | HTTP | `code` | Cuándo |
 |---|---|---|
@@ -21,7 +24,8 @@
 | 401 | `unauthorized` | sin credencial o credencial inválida |
 | 403 | `forbidden` | credencial válida, rol equivocado (p. ej. un agente que intenta resolver) |
 | 404 | `not_found` | proyecto, nodo o bloqueante inexistente |
-| 409 | `conflict` | id repetido; resolver un bloqueante ya resuelto; cambiar el `status` de un nodo con un bloqueante abierto, declararlo `done` en un `PUT`, o cerrarlo (`close`, `DELETE`) con uno abierto; cerrar un nodo ya cerrado; un `PUT` de un agente sobre una **demo** que quitaría una tarea con un bloqueante (abierto o resuelto); o un `PUT` con `If-None-Match: *` sobre un proyecto que ya existe |
+| 409 | `conflict` + `reason: "exists"` | ya existe: el id de una tarea (`POST …/nodes`) o de un proyecto (`POST /api/projects`, o `PUT` con `If-None-Match: *`), o la arista («necesita» o «nació de») de `POST …/edges`. Re-correr lo mismo es inocuo: no escribe nada. Una tarea repetida da este `409` aun con el proyecto en su tope de tareas |
+| 409 | `conflict` | resolver un bloqueante ya resuelto; cambiar el `status` de un nodo con un bloqueante abierto, declararlo `done` en un `PUT`, o cerrarlo (`close`, `DELETE`) con uno abierto; cerrar un nodo ya cerrado; un `PUT` de un agente sobre una **demo** que quitaría una tarea con un bloqueante (abierto o resuelto); o una `Idempotency-Key` reusada con otro cuerpo. Estos no llevan `reason` |
 | 500 | `internal` | lo demás |
 | 503 | `unavailable` | el servidor se está reiniciando (un deploy) y no escribió nada, o la escritura quedó con su `Idempotency-Key`: repetir con la misma clave es seguro |
 | 503 | `overloaded` | el servidor está sobrecargado: espera antes de reintentar (reintentar enseguida empeora) |
@@ -105,9 +109,9 @@ Sin auth: solo `GET /api/health` → `200 {"ok": true, "version": "<sha corto>"}
 | Método y ruta | Body | Respuesta |
 |---|---|---|
 | `GET /api/projects` | — | `{"projects": ProjectSummary[]}` (con conteos por estado de las tareas, `kind: "task"`, y bloqueantes abiertos) |
-| `POST /api/projects` | `ProjectInput` (`name`, `id?`, `lang?`, `stages?`) | `201 Project`. Sin `lang`, `en`; sin `stages` usa las 5 por defecto con su nombre en ese idioma (los ids son los mismos en los dos: `descubrimiento`, `diseno`, `construccion`, `pruebas`, `lanzamiento`) |
+| `POST /api/projects` | `ProjectInput` (`name`, `id?`, `lang?`, `stages?`) | `201 Project`. Id que ya existe → `409` con `reason: "exists"`. Sin `lang`, `en`; sin `stages` usa las 5 por defecto con su nombre en ese idioma (los ids son los mismos en los dos: `descubrimiento`, `diseno`, `construccion`, `pruebas`, `lanzamiento`) |
 | `GET /api/projects/:pid` | — | `ProjectSnapshot` (ver abajo) |
-| `PUT /api/projects/:pid` | `ProjectGraphInput` | `200 ProjectSnapshot`. Crea el proyecto o reescribe su grafo (idempotente). Lo usan la semilla (con el token del dueño) y `dagyard import`. Con `If-None-Match: *` solo crea: `409` si el proyecto ya existe, sin tocarlo. En un proyecto existente que no es demo **ningún nodo desaparece** (#90, ver abajo). Si quien llama es `agent` conserva los bloqueantes, los mensajes y la antigüedad de las tareas (ver abajo). Emite `project.replaced` |
+| `PUT /api/projects/:pid` | `ProjectGraphInput` | `200 ProjectSnapshot`. Crea el proyecto o reescribe su grafo (idempotente). Lo usan la semilla (con el token del dueño) y `dagyard import`. Con `If-None-Match: *` solo crea: `409` (`reason: "exists"`) si el proyecto ya existe, sin tocarlo. En un proyecto existente que no es demo **ningún nodo desaparece** (#90, ver abajo). Si quien llama es `agent` conserva los bloqueantes, los mensajes y la antigüedad de las tareas (ver abajo). Emite `project.replaced` |
 | `PATCH /api/projects/:pid` | `{"name"?, "lang"?, "stages"?}` | `200 Project`. Emite `project.updated` |
 | `DELETE /api/projects/:pid` | — | `204`. Solo `owner`. Borra el proyecto entero con sus nodos: uno de los dos únicos caminos que borran filas de nodo (el otro: re-sembrar una demo) |
 | `GET /api/projects/:pid/next` | — | `NextResult`: `{"node": DagNode \| null, "goalLine": "/goal …" \| null}` |
@@ -176,11 +180,11 @@ cerrada; si se cerró como `replaced`, cuenta la última de su cadena de `replac
 
 | Método y ruta | Body | Respuesta |
 |---|---|---|
-| `POST /api/projects/:pid/nodes` | `NodeInput` (`title`, `id?`, `stage?`, `kind?`, `bornAt?`, `quote?`, `quoteBy?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `deps?`, `origins?: [{from, why?}]`) | `201 DagNode`. Sin `stage`, la primera del proyecto. Emite `node.added` + un `edge.added` por cada dep + un `origin.added` por cada origen |
+| `POST /api/projects/:pid/nodes` | `NodeInput` (`title`, `id?`, `stage?`, `kind?`, `bornAt?`, `quote?`, `quoteBy?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `deps?`, `origins?: [{from, why?}]`) | `201 DagNode`. Sin `stage`, la primera del proyecto. Id que ya existe → `409` con `reason: "exists"`. Emite `node.added` + un `edge.added` por cada dep + un `origin.added` por cada origen |
 | `PATCH /api/projects/:pid/nodes/:nid` | `NodePatch` (`stage?`, `title?`, `kind?`, `quote?`, `quoteBy?`, `status?`, `progress?`, `team?`, `goal?`, `reportUrl?`, `link?`, `teamId?`) | `200 DagNode`. Emite `node.updated`. `status: "done"` cierra como `done`; `pending`/`working` reabre. No acepta `closedAs` (para eso, `close`). Un `teamId` de un equipo que no existe lo crea (arrancado ahora, nombre desde el slug) |
 | `POST /api/projects/:pid/nodes/:nid/close` | `CloseInput` (`as`, `why?`, `by?`, `reportUrl?`) | `200 DagNode`. Cierra con motivo (ver §El modelo del DAG). Ya cerrado → `409`; con una pregunta abierta → `409`. Emite `node.updated` |
 | `DELETE /api/projects/:pid/nodes/:nid?why=<motivo>` | — | `200 DagNode`. **Descartar**, solo `owner` (agente → `403`): cierra como `dropped` con el motivo opcional de `?why=` (≤500). Nunca borra la fila. Mismas reglas que `close`. Emite `node.updated` |
-| `POST /api/projects/:pid/edges` | `EdgeInput` (`from`, `to`, `kind?: "requires" \| "origin"`, `why?`) | `201 Edge` (o `201 Origin` con `kind: "origin"`). Sin `kind`, «necesita»; `why` (≤280) solo con `origin`. `400 cycle` si cierra un ciclo de su tipo; `400` si un «necesita» sale de un `goal` o `stream`; `409` si ya existe. Emite `edge.added` u `origin.added` |
+| `POST /api/projects/:pid/edges` | `EdgeInput` (`from`, `to`, `kind?: "requires" \| "origin"`, `why?`) | `201 Edge` (o `201 Origin` con `kind: "origin"`). Sin `kind`, «necesita»; `why` (≤280) solo con `origin`. `400 cycle` si cierra un ciclo de su tipo; `400` si un «necesita» sale de un `goal` o `stream`; `409` con `reason: "exists"` si ya existe. Emite `edge.added` u `origin.added` |
 | `DELETE /api/projects/:pid/edges?from=<id>&to=<id>[&kind=origin]` | — | `204`. «Necesita»: los dos roles; «nació de» (`kind=origin`): solo `owner`. Emite `edge.removed` u `origin.removed` |
 
 `link` es el detalle técnico de la tarea: la URL (http o https) del issue o del PR. Es opcional

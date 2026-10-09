@@ -77,7 +77,7 @@ function pidParam(c: C): string {
 /* ------------------------------------------------------------------ errores y auth */
 
 app.onError((err, c) => {
-  if (err instanceof ApiFailure) return errorResponse(err.code, err.message);
+  if (err instanceof ApiFailure) return errorResponse(err.code, err.message, undefined, err.reason);
   // un deploy reinició un Durable Object en medio de una lectura (o está sobrecargado): no es un error nuestro
   const unavailable = unavailableFailure(err);
   if (unavailable) return errorResponse(unavailable.code, unavailable.message);

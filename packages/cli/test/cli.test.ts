@@ -32,6 +32,10 @@ let projects = new Set<string>();
 let lockedProjects = new Set<string>();
 /** idioma guardado de cada proyecto del mock; sin entrada = guardado antes del campo (#77) */
 let projectLangs = new Map<string, string>();
+/** ids y aristas (`from>to`) que el mock da por existentes: un POST repetido → 409 `reason: 'exists'` (#110) */
+let existing = new Set<string>();
+/** ids cuyo POST responde un 409 que no es un duplicado (sin `reason`) */
+let otherConflict = new Set<string>();
 
 /** Un nodo del mock con defaults; `next` lo elige con `nextStartable` del modelo, como el Worker. */
 function mockNode(id: string, stage: string, status: DagNode['status'], goal: string | null = null): DagNode {
@@ -79,6 +83,12 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   }
   if (req.method === 'GET' && kind === 'next') {
     return reply(res, 200, nextStartable(stages, nodes, edges));
+  }
+  if (req.method === 'POST' && (kind === 'nodes' || kind === 'edges') && !nodeId) {
+    const b = body as { id?: string; from?: string; to?: string };
+    const key = kind === 'nodes' ? b.id! : `${b.from}>${b.to}`;
+    if (existing.has(key)) return reply(res, 409, { error: { code: 'conflict', message: `Ya existe «${key}»`, reason: 'exists' } });
+    if (otherConflict.has(key)) return reply(res, 409, { error: { code: 'conflict', message: 'El equipo llegaría a 51 tareas; el máximo es 50' } });
   }
   if (req.method === 'POST' && kind === 'nodes' && !nodeId) return reply(res, 201, { ...(body as object), projectId });
   if (req.method === 'PATCH' && kind === 'nodes' && nodeId) {
@@ -154,6 +164,8 @@ beforeEach(() => {
   projects = new Set(['demo']);
   lockedProjects = new Set();
   projectLangs = new Map();
+  existing = new Set();
+  otherConflict = new Set();
 });
 
 /** `cwd` por defecto: una carpeta temporal vacía, así ningún `.dagyard.json` del repo se cuela en los tests. */
@@ -334,6 +346,58 @@ describe('el modelo del DAG (#90)', () => {
     expect(last().body).toEqual({ from: 'panel', to: 'p7', kind: 'origin', why: 'sale del panel' });
     expect((await cli(['edge', 'add', 'a', 'b', '--why', 'x'])).code).toBe(EXIT.usage);
     expect((await cli(['edge', 'add', 'a', 'b', '--kind', 'nace'])).code).toBe(EXIT.usage);
+  });
+});
+
+describe('--if-absent (#110)', () => {
+  it.each([
+    // el id ya sale normalizado: el mock compara contra el `id` del body y la marca lo imprime en slug
+    [['node', 'add', 'T-314-A', '--title', 'Uno'], 't-314-a', 't-314-a exists\n'],
+    [['goal', 'add', 'goal-fabrica', '--title', 'x'], 'goal-fabrica', 'goal-fabrica exists\n'],
+    [['request', 'add', 'r1', '--title', 'R', '--quote', 'q'], 'r1', 'r1 exists\n'],
+    [['edge', 'add', 'a', 'b'], 'a>b', 'a → b exists\n'],
+    [['edge', 'add', 'req-m9', 'gh-75', '--kind', 'origin', '--why', 'x'], 'req-m9>gh-75', 'req-m9 ⇢ gh-75 exists\n'],
+  ])('%j: si ya existe, exit 0 e imprime «… exists»; sin el flag, exit 1', async (argv, key, out) => {
+    existing.add(key);
+    const r = await cli([...argv, '--if-absent']);
+    expect(r).toEqual({ code: EXIT.ok, stdout: out, stderr: '' });
+    const plain = await cli(argv);
+    expect(plain.code).toBe(EXIT.api);
+    expect(plain.stdout).toBe('');
+    expect(plain.stderr).toMatch(/^dagyard: conflict: Ya existe/);
+  });
+
+  it('si no existe, escribe e imprime como siempre', async () => {
+    expect(await cli(['node', 'add', 'nueva', '--title', 'N', '--if-absent'])).toMatchObject({ code: 0, stdout: 'nueva\n' });
+    expect(last()).toMatchObject({ method: 'POST', path: '/api/projects/demo/nodes', body: { id: 'nueva' } });
+    expect(await cli(['edge', 'add', 'a', 'b', '--if-absent'])).toMatchObject({ code: 0, stdout: 'a → b\n' });
+  });
+
+  it('un 409 que no es «ya existe» sigue fallando con --if-absent', async () => {
+    otherConflict.add('t-9');
+    otherConflict.add('a>b');
+    for (const argv of [['node', 'add', 'T-9', '--title', 'N', '--if-absent'], ['edge', 'add', 'a', 'b', '--if-absent']]) {
+      const r = await cli(argv);
+      expect(r.code, argv.join(' ')).toBe(EXIT.api);
+      expect(r.stdout).toBe('');
+      expect(r.stderr).toContain('conflict: El equipo llegaría a 51 tareas');
+    }
+  });
+
+  it('es una bandera: no lleva valor, y no existe en los comandos que no agregan', async () => {
+    expect((await cli(['node', 'add', 'x', '--title', 'X', '--if-absent=yes'])).code).toBe(EXIT.usage);
+    expect((await cli(['node', 'update', 'x', '--title', 'X', '--if-absent'])).code).toBe(EXIT.usage);
+    expect(seen).toHaveLength(0);
+  });
+
+  it('la ayuda lo explica en inglés y en español', async () => {
+    for (const cmd of [['node', 'add'], ['goal', 'add'], ['request', 'add'], ['edge', 'add']]) {
+      const es = await cli([...cmd, '--help']);
+      expect(es.stdout).toContain('[--if-absent]');
+      expect(es.stdout).toContain('Con --if-absent');
+      const en = await cli([...cmd, '--help'], { LANG: 'en_US.UTF-8' });
+      expect(en.stdout).toContain('With --if-absent');
+    }
   });
 });
 

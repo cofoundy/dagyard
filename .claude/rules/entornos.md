@@ -14,3 +14,5 @@ Secrets del Worker (`wrangler secret bulk`): `OWNER_TOKEN`, `AGENT_KEY`, `VAULT_
 El token de Cloudflare del entorno no tiene permiso de D1: el estado vive en Durable Objects con SQLite (#9).
 
 Verifica: `curl -s <url>/api/health` → 200 con `version` = el sha de `main`; `curl -s -o /dev/null -w '%{http_code}' <url>/api/projects` → 401.
+
+`/api/health` no pasa por el Durable Object `Store`: tras un deploy da el sha nuevo enseguida, pero el `Store` puede seguir con el código viejo ~2 min (medido el 2026-10-09 en #110: deploy 17:57:35Z, el 409 con `reason` apareció a las 17:59:48Z). Si el cambio toca el `Store` (`writes.ts`, `db.ts`), sondea el efecto (la respuesta de la escritura) hasta verlo, no el `health`.

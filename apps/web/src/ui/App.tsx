@@ -7,6 +7,7 @@ import { EMPTY_GRAPH } from '../data/view';
 import { useLang } from '../i18n';
 import { COPY } from './copy';
 import { Entry, type EntryNotice } from './Entry';
+import { readLink } from './link';
 import { useSky } from './useSky';
 import { Workspace } from './Workspace';
 
@@ -25,8 +26,13 @@ export function App({ api, demo = false }: { api: AppApi; demo?: boolean }) {
   // Al cambiar de idioma se vuelve a pintar todo el árbol: cada texto se lee del catálogo al pintar.
   useLang();
 
+  // Con un enlace a un proyecto (`?p=`), su plan y la lista se piden junto con la sesión, no después (#112).
+  const prefetched = useRef(false);
   useEffect(() => {
     let alive = true;
+    const linked = readLink().project;
+    if (linked && !prefetched.current) api.prefetch?.(linked);
+    prefetched.current = true;
     api
       .check()
       .then((ok) => alive && setPhase(ok ? 'in' : 'entry'))
