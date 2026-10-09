@@ -34,7 +34,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { fmtDuration, fmtTime, t, type MessageKey } from '../i18n';
+import { fmtDuration, fmtTime, lang, t, type MessageKey } from '../i18n';
 import { buildBackdrop } from './backdrop';
 import type { CardArea, CreateSkyOptions, Pulse, SafeArea, SceneEdge, SceneGraph, SceneMode, SceneNode, Sky } from './contract';
 import { layoutDag, timeTicks, type DagLayout } from './dag-layout';
@@ -42,7 +42,10 @@ import { fallback, fitText, injectStyles, textMeter } from './dag-labels';
 import {
   FLY_DUR,
   FOV,
+  GROW_DUR,
+  GROW_DUR_NEAR,
   INTRO_DUR,
+  INTRO_DUR_NEAR,
   K,
   RELAY_DUR,
   clampPan,
@@ -51,6 +54,7 @@ import {
   growFront,
   introEase,
   introStartCam,
+  introStartCamNear,
   lerpCam,
   overviewCam,
   placeCamera,
@@ -61,6 +65,7 @@ import {
   type CamState,
   type Viewport,
 } from './dag-motion';
+import { nowEdge } from './now-edge';
 import { makeTextures, type SkyTextures } from './textures';
 
 const COL = { done: 0xf4eee2, working: 0x9fd3ff, blocked: 0xffb547, pending: 0x8494ad, loose: 0x9aa6b8, ended: 0x5d6a80 } as const;
@@ -226,12 +231,22 @@ export function createSky(opts: CreateSkyOptions): Sky {
   let intro: number | null = null;
   let introPending = true;
   let clip = Infinity;
+  /** El frente de crecimiento arranca aquí (px) y dura esto (s): en celular, solo lo que se ve. */
+  let growX0 = 0;
+  let growDur = GROW_DUR;
   const cam: CamState = { tx: 0, ty: 0, tz: 0, r: 60, theta: 0, phi: Math.PI / 2, ox: 0, oy: 0 };
   let tween: { from: CamState; to: CamState; t: number; dur: number; ease: (k: number) => number; onEnd?: () => void } | null = null;
   let restK = 0;
   const parallax = { x: 0, y: 0, tx: 0, ty: 0 };
   let down: { x: number; y: number; px: number; py: number; moved: boolean } | null = null;
   const alive = new Map<string, boolean>();
+  /** #107: lo que se nombra en «ahora» con su hilo, y el resto abierto, agrupado. */
+  const named = new Set<string>();
+  let grouped: string[] = [];
+  let groupOpen = false;
+  /** #108: la primera estrella a la vista ya se marcó (performance.mark). */
+  let firstStar = false;
+  let firstFrame = false;
 
   // ---------- partículas y relevos ----------
   const pGeo = new BufferGeometry();
@@ -261,6 +276,23 @@ export function createSky(opts: CreateSkyOptions): Sky {
   const nowEl = doc.createElement('div');
   nowEl.className = 'sky-now';
   root.appendChild(nowEl);
+  // el resto de lo abierto: una sola etiqueta bajo «ahora» que se despliega en la lista de sus nombres
+  const moreBtn = doc.createElement('button');
+  moreBtn.type = 'button';
+  moreBtn.className = 'sky-more';
+  moreBtn.setAttribute('aria-expanded', 'false');
+  moreBtn.style.display = 'none';
+  const moreList = doc.createElement('div');
+  moreList.className = 'sky-more-list';
+  moreList.id = `sky-more-${Math.random().toString(36).slice(2, 8)}`;
+  moreList.hidden = true;
+  moreBtn.setAttribute('aria-controls', moreList.id);
+  moreBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    if (intro !== null) skipIntro();
+    setGroupOpen(!groupOpen);
+  });
+  root.append(moreBtn, moreList);
 
   // ---------- nodos ----------
   function buildNode(n: SceneNode): NodeView {
@@ -463,13 +495,21 @@ export function createSky(opts: CreateSkyOptions): Sky {
     const { w, h } = safeSize(vp, safe);
     if (!graph.nodes.length) {
       L = null;
+      named.clear();
+      grouped = [];
+      renderGroup();
       clearAxis();
       return;
     }
     const width = mobile() ? Math.max(w, 900) : w;
     const prev = L;
+    const edge = nowEdge(graph.nodes, { now: graph.now });
+    named.clear();
+    for (const id of edge.named) named.add(id);
+    grouped = edge.grouped;
+    renderGroup();
     L = layoutDag(
-      graph.nodes.map((n) => ({ id: n.id, born: n.born, parent: n.parent, children: n.children, status: n.status, labelled: n.status === 'working' || n.status === 'blocked' || n.kind !== 'task' })),
+      graph.nodes.map((n) => ({ id: n.id, born: n.born, parent: n.parent, children: n.children, status: n.status, toNow: named.has(n.id), labelled: named.has(n.id) || n.kind !== 'task' })),
       { width, now: graph.now, activity: graph.activity, padL: mobile() ? 24 : 40, padR: mobile() ? 150 : 230, labelReserve: mobile() ? 120 : 150, prevRows: prev?.row ?? null },
     );
     const nRows = L.rows[1] - L.rows[0] + 1;
@@ -558,6 +598,80 @@ export function createSky(opts: CreateSkyOptions): Sky {
     nowLine.computeLineDistances();
   }
 
+  // ---------- el grupo de «ahora» (#107): lo abierto que no lleva hilo, a un click ----------
+  let groupKey = '';
+  function renderGroup() {
+    // se rehace solo si cambió (el reloj relayouta cada minuto: el foco del teclado no se pierde)
+    const key = `${lang()}|${grouped.map((id) => `${id}:${byId.get(id)?.status}:${byId.get(id)?.title}`).join('|')}`;
+    if (key === groupKey) return;
+    groupKey = key;
+    moreBtn.style.display = grouped.length ? '' : 'none';
+    moreBtn.textContent = grouped.length ? t('scene.more', { count: grouped.length }) : '';
+    moreList.textContent = '';
+    if (!grouped.length) {
+      setGroupOpen(false);
+      return;
+    }
+    const hint = doc.createElement('p');
+    hint.className = 'sky-more-hint';
+    hint.textContent = t('scene.moreHint');
+    moreList.appendChild(hint);
+    for (const id of grouped) {
+      const n = byId.get(id);
+      if (!n) continue;
+      const b = doc.createElement('button');
+      b.type = 'button';
+      b.className = `sky-more-item ${statusClass(n)}`;
+      const pre = prefixOf(n);
+      if (pre) {
+        const sp = doc.createElement('span');
+        sp.className = 'pre';
+        sp.textContent = `${pre} · `;
+        b.appendChild(sp);
+      }
+      b.appendChild(doc.createTextNode(n.title || '—'));
+      b.title = n.title;
+      b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setGroupOpen(false);
+        handlers.onPick(id);
+      });
+      const lightOn = () => {
+        hoverId = id;
+        dirtyLabels = true;
+      };
+      const lightOff = () => {
+        if (hoverId !== id) return;
+        hoverId = null;
+        dirtyLabels = true;
+      };
+      b.addEventListener('pointerenter', lightOn);
+      b.addEventListener('pointerleave', lightOff);
+      b.addEventListener('focus', () => {
+        lightOn();
+        reveal(id);
+      });
+      b.addEventListener('blur', lightOff);
+      moreList.appendChild(b);
+    }
+  }
+
+  function setGroupOpen(on: boolean) {
+    if (on === groupOpen) return;
+    groupOpen = on;
+    moreBtn.setAttribute('aria-expanded', String(on));
+    moreList.hidden = !on;
+    if (!on && hoverId && grouped.includes(hoverId)) hoverId = null;
+    dirtyLabels = true;
+  }
+
+  /** Lo que se enciende: el vecindario de la tarea abierta o señalada; con el grupo desplegado, el grupo. */
+  function lit(): Set<string> | null {
+    const id = focusId ?? hoverId;
+    if (id) return related(id);
+    return groupOpen ? new Set(grouped) : null;
+  }
+
   // ---------- etiquetas: pocas, por prioridad, sin choques; lo vivo se nombra en el borde de «ahora» ----------
   function related(id: string | null): Set<string> | null {
     if (!id) return null;
@@ -573,7 +687,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
     if (focusId === n.id || hoverId === n.id || markId === n.id) return 1000;
     if (n.status === 'blocked') return 900;
     if (rel?.has(n.id)) return 850;
-    if (n.status === 'working') return 800;
+    if (named.has(n.id)) return 800;
     if (n.kind === 'goal' || n.loose) return 700;
     if (n.kind === 'request' || n.kind === 'stream') return 600;
     if (graph.now - n.born < 45 * 60e3) return 500;
@@ -590,7 +704,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
   function placeLabels() {
     dirtyLabels = false;
     if (!L) return;
-    const rel = related(focusId);
+    const rel = focusId ? related(focusId) : groupOpen ? new Set(grouped) : null;
     // en el vuelo a una tarea las estrellas se separan: los choques se miden a esa escala
     const s = focusId ? 1 / 0.42 : 1;
     const fv = focusId ? nodes.get(focusId) : undefined;
@@ -612,7 +726,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
       const v = nodes.get(n.id)!;
       const weight = n.status === 'blocked' || n.kind === 'goal' ? 500 : 400;
       const sp = P(v.tx, v.ty);
-      const tip = !focusId && (n.status === 'working' || n.status === 'blocked') && v.te > v.tx + 4;
+      const tip = !focusId && named.has(n.id) && v.te > v.tx + 4;
       const max = tip ? Math.max(60, W - (v.te + 14) - 10) : p >= 850 ? 260 : 210;
       const pre = prefixOf(n);
       const preTxt = pre ? `${pre} · ` : '';
@@ -689,19 +803,26 @@ export function createSky(opts: CreateSkyOptions): Sky {
       setMode(focusId ? 'focus' : 'overview', true);
       return;
     }
+    const near = mobile();
     const first = graph.nodes.reduce((a, b) => (b.born < a.born ? b : a));
     const fv = nodes.get(first.id)!;
-    Object.assign(cam, introStartCam(end, { x: fv.tx + 120, y: fv.ty }));
+    const x0 = Math.min(...[...nodes.values()].map((v) => v.tx));
+    // en celular el grafo es más ancho que la pantalla y la entrada mira lo de ahora: lo que queda a la izquierda
+    // (fuera de cuadro) ya está, y el frente recorre solo lo que se ve
+    growX0 = near ? Math.max(x0, pan.x - 20) : x0;
+    growDur = near ? GROW_DUR_NEAR : GROW_DUR;
+    Object.assign(cam, near ? introStartCamNear(end) : introStartCam(end, { x: fv.tx + 120, y: fv.ty }));
     for (const v of nodes.values()) {
-      v.sc = 0;
+      const before = near && v.tx < growX0;
+      v.sc = before ? 1 : 0;
       v.vsc = 0;
-      v.lit = false;
+      v.lit = before;
     }
     for (const e of edges.values()) e.draw = 0;
     intro = 0;
     clip = -Infinity;
     mode = 'intro';
-    flyTo(end, INTRO_DUR, introEase, () => {
+    flyTo(end, near ? INTRO_DUR_NEAR : INTRO_DUR, introEase, () => {
       intro = null;
       clip = Infinity;
       if (focusId) {
@@ -786,7 +907,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
       styleEdge(ed);
     }
 
-    const key = `${graph.nodes.map((n) => `${n.id}@${n.born}:${n.parent ?? ''}:${n.status}`).sort().join(',')}#${graph.now}`;
+    const key = `${graph.nodes.map((n) => `${n.id}@${n.born}:${n.parent ?? ''}:${n.status}:${n.touched ?? ''}`).sort().join(',')}#${graph.now}`;
     if (key !== structureKey) {
       structureKey = key;
       if (vp.width > 1) relayout(live);
@@ -882,7 +1003,10 @@ export function createSky(opts: CreateSkyOptions): Sky {
   };
   const onUp = () => {
     canvas.style.cursor = '';
-    if (down && !down.moved) handlers.onPick(null);
+    if (down && !down.moved) {
+      setGroupOpen(false);
+      handlers.onPick(null);
+    }
     down = null;
   };
   const onLeave = () => {
@@ -908,6 +1032,10 @@ export function createSky(opts: CreateSkyOptions): Sky {
   canvas.style.touchAction = 'none';
   const onKey = (ev: KeyboardEvent) => {
     if (ev.key === 'Escape' && intro !== null) skipIntro();
+    else if (ev.key === 'Escape' && groupOpen) {
+      setGroupOpen(false);
+      moreBtn.focus({ preventScroll: true });
+    }
   };
   win.addEventListener('keydown', onKey);
 
@@ -943,7 +1071,12 @@ export function createSky(opts: CreateSkyOptions): Sky {
 
   function frame(now: number) {
     raf = win.requestAnimationFrame(frame);
-    const dt = Math.min((now - last) / 1000, 0.05);
+    const raw = Math.max(0, (now - last) / 1000);
+    const dt = Math.min(raw, 0.05);
+    // la entrada sigue al reloj aunque el dispositivo dibuje pocos cuadros (#108): con dt tope 0,05 s, a 4 fps
+    // los 5 s del travelling duraban más de 30
+    const dtIntro = intro !== null ? Math.min(raw, 0.25) : dt;
+    const slow = raw > 0.1;
     last = now;
     elapsed += dt;
     const tt = elapsed;
@@ -958,15 +1091,18 @@ export function createSky(opts: CreateSkyOptions): Sky {
         if (v) Object.assign(cam, focusCam(vp, safe, card, { x: v.tx, y: v.ty }, sideOf(v)));
       }
     }
-    if (introPending && L && graph.nodes.length) startIntro();
+    if (introPending && L && graph.nodes.length) {
+      mark('dagyard:graph');
+      startIntro();
+    }
 
     // cámara
     if (intro !== null) {
-      intro += dt;
-      clip = L ? growFront(intro, Math.min(...[...nodes.values()].map((v) => v.tx)), L.nowX) : Infinity;
+      intro += dtIntro;
+      clip = L ? growFront(intro, growX0, L.nowX, growDur, growDur === GROW_DUR_NEAR) : Infinity;
     }
     if (tween) {
-      tween.t += dt;
+      tween.t += dtIntro;
       lerpCam(tween.from, tween.to, tween.ease(Math.min(1, tween.t / tween.dur)), cam);
       if (tween.t >= tween.dur) {
         const end = tween.onEnd;
@@ -995,7 +1131,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
     backdrop.position.set(cam.tx * 0.65, cam.ty * 0.65, 0);
 
     if (dirtyLabels) placeLabels();
-    const rel = related(focusId ?? hoverId);
+    const rel = lit();
     const sel = focusId;
 
     // nodos
@@ -1028,7 +1164,8 @@ export function createSky(opts: CreateSkyOptions): Sky {
         if (intro !== null) v.flash = Math.max(v.flash, 0.5);
       }
       const target = v.lit && v.dying < 0 ? 1 : v.dying >= 0 ? v.dying : 0;
-      if (REDUCED) v.sc = target;
+      // cuadros lentos: la estrella aparece entera en vez de crecer de a poco
+      if (REDUCED || (slow && target === 1)) v.sc = target;
       const ds = target - v.sc;
       if (Math.abs(ds) > 0.002 || Math.abs(v.vsc) > 0.002) {
         v.vsc += (260 * ds - 22 * v.vsc) * dt;
@@ -1121,7 +1258,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
         }
       }
       // hilo de continuación: lo vivo se extiende hasta «ahora» y ahí se nombra
-      const liveNode = n.status === 'working' || n.status === 'blocked';
+      const liveNode = named.has(n.id);
       const end = Math.min(v.e, clip);
       if (vis && liveNode && end > v.x + 4) {
         v.thread.visible = true;
@@ -1156,7 +1293,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
         }
       }
       const vis = A.sc > 0.5 && B.sc > 0.5;
-      if (vis && ed.draw < SEG + 1) ed.draw = Math.min(SEG + 1, ed.draw + dt * (REDUCED ? 999 : 48));
+      if (vis && ed.draw < SEG + 1) ed.draw = Math.min(SEG + 1, ed.draw + dtIntro * (REDUCED ? 999 : 48));
       if (!vis && intro !== null) ed.draw = 0;
       if (moved) shapeEdge(ed);
       ed.geo.setDrawRange(0, Math.floor(ed.draw));
@@ -1222,6 +1359,14 @@ export function createSky(opts: CreateSkyOptions): Sky {
       const q = toScreen(L.nowX, 4);
       nowEl.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px) translateX(-50%)`;
       nowEl.style.opacity = q.ok ? String(axisO) : '0';
+      // el grupo cuelga bajo «ahora»; la lista se abre hacia el lado de los nombres sin salirse de la pantalla
+      moreBtn.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y + 20).toFixed(1)}px) translateX(-50%)`;
+      moreBtn.style.opacity = q.ok ? String(axisO * (sel ? 0.4 : 1)) : '0';
+      if (groupOpen) {
+        const lw = moreList.offsetWidth || 260;
+        const lx = Math.max(12, Math.min(q.x - 24, vp.width - lw - 12));
+        moreList.style.transform = `translate(${lx.toFixed(1)}px, ${(q.y + 50).toFixed(1)}px)`;
+      }
       nowMat.opacity = 0.32 * axisO;
       tickMat.opacity = 0.9 * axisO;
     }
@@ -1257,6 +1402,22 @@ export function createSky(opts: CreateSkyOptions): Sky {
     }
 
     composer.render();
+    // #108: marcas para medir en un teléfono el tiempo del primer cuadro a la primera estrella a la vista
+    if (!firstFrame) {
+      firstFrame = true;
+      mark('dagyard:sky');
+    }
+    if (!firstStar && graph.nodes.length) {
+      for (const v of nodes.values()) {
+        if (v.sc < 0.3 || v.dying >= 0) continue;
+        const q = toScreen(v.x, v.y);
+        if (q.ok && q.x > 0 && q.x < vp.width && q.y > top && q.y < bottom) {
+          firstStar = true;
+          mark('dagyard:first-star');
+          break;
+        }
+      }
+    }
   }
   raf = win.requestAnimationFrame(frame);
 
@@ -1396,6 +1557,14 @@ function makeDashRing() {
   return new CanvasTexture(c);
 }
 
+
+function mark(name: string) {
+  try {
+    performance.mark(name);
+  } catch {
+    /* sin User Timing */
+  }
+}
 
 function hashSeed(s: string): number {
   let h = 2166136261;

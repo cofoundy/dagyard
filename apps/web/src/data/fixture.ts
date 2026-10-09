@@ -196,6 +196,7 @@ function shifted(raw: unknown, now: number): Snapshot {
   for (const n of snap.nodes) {
     n.bornAt = move(n.bornAt);
     n.closedAt = move(n.closedAt);
+    n.updatedAt = move(n.updatedAt);
   }
   for (const b of snap.blockers) b.resolvedAt = move(b.resolvedAt);
   for (const m of snap.messages) m.at = move(m.at)!;
@@ -516,6 +517,10 @@ export class FixtureApi implements AppApi {
   }
 
   private emit(p: ProjectState, draft: Draft): void {
+    // como el servidor: toda escritura de un nodo le pone la hora de su último cambio
+    const at = new Date(this.now()).toISOString();
+    if (draft.type === 'node.added') draft = { ...draft, node: { ...draft.node, updatedAt: at } };
+    else if (draft.type === 'node.updated') draft = { ...draft, node: { ...draft.node, updatedAt: at } };
     const e = { ...draft, seq: p.snap.seq + 1 } as DagEvent;
     p.snap = reduce(p.snap, e);
     p.log.push(e);

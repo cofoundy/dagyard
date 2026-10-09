@@ -19,6 +19,8 @@ export interface SceneNode {
   parent: string | null;
   /** Lo que nació de ella, del más viejo al más nuevo. */
   children: string[];
+  /** Su último cambio (ms): estado, mensaje o respuesta. Sin él, su nacimiento. Decide qué se nombra en «ahora». */
+  touched?: number;
 }
 
 /** `needs`: `to` necesita a `from`. `origin`: `to` nació de `from`. En los dos, el extremo brillante es `to`. */

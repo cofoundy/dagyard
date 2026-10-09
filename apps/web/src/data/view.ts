@@ -5,7 +5,7 @@ import type { DagModel } from './dag';
 import type { Blocker, DagNode, Message, Snapshot } from './types';
 
 /** El DAG en la forma que dibuja la escena. */
-export function toSceneGraph(m: DagModel, activity?: number[]): SceneGraph {
+export function toSceneGraph(m: DagModel, activity?: number[], touched?: Map<string, number>): SceneGraph {
   return {
     nodes: m.tasks.map((t) => ({
       id: t.id,
@@ -17,6 +17,7 @@ export function toSceneGraph(m: DagModel, activity?: number[]): SceneGraph {
       loose: t.loose,
       parent: t.origins[0]?.from ?? null,
       children: [...t.children],
+      touched: Math.max(t.born, touched?.get(t.id) ?? -Infinity),
     })),
     edges: m.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
     now: m.now,
@@ -36,6 +37,19 @@ export function activityOf(s: Snapshot): number[] {
     if (Number.isFinite(t)) out.push(t);
   }
   return out.sort((a, b) => a - b);
+}
+
+/** Último cambio de cada tarea (ms): su `updatedAt`, sus mensajes y sus pedidos respondidos. */
+export function touchedOf(s: Snapshot): Map<string, number> {
+  const out = new Map<string, number>();
+  const bump = (id: string, at: string | undefined) => {
+    const t = at ? Date.parse(at) : NaN;
+    if (Number.isFinite(t) && t > (out.get(id) ?? -Infinity)) out.set(id, t);
+  };
+  for (const n of s.nodes) bump(n.id, n.updatedAt);
+  for (const m of s.messages) bump(m.nodeId, m.at);
+  for (const b of s.blockers) bump(b.nodeId, b.resolvedAt);
+  return out;
 }
 
 export const EMPTY_GRAPH: SceneGraph = { nodes: [], edges: [], now: 0 };

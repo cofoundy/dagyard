@@ -84,7 +84,7 @@ describe('adapter', () => {
     expect(s.project).toEqual({ id: 'p', name: 'Marketplace de reservas' });
     expect(s.stages).toEqual([{ id: 'diseno', name: 'Diseño' }]);
     // sin #90 en el cable: nació cuando se creó y los orígenes quedan por deducir (undefined, no [])
-    expect(s.nodes[0]).toEqual({ id: 'modelo-de-comisiones', stageId: 'diseno', title: 'Modelo de comisiones', status: 'blocked', progress: 0, team: 'Diseño', goal: undefined, reportUrl: undefined, kind: 'task', bornAt: T });
+    expect(s.nodes[0]).toEqual({ id: 'modelo-de-comisiones', stageId: 'diseno', title: 'Modelo de comisiones', status: 'blocked', progress: 0, team: 'Diseño', goal: undefined, reportUrl: undefined, kind: 'task', bornAt: T, updatedAt: T });
     expect(s.origins).toBeUndefined();
     expect(s.messages[0]).toMatchObject({ at: T, reportUrl: undefined });
     expect(s.seq).toBe(7);

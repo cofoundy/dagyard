@@ -46,6 +46,8 @@ export interface DagNode {
   closedReason?: string;
   replacedBy?: string;
   closedAt?: string;
+  /** Último cambio del nodo (ISO). Sin él (fixtures viejos), se toma su nacimiento. */
+  updatedAt?: string;
 }
 
 /** «Nació de» (#90): `to` nació de `from`, con su porqué. Nunca bloquea. */

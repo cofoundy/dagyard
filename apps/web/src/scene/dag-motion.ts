@@ -99,6 +99,19 @@ export function introStartCam(end: CamState, first: { x: number; y: number }): C
   return { ...end, tx: first.x * K, ty: -first.y * K, r: end.r * 0.36, theta: end.theta - 0.62, phi: end.phi - 0.4 };
 }
 
+/**
+ * En celular (#108) el travelling no viaja desde lo primero que nació (queda fuera de la pantalla, y el cielo se ve vacío
+ * varios segundos): arranca ya encuadrado en lo de ahora, un poco más cerca y de costado, y solo se posa.
+ */
+export function introStartCamNear(end: CamState): CamState {
+  return { ...end, r: end.r * 0.78, theta: end.theta - 0.24, phi: end.phi - 0.16 };
+}
+
+/** En celular la entrada es más corta: el frente de crecimiento solo recorre lo que se ve. */
+export const INTRO_DUR_NEAR = 3.2;
+export const GROW_DUR_NEAR = 2.4;
+export const GROW_START_NEAR = 0.12;
+
 /** Curva del travelling: arranca ya en movimiento (sin aire muerto) y se posa suave. */
 export function introEase(t: number): number {
   const k = Math.min(1, Math.max(0, t));
@@ -111,9 +124,10 @@ export function introEase(t: number): number {
 export const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 /** Frente de crecimiento (px) a los `s` segundos del travelling: de lo primero que nació a «ahora». */
-export function growFront(s: number, x0: number, x1: number): number {
-  const k = Math.min(1, Math.max(0, (s - GROW_START) / GROW_DUR));
-  const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+export function growFront(s: number, x0: number, x1: number, dur = GROW_DUR, near = false): number {
+  // en celular arranca casi enseguida y rápido (sale frenando): lo que se ve se enciende en el primer medio segundo
+  const k = Math.min(1, Math.max(0, (s - (near ? GROW_START_NEAR : GROW_START)) / dur));
+  const e = near ? 1 - (1 - k) * (1 - k) : k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
   return k <= 0 ? -Infinity : k >= 1 ? Infinity : x0 - 10 + (x1 + 14 - (x0 - 10)) * e;
 }
 
