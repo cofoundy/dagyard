@@ -52,7 +52,7 @@ export const en = {
   'hud.reconnecting': 'Reconnecting…',
   'hud.projects': 'Your projects',
   'hud.logout': 'Sign out',
-  'hud.demoNote': 'Sample project · no server',
+  'hud.demoNote': 'Example project: the data is made up',
   'hud.sky': 'Tasks in the order they were born; lines show what each one needs and where it came from',
 
   // ficha
@@ -238,7 +238,7 @@ export const es: Catalog = {
   'hud.reconnecting': 'Reconectando…',
   'hud.projects': 'Tus proyectos',
   'hud.logout': 'Salir',
-  'hud.demoNote': 'Proyecto de ejemplo · sin servidor',
+  'hud.demoNote': 'Proyecto de ejemplo: los datos son inventados',
   'hud.sky': 'Las tareas en el orden en que nacieron; las líneas dicen qué necesita cada una y de dónde salió',
 
   'card.close': 'Cerrar',

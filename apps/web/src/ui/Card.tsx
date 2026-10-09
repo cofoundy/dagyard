@@ -4,11 +4,11 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { buildDag, chain, goalOf, type DagModel, type DagTask } from '../data/dag';
-import type { Blocker, DagNode, Resolution, Snapshot } from '../data/types';
+import type { Blocker, CloseAs, DagNode, Resolution, Snapshot } from '../data/types';
 import { messagesOf, openBlockerOf, resolvedBlockersOf } from '../data/view';
 import { isResolvedByYou, RESOLVED_BY_AGENT } from '../data/adapter';
 import { t, useLang } from '../i18n';
-import { stateKey } from '../data/orient';
+import { endOf, needsInOrder, stateKey } from '../data/orient';
 import {
   ago,
   answeredBy,
@@ -95,19 +95,46 @@ export function Card(props: CardProps) {
   const open = !!node;
   const fresh = n ? props.snapshot.nodes.find((x) => x.id === n.id) : undefined;
 
+  // #116: al abrirse, el foco entra en la ficha (a su título), así quien va con teclado o lector de pantalla se entera;
+  // al cerrarse vuelve a lo que la abrió (la fila de la brújula, la estrella). Si entretanto el PM se fue a otra parte,
+  // no se le roba el foco.
+  const ref = useRef<HTMLElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const openId = node?.id;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const doc = el.ownerDocument;
+    const active = doc.activeElement instanceof HTMLElement && doc.activeElement !== doc.body ? doc.activeElement : null;
+    if (openId) {
+      // una tarea abierta desde la propia ficha (sus chips) conserva el origen de la primera, y se lee desde arriba
+      if (active && !el.contains(active)) opener.current = active;
+      el.scrollTop = 0;
+      el.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
+      return;
+    }
+    const back = opener.current;
+    opener.current = null;
+    if (back?.isConnected && (!active || el.contains(active))) back.focus({ preventScroll: true });
+  }, [openId]);
+
   return (
-    <aside className={`card${open ? ' open' : ''}`} aria-live="polite" aria-hidden={!open} inert={!open}>
+    <aside ref={ref} className={`card${open ? ' open' : ''}`} aria-live="polite" aria-hidden={!open} inert={!open}>
       {n && fresh && <CardBody {...props} node={fresh} />}
     </aside>
   );
 }
 
-/** Una tarea como botón con su punto de estado: lleva a su ficha (y la cámara vuela a ella). */
-function Chip({ t, onFocus }: { t: DagTask; onFocus: (id: string) => void }) {
+/**
+ * Una tarea como botón con su punto de estado: lleva a su ficha (y la cámara vuela a ella). `end`: una necesidad que
+ * ya no frena (#115) va tenue, con ✓ si se terminó y – si se dejó de lado, y el lector de pantalla dice cuál.
+ */
+function Chip({ t: task, onFocus, end }: { t: DagTask; onFocus: (id: string) => void; end?: CloseAs | null }) {
   return (
-    <button type="button" title={t.title} onClick={() => onFocus(t.id)}>
-      <i className={STATUS_CLASS[t.status]} aria-hidden="true" />
-      <span>{t.title}</span>
+    <button type="button" className={end ? 'met' : undefined} title={task.title} onClick={() => onFocus(task.id)}>
+      {end ? <b aria-hidden="true">{end === 'done' ? '✓' : '–'}</b> : <i className={STATUS_CLASS[task.status]} aria-hidden="true" />}
+      <span>{task.title}</span>
+      {end && <span className="sr"> · {CLOSE_TEXT[end]}</span>}
     </button>
   );
 }
@@ -137,7 +164,7 @@ function CardBody({ snapshot, node, quiet, model: given, offline, onClose, onFoc
   const cls = STATUS_CLASS[node.status];
   const state = stateKey({ status: node.status, kind: task.kind }, quiet);
   const neededBy = list(task.neededBy);
-  const needs = list(task.needs);
+  const needs = needsInOrder(model, task);
   const children = list(task.children);
   const goal = task.kind === 'goal' ? undefined : goalOf(model, task.id);
   const anc = chain(model, task.id).slice(0, -1);
@@ -231,7 +258,7 @@ function CardBody({ snapshot, node, quiet, model: given, offline, onClose, onFoc
           ×
         </button>
       </div>
-      <h2>{node.title}</h2>
+      <h2 tabIndex={-1}>{node.title}</h2>
 
       {blocker && <BlockerPanel key={blocker.id} blocker={blocker} offline={offline} onResolve={onResolve} />}
 
@@ -268,11 +295,15 @@ function CardBody({ snapshot, node, quiet, model: given, offline, onClose, onFoc
         </Sec>
       )}
 
-      {needs.length > 0 && (
-        <Sec title={COPY.needs}>
+      {/* primero lo que todavía la frena (el primero es el «después de …» de la brújula); lo cerrado, tenue y con ✓ */}
+      {needs.open.length + needs.done.length > 0 && (
+        <Sec title={COPY.needs} className="needs">
           <div className="kids">
-            {needs.map((t) => (
+            {needs.open.map((t) => (
               <Chip key={t.id} t={t} onFocus={onFocus} />
+            ))}
+            {needs.done.map((t) => (
+              <Chip key={t.id} t={t} onFocus={onFocus} end={endOf(model, t.id) ?? 'done'} />
             ))}
           </div>
         </Sec>

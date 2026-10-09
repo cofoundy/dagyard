@@ -7,7 +7,7 @@
 
 import type { DagModel, DagTask } from './dag';
 import type { MessageKey } from '../i18n';
-import type { Blocker, NodeKind, NodeStatus, Snapshot } from './types';
+import type { Blocker, CloseAs, NodeKind, NodeStatus, Snapshot } from './types';
 import { openBlockers } from './view';
 
 export interface WaitingItem {
@@ -49,6 +49,28 @@ const closed = (m: DagModel, id: string, seen = new Set<string>()): boolean => {
   return t.closedAs !== null;
 };
 
+/**
+ * Lo que una tarea necesita, en el orden en que lo dicen la brújula y la ficha (#115): primero lo abierto, de lo más
+ * viejo a lo más nuevo (el primero es el «después de …» de la brújula); después lo cerrado. Una necesidad reemplazada
+ * sigue abierta mientras lo esté su reemplazo.
+ */
+export function needsInOrder(m: DagModel, task: DagTask): { open: DagTask[]; done: DagTask[] } {
+  const all = task.needs.map((id) => m.byId.get(id)).filter((x): x is DagTask => !!x);
+  const byBorn = (a: DagTask, b: DagTask) => a.born - b.born;
+  return {
+    open: all.filter((t) => !closed(m, t.id)).sort(byBorn),
+    done: all.filter((t) => closed(m, t.id)),
+  };
+}
+
+/** Cómo terminó de verdad una tarea cerrada: si la reemplazaron, como terminó su reemplazo (#115). */
+export function endOf(m: DagModel, id: string, seen = new Set<string>()): CloseAs | null {
+  const t = m.byId.get(id);
+  if (!t) return null;
+  if (t.closedAs === 'replaced' && t.replacedBy && m.byId.has(t.replacedBy) && !seen.has(id)) return endOf(m, t.replacedBy, seen.add(id));
+  return t.closedAs;
+}
+
 export function orientation(m: DagModel, s: Snapshot): Orientation {
   const waiting: WaitingItem[] = [];
   const seenTask = new Set<string>();
@@ -81,7 +103,7 @@ export function orientation(m: DagModel, s: Snapshot): Orientation {
   const next: NextItem[] = m.tasks
     .filter((t) => t.kind === 'task' && t.status === 'pending' && t.closedAs === null)
     .map((task) => {
-      const open = task.needs.filter((id) => !closed(m, id)).map((id) => m.byId.get(id)!).sort((a, b) => a.born - b.born);
+      const { open } = needsInOrder(m, task);
       return { task, ready: open.length === 0, after: open[0] };
     })
     // lo que ya puede arrancar primero; dentro, lo más nuevo (lo que la fábrica acaba de pedir)

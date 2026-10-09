@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -143,5 +145,153 @@ describe('ficha: una tarea suelta (#90)', () => {
     expect(host.querySelector('.loose-actions')).toBeNull();
     expect(host.textContent).not.toMatch(/Lista/);
     expect(host.textContent).toMatch(/no entra/);
+  });
+});
+
+/** Una ficha con varias tareas en el plan (las otras se ven como chips). */
+function renderIn(s: Snapshot, id: string) {
+  const noop = () => {};
+  const n = s.nodes.find((x) => x.id === id)!;
+  act(() => root.render(<Card snapshot={s} node={n} onClose={noop} onFocus={noop} onResolve={async () => {}} />));
+}
+const plan = (nodes: DagNode[], edges: Snapshot['edges'] = [], blockers: Snapshot['blockers'] = []): Snapshot => ({
+  ...snapshot(nodes[0]!),
+  nodes,
+  edges,
+  blockers,
+});
+const at = (h: number) => new Date(Date.UTC(2026, 9, 9, h)).toISOString();
+
+describe('ficha: lo que todavía necesita (#115)', () => {
+  it('primero lo abierto (lo que la brújula nombra «después de»); lo cerrado después, con ✓ y marcado como listo', () => {
+    const s = plan(
+      [
+        node({ id: 'v1', title: 'v1', status: 'pending', bornAt: at(9) }),
+        node({ id: 'a', title: 'Diseñar la entrada', status: 'done', bornAt: at(1) }),
+        node({ id: 'b', title: 'Abrir el código', status: 'working', bornAt: at(2) }),
+        node({ id: 'c', title: 'Sincronizar issues', status: 'done', bornAt: at(3) }),
+        node({ id: 'd', title: 'Avisos', status: 'done', bornAt: at(4) }),
+      ],
+      ['a', 'b', 'c', 'd'].map((from) => ({ from, to: 'v1' })),
+    );
+    renderIn(s, 'v1');
+    const chips = [...host.querySelectorAll<HTMLButtonElement>('.needs .kids button')];
+    expect(chips.map((b) => b.title)).toEqual(['Abrir el código', 'Diseñar la entrada', 'Sincronizar issues', 'Avisos']);
+    expect(chips.map((b) => b.classList.contains('met'))).toEqual([false, true, true, true]);
+    expect(chips[0]!.textContent).not.toContain('✓');
+    for (const b of chips.slice(1)) expect(b.textContent).toMatch(/^✓.* · Lista$/);
+  });
+
+  it('lo que se dejó de lado no dice «Lista»: va tenue con – y su motivo', () => {
+    const s = plan(
+      [
+        node({ id: 'v1', title: 'v1', status: 'pending' }),
+        node({ id: 'x', title: 'Descartada', status: 'done', closedAs: 'dropped' }),
+        node({ id: 'vieja', title: 'Vieja', status: 'done', closedAs: 'replaced', replacedBy: 'nueva' }),
+        node({ id: 'nueva', title: 'Nueva', status: 'done', closedAs: 'dropped' }),
+      ],
+      [{ from: 'x', to: 'v1' }, { from: 'vieja', to: 'v1' }],
+    );
+    renderIn(s, 'v1');
+    const chips = [...host.querySelectorAll<HTMLButtonElement>('.needs .kids button')];
+    expect(chips.map((b) => b.textContent)).toEqual(['–Descartada · Descartada', '–Vieja · Descartada']);
+    expect(chips.every((b) => b.classList.contains('met'))).toBe(true);
+  });
+
+  it('una necesidad reemplazada sigue abierta mientras lo esté su reemplazo', () => {
+    const s = plan(
+      [
+        node({ id: 'v1', title: 'v1', status: 'pending' }),
+        node({ id: 'vieja', title: 'Vieja', status: 'done', closedAs: 'replaced', replacedBy: 'nueva' }),
+        node({ id: 'nueva', title: 'Nueva', status: 'working' }),
+      ],
+      [{ from: 'vieja', to: 'v1' }],
+    );
+    renderIn(s, 'v1');
+    const chip = host.querySelector<HTMLButtonElement>('.needs .kids button')!;
+    expect(chip.title).toBe('Vieja');
+    expect(chip.classList.contains('met')).toBe(false);
+  });
+});
+
+describe('ficha: pedidos largos y ajenos (#117)', () => {
+  const Q = '¿' + 'Una pregunta larguísima sobre las facturas en PDF '.repeat(6) + 'REFERENCIA-SIN-ESPACIOS-'.repeat(2) + '?';
+  const OPT = 'Opción con un texto de ciento veinte caracteres para ver cómo se parte dentro de la ficha sin salirse del borde ni tapar';
+
+  it('una pregunta de ~300 caracteres y opciones de ~120 se muestran enteras', () => {
+    expect(Q.length).toBeGreaterThanOrEqual(300);
+    expect(OPT.length).toBeGreaterThanOrEqual(120);
+    const s = plan(
+      [node({ id: 'f', title: 'Facturas en PDF', status: 'blocked' })],
+      [],
+      [{ id: 'b1', nodeId: 'f', kind: 'decision', question: Q, options: [OPT, 'Opción dos'] }],
+    );
+    renderIn(s, 'f');
+    expect(host.querySelector('.block p')?.textContent).toBe(Q);
+    expect([...host.querySelectorAll('.block .opts button')].map((b) => b.textContent)).toEqual([OPT, 'Opción dos']);
+  });
+
+  it('las reglas de la hoja que las parten siguen ahí (jsdom no mide; el navegador real se verifica aparte)', () => {
+    const css = readFileSync(join(import.meta.dirname, '..', 'styles.css'), 'utf8');
+    const rule = (sel: string) => css.split('\n').find((l) => l.startsWith(`${sel} {`)) ?? '';
+    expect(rule('.block p')).toContain('overflow-wrap: anywhere');
+    expect(rule('.go')).toContain('overflow-wrap: anywhere');
+    expect(rule('.go')).toContain('min-width: 0');
+    expect(rule('.block .opts')).toContain('minmax(0, 1fr)');
+    expect(rule('.card h2')).toContain('overflow-wrap: anywhere');
+  });
+
+  it('cada ficha muestra solo los pedidos de su tarea', () => {
+    const s = plan(
+      [node({ id: 'f', title: 'Facturas', status: 'blocked' }), node({ id: 'p', title: 'Pagos', status: 'blocked' })],
+      [],
+      [
+        { id: 'bp', nodeId: 'p', kind: 'decision', question: '¿Tarjeta o transferencia?', options: ['Tarjeta'] },
+        { id: 'bf', nodeId: 'f', kind: 'decision', question: '¿Detalle o resumen?', options: ['Detalle'] },
+        { id: 'bp2', nodeId: 'p', kind: 'review', question: '¿Revisas el flujo de pagos?', options: [], resolvedAt: at(5), resolution: 'ok' },
+      ],
+    );
+    renderIn(s, 'f');
+    expect(host.textContent).toContain('¿Detalle o resumen?');
+    expect(host.textContent).not.toMatch(/Tarjeta|pagos/);
+  });
+});
+
+describe('ficha: el foco (#116)', () => {
+  it('al abrirse entra en la ficha; al cerrarse vuelve a lo que la abrió', () => {
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    const n = node({ id: 'f', title: 'Facturas' });
+    const s = plan([n, node({ id: 'g', title: 'Pagos' })], [{ from: 'g', to: 'f' }]);
+    const noop = () => {};
+    const show = (x: DagNode | undefined) =>
+      act(() => root.render(<Card snapshot={s} node={x} onClose={noop} onFocus={noop} onResolve={async () => {}} />));
+    show(n);
+    expect(document.activeElement?.tagName).toBe('H2');
+    expect(host.contains(document.activeElement)).toBe(true);
+    // pasar a otra tarea desde la propia ficha no cambia a dónde se vuelve
+    show(s.nodes[1]);
+    expect(document.activeElement?.textContent).toBe('Pagos');
+    show(undefined);
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it('si al cerrar el foco ya está en otra parte, no se lo roba', () => {
+    const opener = document.createElement('button');
+    const elsewhere = document.createElement('input');
+    document.body.append(opener, elsewhere);
+    opener.focus();
+    const n = node({ id: 'f', title: 'Facturas' });
+    const noop = () => {};
+    const show = (x: DagNode | undefined) =>
+      act(() => root.render(<Card snapshot={snapshot(n)} node={x} onClose={noop} onFocus={noop} onResolve={async () => {}} />));
+    show(n);
+    elsewhere.focus();
+    show(undefined);
+    expect(document.activeElement).toBe(elsewhere);
+    opener.remove();
+    elsewhere.remove();
   });
 });

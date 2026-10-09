@@ -305,7 +305,8 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
   useEffect(() => {
     if (!engaged) return;
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape' && !ev.defaultPrevented) overview();
+      // con el foco dentro de la ficha (#116), Escape mientras se compone un texto (IME) solo cancela la composición
+      if (ev.key === 'Escape' && !ev.defaultPrevented && !ev.isComposing) overview();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

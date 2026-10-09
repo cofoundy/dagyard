@@ -38,7 +38,7 @@ import { fmtDuration, fmtTime, lang, t, type MessageKey } from '../i18n';
 import { buildBackdrop } from './backdrop';
 import type { CardArea, CreateSkyOptions, Pulse, SafeArea, SceneEdge, SceneGraph, SceneMode, SceneNode, Sky } from './contract';
 import { layoutDag, timeTicks, type DagLayout } from './dag-layout';
-import { fallback, fitText, injectStyles, textMeter } from './dag-labels';
+import { fallback, fitText, hoverable, injectStyles, pickable, released, textMeter } from './dag-labels';
 import {
   FLY_DUR,
   FOV,
@@ -239,7 +239,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
   let tween: { from: CamState; to: CamState; t: number; dur: number; ease: (k: number) => number; onEnd?: () => void } | null = null;
   let restK = 0;
   const parallax = { x: 0, y: 0, tx: 0, ty: 0 };
-  let down: { x: number; y: number; px: number; py: number; moved: boolean } | null = null;
+  let down: { x: number; y: number; px: number; py: number; moved: boolean; pick?: string } | null = null;
   const alive = new Map<string, boolean>();
   /** #107: lo que se nombra en «ahora» con su hilo, y el resto abierto, agrupado. */
   const named = new Set<string>();
@@ -319,25 +319,23 @@ export function createSky(opts: CreateSkyOptions): Sky {
     hit.className = 'sky-hit';
     hit.type = 'button';
     hit.tabIndex = -1;
-    hit.addEventListener('click', (ev) => {
-      ev.stopPropagation();
+    // la estrella y su nombre son el mismo blanco (#114): clicar el nombre abre la ficha, pasar por él la ilumina
+    const pick = () => {
       if (intro !== null) skipIntro();
       handlers.onPick(n.id);
-    });
+    };
+    const hover = (on: boolean) => {
+      if (on ? hoverId === n.id : hoverId !== n.id) return;
+      hoverId = on ? n.id : null;
+      dirtyLabels = true;
+    };
+    pickable(hit, pick, hover);
+    // el nombre le pasa el gesto al lienzo: arrastrar y la rueda mueven el cielo; un toque sin moverse la abre
+    hoverable(lbl, hover);
+    lbl.addEventListener('pointerdown', (ev) => onDown(ev, n.id));
+    lbl.addEventListener('wheel', (ev) => onWheel(ev), { passive: false });
     hit.addEventListener('keydown', (ev) => keyNav(ev, n.id));
     hit.addEventListener('focus', () => reveal(n.id));
-    hit.addEventListener('pointerenter', (ev) => {
-      if (ev.pointerType === 'mouse' && hoverId !== n.id) {
-        hoverId = n.id;
-        dirtyLabels = true;
-      }
-    });
-    hit.addEventListener('pointerleave', () => {
-      if (hoverId === n.id) {
-        hoverId = null;
-        dirtyLabels = true;
-      }
-    });
     root.appendChild(lbl);
     root.appendChild(hit);
     return {
@@ -776,7 +774,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
     for (const n of graph.nodes) {
       const v = nodes.get(n.id)!;
       v.lblOn = shown.has(n.id);
-      v.lbl.className = ['sky-lbl', statusClass(n), n.kind === 'goal' ? 'goal' : '', n.kind === 'request' ? 'request' : '', n.loose ? 'loose' : '', isEnded(n) ? 'ended' : '', focusId === n.id ? 'sel' : ''].filter(Boolean).join(' ');
+      v.lbl.className = ['sky-lbl', statusClass(n), n.kind === 'goal' ? 'goal' : '', n.kind === 'request' ? 'request' : '', n.loose ? 'loose' : '', isEnded(n) ? 'ended' : '', focusId === n.id ? 'sel' : '', v.lbl.classList.contains('pick') ? 'pick' : ''].filter(Boolean).join(' ');
       v.hit.setAttribute('aria-label', hitLabel(n));
     }
   }
@@ -989,9 +987,9 @@ export function createSky(opts: CreateSkyOptions): Sky {
   }
 
   // ---------- puntero: arrastrar desplaza el plano, la rueda también; click en el vacío cierra ----------
-  const onDown = (ev: PointerEvent) => {
+  const onDown = (ev: PointerEvent, pick?: string) => {
     if (intro !== null) skipIntro();
-    down = { x: ev.clientX, y: ev.clientY, px: pan.x, py: pan.y, moved: false };
+    down = { x: ev.clientX, y: ev.clientY, px: pan.x, py: pan.y, moved: false, pick };
     try {
       canvas.setPointerCapture(ev.pointerId);
     } catch {
@@ -1022,9 +1020,10 @@ export function createSky(opts: CreateSkyOptions): Sky {
   };
   const onUp = () => {
     canvas.style.cursor = '';
-    if (down && !down.moved) {
+    const picked = released(down);
+    if (picked !== undefined) {
       setGroupOpen(false);
-      handlers.onPick(null);
+      handlers.onPick(picked);
     }
     down = null;
   };
@@ -1434,6 +1433,9 @@ export function createSky(opts: CreateSkyOptions): Sky {
       v.lblO += (want - v.lblO) * Math.min(1, dt * 6);
       v.lbl.style.transform = `translate(${lx.toFixed(1)}px, ${ly.toFixed(1)}px)`;
       v.lbl.style.opacity = v.lblO < 0.01 ? '0' : v.lblO.toFixed(3);
+      // el nombre se toca solo si se lee: bajo la columna de la brújula, atenuado por la ficha o apagado, el toque
+      // pasa al lienzo (#114). Las estrellas van por encima de los nombres: un nombre nunca tapa la estrella vecina.
+      v.lbl.classList.toggle('pick', want === 1 && v.lblO > 0.5);
       v.hit.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px)`;
       v.hit.style.display = vis && inView ? 'block' : 'none';
     }
