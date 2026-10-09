@@ -11,7 +11,7 @@ describe('la brújula (#109) sobre el proyecto «dagyard» del 9 oct', () => {
     const o = orientation(buildDag(s, NOW), s);
     expect(o.waiting).toEqual([]);
     expect(o.moving.map((x) => x.task.id).sort()).toEqual(['gh-107', 'gh-108', 'gh-25']);
-    // «Abrir el código» no tiene noticias desde el 4 oct: va al final y se dice
+    // «Abrir el código» no tiene noticias desde el 4 oct: va después de lo que se mueve y se dice
     expect(o.moving.at(-1)).toMatchObject({ task: { id: 'gh-25' }, quiet: true });
   });
 

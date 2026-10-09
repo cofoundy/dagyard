@@ -135,7 +135,7 @@ interface ActionsProps {
 
 export const Actions = forwardRef<HTMLDivElement, ActionsProps>(function Actions({ waiting, onWaiting, onNotify, noWaiting }, ref) {
   return (
-    <div className="hud actions" ref={ref}>
+    <div className={`hud actions${noWaiting ? ' slim' : ''}`} ref={ref}>
       {onNotify && (
         <button type="button" className="btn notify" onClick={onNotify} title={COPY.notifyMeHint} aria-label={COPY.notifyMe}>
           <svg viewBox="0 0 16 16" aria-hidden="true">

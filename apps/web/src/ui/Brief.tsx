@@ -5,11 +5,25 @@
 // Cada fila es un enlace a su estrella: al pasar el mouse la marca en el cielo, al hacer clic la cámara vuela hasta ella.
 // No es un panel: texto sobre el cielo, sin caja (anti-referencias: sidebar, tablas, KPIs).
 
-import { forwardRef, useState } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 import type { Orientation } from '../data/orient';
 import { fmtDuration, fmtRelative, t } from '../i18n';
 
+/** Filas por grupo antes de «+N más»: 3 en escritorio, 2 en celular (la pantalla es del grafo también). */
 const CAP = 3;
+const CAP_MOBILE = 2;
+
+function useCap(): number {
+  const q = typeof matchMedia === 'function' ? matchMedia('(max-width: 720px)') : null;
+  const [mobile, setMobile] = useState(() => !!q?.matches);
+  useEffect(() => {
+    if (!q) return;
+    const on = () => setMobile(q.matches);
+    q.addEventListener('change', on);
+    return () => q.removeEventListener('change', on);
+  }, [q]);
+  return mobile ? CAP_MOBILE : CAP;
+}
 
 interface BriefProps {
   o: Orientation;
@@ -23,6 +37,8 @@ interface BriefProps {
 export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now, reconnecting, onAnswer, onPick, onMark }, ref) {
   const [allMoving, setAllMoving] = useState(false);
   const [allNext, setAllNext] = useState(false);
+  const cap = useCap();
+  const quietN = o.moving.filter((x) => x.quiet).length;
   const waiting = o.waiting.length;
   const row = (id: string) => ({
     onClick: () => {
@@ -34,8 +50,8 @@ export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now
     onFocus: () => onMark(id),
     onBlur: () => onMark(null),
   });
-  const moving = allMoving ? o.moving : o.moving.slice(0, CAP);
-  const next = allNext ? o.next : o.next.slice(0, CAP);
+  const moving = allMoving ? o.moving : o.moving.slice(0, cap);
+  const next = allNext ? o.next : o.next.slice(0, cap);
 
   return (
     <nav className="hud brief" ref={ref} aria-label={t('brief.label')}>
@@ -57,12 +73,12 @@ export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now
         </p>
       )}
       {waiting > 0 && (
-        <ul className="b-rows">
+        <ul className="b-rows wait">
           {o.waiting.map(({ task, blocker }) => (
             <li key={task.id}>
               <button type="button" className="b-row blocked" {...row(task.id)}>
                 <i aria-hidden="true" />
-                <span className="ttl">{task.title}</span>
+                <span className="ttl" title={task.title}>{task.title}</span>
                 <span className="meta">{t(`brief.ask.${blocker.kind}`)}</span>
               </button>
             </li>
@@ -74,27 +90,28 @@ export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now
       <section className="b-group">
         <h2 className="b-cap">
           {t('brief.moving')}
-          {o.moving.length > 0 && <span className="n">{o.moving.length}</span>}
+          {o.moving.length > 0 && <span className="n">{o.moving.length - quietN}</span>}
+          {quietN > 0 && <span className="q">· {t('brief.quietCount', { count: quietN })}</span>}
         </h2>
         {o.moving.length === 0 ? (
           <p className="b-none">{t('brief.noMoving')}</p>
         ) : (
-          <ul className="b-rows">
+          <ul className={`b-rows${allMoving ? ' all' : ''}`}>
             {moving.map(({ task, lastSign, news, quiet }) => (
               <li key={task.id}>
                 <button type="button" className={`b-row working${quiet ? ' quiet' : ''}`} {...row(task.id)}>
                   <i aria-hidden="true" />
-                  <span className="ttl">{task.title}</span>
+                  <span className="ttl" title={task.title}>{task.title}</span>
                   <span className="meta">
-                    {quiet ? t('brief.quiet', { dur: fmtDuration(now - lastSign) }) : t(news ? 'brief.news' : 'brief.started', { ago: fmtRelative(lastSign, now) })}
+                    {quiet ? t('brief.quiet', { dur: fmtDuration(roundQuiet(now - lastSign)) }) : t(news ? 'brief.news' : 'brief.started', { ago: fmtRelative(lastSign, now) })}
                   </span>
                 </button>
               </li>
             ))}
-            {o.moving.length > CAP && (
+            {o.moving.length > cap && (
               <li>
-                <button type="button" className="b-more" onClick={() => setAllMoving((v) => !v)}>
-                  {allMoving ? t('brief.less') : t('brief.more', { count: o.moving.length - CAP })}
+                <button type="button" className="b-more" onClick={() => (setAllMoving((v) => !v), setAllNext(false))}>
+                  {allMoving ? t('brief.less') : t('brief.more', { count: o.moving.length - cap })}
                 </button>
               </li>
             )}
@@ -111,12 +128,12 @@ export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now
         {o.next.length === 0 ? (
           <p className="b-none">{t('brief.noNext')}</p>
         ) : (
-          <ul className="b-rows">
+          <ul className={`b-rows${allNext ? ' all' : ''}`}>
             {next.map(({ task, ready, after }) => (
               <li key={task.id}>
                 <button type="button" className={`b-row queued${ready ? ' ready' : ''}`} {...row(task.id)}>
                   <i aria-hidden="true" />
-                  <span className="ttl">{task.title}</span>
+                  <span className="ttl" title={task.title}>{task.title}</span>
                   <span className="meta">
                     {ready || !after ? (
                       t('brief.ready')
@@ -129,10 +146,10 @@ export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now
                 </button>
               </li>
             ))}
-            {o.next.length > CAP && (
+            {o.next.length > cap && (
               <li>
-                <button type="button" className="b-more" onClick={() => setAllNext((v) => !v)}>
-                  {allNext ? t('brief.less') : t('brief.more', { count: o.next.length - CAP })}
+                <button type="button" className="b-more" onClick={() => (setAllNext((v) => !v), setAllMoving(false))}>
+                  {allNext ? t('brief.less') : t('brief.more', { count: o.next.length - cap })}
                 </button>
               </li>
             )}
@@ -142,3 +159,9 @@ export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now
     </nav>
   );
 });
+
+/** Lo quieto se cuenta en horas o días enteros («24 h», «5 días»), no al minuto. */
+function roundQuiet(ms: number): number {
+  const h = ms / 36e5;
+  return (h >= 48 ? Math.round(h / 24) * 24 : Math.round(h)) * 36e5;
+}

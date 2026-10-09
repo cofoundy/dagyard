@@ -10,7 +10,7 @@ import { ProjectStore, type StoreChange, type StoreState } from '../data/store';
 import { UnauthorizedError, type Blocker, type ProjectSummary, type Resolution } from '../data/types';
 import { buildDag, dagCounts } from '../data/dag';
 import { activityOf, nodeById, openBlockers, toSceneGraph, touchedOf } from '../data/view';
-import { lang, type Lang } from '../i18n';
+import { lang, t, type Lang } from '../i18n';
 import {
   isLooking,
   newlyOpened,
@@ -444,8 +444,8 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
   } else if (!snapshot.nodes.length) {
     center = (
       <div className="center-note empty">
-        <h2>{COPY.emptyTitle}</h2>
-        <p>{COPY.emptyText}</p>
+        <h2>{strict ? t('brief.nothing') : COPY.emptyTitle}</h2>
+        <p>{strict ? t('brief.emptyText') : COPY.emptyText}</p>
       </div>
     );
   }

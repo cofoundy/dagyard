@@ -73,7 +73,7 @@ export function orientation(m: DagModel, s: Snapshot): Orientation {
       const lastSign = Math.max(said, Number.isFinite(st) ? st! : task.born);
       return { task, lastSign, news: said === lastSign, quiet: m.now - lastSign > QUIET_MS };
     })
-    // lo que tiene noticias recientes primero; lo quieto al final
+    // lo que se mueve de verdad primero; lo quieto después, y la cabecera lo cuenta aparte («2 · 1 sin noticias»)
     .sort((a, b) => Number(a.quiet) - Number(b.quiet) || b.lastSign - a.lastSign);
 
   const next: NextItem[] = m.tasks

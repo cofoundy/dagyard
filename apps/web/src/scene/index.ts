@@ -588,8 +588,10 @@ export function createSky(opts: CreateSkyOptions): Sky {
       const el = doc.createElement('div');
       el.className = 'sky-fold';
       if (graph.strict) {
-        // brújula: el silencio se dice corto y en horizontal, en la línea de las horas («5 d», «10 h»)
+        // brújula: el silencio se dice corto y en horizontal, en la línea de las horas, y solo si es de días («5 d»);
+        // uno de horas lo cuentan las marcas de hora a sus lados
         const hrs = (f.to - f.from) / 36e5;
+        if (hrs < 36) continue;
         el.textContent = hrs >= 36 ? t('gap.days', { count: Math.round(hrs / 24) }) : t('gap.hours', { count: Math.round(hrs) });
         el.title = t('scene.quiet', { dur: fmtDuration(f.to - f.from) });
         el.classList.add('flat');
@@ -716,7 +718,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
   function prefixOf(n: SceneNode): string {
     if (n.kind === 'goal') return t('scene.goal');
     if (isEnded(n)) return t(n.closedAs === 'dropped' ? 'scene.dropped' : n.closedAs === 'replaced' ? 'scene.replaced' : 'scene.learned');
-    if (n.loose) return t('scene.loose');
+    if (n.loose && !(graph.strict && n.named)) return t('scene.loose');
     return '';
   }
 
@@ -1195,6 +1197,8 @@ export function createSky(opts: CreateSkyOptions): Sky {
       }
       const s = Math.max(0, Math.min(1.08, v.sc));
       const vis = s > 0.01;
+      // brújula: la columna de la izquierda es del texto; lo que la cámara deja ahí detrás se apaga (no se tapa con una caja)
+      const veil = graph.strict && safe.left > 40 ? Math.max(0.1, Math.min(1, (toScreen(v.x, v.y).x - (safe.left - 70)) / 90)) : 1;
       v.group.position.set(v.x * K, -v.y * K, 0);
       v.group.visible = vis;
 
@@ -1246,10 +1250,10 @@ export function createSky(opts: CreateSkyOptions): Sky {
       size *= (1 + v.flash * 1.2) * s;
       const px = size * K;
       v.glow.material.color.copy(v.color);
-      v.glow.material.opacity = glowO * v.dim;
+      v.glow.material.opacity = glowO * v.dim * veil;
       v.glow.scale.setScalar(Math.max(1e-4, px * 2.1));
       v.spike.material.color.copy(v.color);
-      v.spike.material.opacity = Math.min(1, spike + v.spikeBoost * 0.6) * v.dim;
+      v.spike.material.opacity = Math.min(1, spike + v.spikeBoost * 0.6) * v.dim * veil;
       v.spike.scale.setScalar(Math.max(1e-4, px * (3.6 + v.spikeBoost * 2)));
       // retícula ámbar en lo que te espera: un anillo con marcas que se abre y se apaga, una y otra vez
       if (n.status === 'blocked') {
@@ -1402,7 +1406,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
       const n = v.data;
       const vis = v.sc > 0.05 && v.dying < 0;
       const q = toScreen(v.x, v.y);
-      const inView = q.ok && q.y > top && q.y < bottom && q.x > -40 && q.x < vp.width + 40;
+      const inView = q.ok && q.y > top && q.y < bottom && q.x > (graph.strict && safe.left > 40 ? safe.left - 8 : -40) && q.x < vp.width + 40;
       let lx = q.x + v.lblDx + Math.sign(v.lblDx) * 11 * (zoom - 1), ly = q.y + v.lblDy - 14 * (zoom - 1);
       if (n.id === sel) {
         lx = q.x + ringPx + 8;
