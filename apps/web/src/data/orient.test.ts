@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildDag } from './dag';
-import { dagyardHoySnapshot } from './fixture';
-import { orientation } from './orient';
+import { buildDag, type DagTask } from './dag';
+import { dagyardHoySnapshot, estresSnapshot } from './fixture';
+import { orientation, ROWS_MAX, rowsShown, twinTags } from './orient';
 
 const NOW = Date.parse('2026-10-09T17:15:00Z');
 
@@ -31,5 +31,55 @@ describe('la brújula (#109) sobre el proyecto «dagyard» del 9 oct', () => {
         ['gh-108', 'review'],
       ]),
     );
+  });
+});
+
+describe('filas de la brújula: sin scroll, tope 8 y el resto a la búsqueda', () => {
+  it('plegado muestra 3 y «+N más» cuenta el resto', () => {
+    expect(rowsShown(14, false)).toEqual({ shown: 3, more: 11, rest: 0 });
+    expect(rowsShown(2, false)).toEqual({ shown: 2, more: 0, rest: 0 });
+  });
+
+  it('desplegado crece hasta 8 y lo que no cabe se busca por nombre', () => {
+    expect(rowsShown(14, true)).toEqual({ shown: ROWS_MAX, more: 0, rest: 6 });
+    expect(rowsShown(5, true)).toEqual({ shown: 5, more: 0, rest: 0 });
+  });
+
+  it('plegado a su cabecera (celular, o el otro grupo abierto): ninguna fila, todo en «+N más»', () => {
+    expect(rowsShown(4, false, 0)).toEqual({ shown: 0, more: 4, rest: 0 });
+  });
+});
+
+describe('títulos repetidos: un distintivo corto, solo cuando se repiten', () => {
+  const task = (id: string, title: string, born = 0) => ({ id, title, born }) as DagTask;
+  const at = (t: DagTask) => `t${t.born}`;
+
+  it('un título único no lleva nada', () => {
+    expect(twinTags([task('a', 'Pagos'), task('b', 'Modo oscuro')], at).size).toBe(0);
+  });
+
+  it('con número de issue, el número; sin él, la hora en que nació', () => {
+    const tags = twinTags([task('gh-109', 'Calendario compartido'), task('gh-31', 'calendario compartido '), task('x', 'Pagos', 1), task('y', 'Pagos', 2)], at);
+    expect(tags.get('gh-109')).toBe('#109');
+    expect(tags.get('gh-31')).toBe('#31');
+    expect(tags.get('x')).toBe('t1');
+    expect(tags.get('y')).toBe('t2');
+  });
+
+  it('si la hora también choca, su orden; y la misma tarea en dos grupos no cuenta como repetida', () => {
+    const a = task('a', 'X', 5);
+    const tags = twinTags([a, task('b', 'X', 5), a], at);
+    expect([tags.get('a'), tags.get('b')]).toEqual(['t5 · 1', 't5 · 2']);
+    expect(twinTags([a, a], at).size).toBe(0);
+  });
+
+  it('en los datos hostiles, «Calendario compartido» te espera y está en curso: cada fila lleva su distintivo', () => {
+    const s = estresSnapshot(NOW);
+    const o = orientation(buildDag(s, NOW), s);
+    const all = [...o.waiting, ...o.moving, ...o.next].map((x) => x.task);
+    const tags = twinTags(all, at);
+    const cal = all.filter((x) => x.title === 'Calendario compartido');
+    expect(cal.length).toBeGreaterThan(1);
+    expect(new Set(cal.map((x) => tags.get(x.id))).size).toBe(cal.length);
   });
 });

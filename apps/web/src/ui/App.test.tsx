@@ -102,10 +102,12 @@ describe('interfaz', () => {
   it('pinta el HUD, el pie y le pasa el DAG y el SafeArea a la escena', async () => {
     await mountIn();
     expect(text()).toContain('Marketplace de reservas');
-    expect(text()).toContain('20 tareas');
-    expect(text()).toContain('en curso');
-    expect(text()).toContain('3 te esperan');
+    // la brújula (#109): lo que te espera con su «Responder», lo que está en curso y lo que sigue, por nombre
+    expect(text()).toContain('3 cosas esperan tu respuesta');
     expect(text()).toContain('Responder');
+    expect(text()).toContain('En curso ahora');
+    expect(text()).toContain('Lo que sigue');
+    expect(host.querySelector('.brief .b-row.blocked')?.textContent).toContain('Modelo de comisiones');
     expect(host.querySelector('.foot input[type="search"]')).not.toBeNull();
     const graphs = scene.calls
       .filter(([n]) => n === 'setGraph')
@@ -162,7 +164,7 @@ describe('interfaz', () => {
     click(button('Al proveedor (10 % por reserva)'));
     await until(() => text().includes('Decidiste'), 'decisión registrada');
     expect(text()).toContain('«Al proveedor (10 % por reserva)» · el equipo sigue');
-    expect(host.querySelector('.card .chip')?.textContent).toBe('En progreso');
+    expect(host.querySelector('.card .chip')?.textContent).toBe('En curso');
 
     pick('checkout-d');
     await settle(1);
@@ -187,17 +189,36 @@ describe('interfaz', () => {
     expect(scene.calls.some(([n, a]) => n === 'pulse' && a[0] === 'pagos' && a[1] === 'working')).toBe(true);
   });
 
-  it('«te esperan» recorre lo que te toca y Escape vuelve a la vista general', async () => {
+  it('«Responder» recorre lo que te toca y Escape vuelve a la vista general', async () => {
     await mountIn();
-    click(button(/te esperan/));
+    click(button('Responder'));
     expect(scene.calls.filter(([n]) => n === 'focus').at(-1)?.[1][0]).toBe('comision');
-    click(button(/te esperan/));
+    click(button('Responder'));
     expect(scene.calls.filter(([n]) => n === 'focus').at(-1)?.[1][0]).toBe('checkout-d');
     act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
     expect(host.querySelector('.card.open')).toBeNull();
     expect(scene.calls.at(-1)?.[0]).toBe('overview');
     click(button(/^Repetir$/));
     expect(scene.calls.at(-1)?.[0]).toBe('replay');
+  });
+
+  it('la brújula: cada fila vuela a su estrella; desplegada crece hasta 8 sin scroll y el resto va a la búsqueda', async () => {
+    await mountIn();
+    click(button(/^Buscador con filtros/));
+    expect(scene.calls.filter(([n]) => n === 'focus').at(-1)?.[1][0]).toBe('buscador');
+    // «Lo que sigue» tiene 9: se ven 3 y «+6 más»; desplegado, 8, «Ver menos» y «1 más · Busca una tarea»
+    const next = () => host.querySelectorAll('.brief .b-group:last-child .b-row');
+    expect(next()).toHaveLength(3);
+    click(button('+6 más'));
+    expect(next()).toHaveLength(8);
+    // desplegar un grupo pliega el otro a su cabecera, que lo vuelve a abrir
+    expect(host.querySelectorAll('.brief .b-row.working')).toHaveLength(0);
+    expect(button(/^En curso ahora/).getAttribute('aria-expanded')).toBe('false');
+    click(button('1 más · Busca una tarea'));
+    expect(document.activeElement).toBe(host.querySelector('.foot input[type="search"]'));
+    click(button('Ver menos'));
+    expect(next()).toHaveLength(3);
+    expect(host.querySelectorAll('.brief .b-row.working')).toHaveLength(3);
   });
 
   it('la entrada rechaza una clave mala y deja pasar una buena', async () => {

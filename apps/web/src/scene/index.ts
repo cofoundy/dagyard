@@ -272,7 +272,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
   world.add(nowLine);
   const tickMat = new LineBasicMaterial({ color: 0x0e1622, transparent: true, opacity: 0.9, depthWrite: false });
   const foldMat = new LineBasicMaterial({ color: 0x1a2536, transparent: true, opacity: 0.8, depthWrite: false });
-  const axisLabels: { el: HTMLDivElement; x: number; y: number; rot?: boolean }[] = [];
+  const axisLabels: { el: HTMLDivElement; x: number; y: number }[] = [];
   const nowEl = doc.createElement('div');
   nowEl.className = 'sky-now';
   root.appendChild(nowEl);
@@ -366,8 +366,8 @@ export function createSky(opts: CreateSkyOptions): Sky {
   function colorOf(n: SceneNode): number {
     if (isEnded(n)) return COL.ended;
     if (n.loose) return COL.loose;
-    // brújula: un pedido o un objetivo «vivo» no es trabajo en curso: luz quieta, no el azul que late
-    if (graph.strict && n.kind !== 'task' && n.kind !== 'goal' && n.status === 'working') return 0xd9e1ec;
+    // un pedido o un trabajo continuo «vivo» no es trabajo en curso (#109): luz quieta, no el azul que late
+    if (n.kind !== 'task' && n.kind !== 'goal' && n.status === 'working') return 0xd9e1ec;
     return COL[n.status];
   }
 
@@ -505,14 +505,14 @@ export function createSky(opts: CreateSkyOptions): Sky {
     }
     const width = mobile() ? Math.max(w, 900) : w;
     const prev = L;
-    // brújula: al borde de «ahora» solo llegan tareas (un pedido o la meta vivos no son trabajo en curso)
-    const edge = nowEdge(graph.strict ? graph.nodes.filter((n) => n.tail) : graph.nodes, { now: graph.now });
+    // al borde de «ahora» solo llegan tareas (#109): un pedido o la meta vivos no son trabajo en curso
+    const edge = nowEdge(graph.nodes.filter((n) => n.tail), { now: graph.now });
     named.clear();
     for (const id of edge.named) named.add(id);
     grouped = edge.grouped;
     renderGroup();
     L = layoutDag(
-      graph.nodes.map((n) => ({ id: n.id, born: n.born, parent: n.parent, children: n.children, status: n.status, toNow: named.has(n.id), labelled: graph.strict ? named.has(n.id) || !!n.named || n.kind === 'goal' : named.has(n.id) || n.kind !== 'task' })),
+      graph.nodes.map((n) => ({ id: n.id, born: n.born, parent: n.parent, children: n.children, status: n.status, toNow: named.has(n.id), labelled: named.has(n.id) || !!n.named || n.kind === 'goal' })),
       { width, now: graph.now, activity: graph.activity, padL: mobile() ? 24 : 40, padR: mobile() ? 150 : 230, labelReserve: mobile() ? 120 : 150, prevRows: prev?.row ?? null },
     );
     const nRows = L.rows[1] - L.rows[0] + 1;
@@ -585,23 +585,16 @@ export function createSky(opts: CreateSkyOptions): Sky {
     const fpts: number[] = [];
     for (const f of L.folds) {
       for (const x of [f.x0 + 6, f.x1 - 6]) fpts.push(x * K, -top * K, -0.5, x * K, -(bottom - 22) * K, -0.5);
+      // el silencio se dice corto y en horizontal, en la línea de las horas, y solo si es de días («5 d», #109); uno de
+      // horas lo cuentan las marcas de hora a sus lados
+      const hrs = (f.to - f.from) / 36e5;
+      if (hrs < 36) continue;
       const el = doc.createElement('div');
       el.className = 'sky-fold';
-      if (graph.strict) {
-        // brújula: el silencio se dice corto y en horizontal, en la línea de las horas, y solo si es de días («5 d»);
-        // uno de horas lo cuentan las marcas de hora a sus lados
-        const hrs = (f.to - f.from) / 36e5;
-        if (hrs < 36) continue;
-        el.textContent = hrs >= 36 ? t('gap.days', { count: Math.round(hrs / 24) }) : t('gap.hours', { count: Math.round(hrs) });
-        el.title = t('scene.quiet', { dur: fmtDuration(f.to - f.from) });
-        el.classList.add('flat');
-        root.appendChild(el);
-        axisLabels.push({ el, x: (f.x0 + f.x1) / 2, y: bottom - 16 });
-      } else {
-        el.textContent = t('scene.quiet', { dur: fmtDuration(f.to - f.from) });
-        root.appendChild(el);
-        axisLabels.push({ el, x: (f.x0 + f.x1) / 2 - 7, y: bottom - 30, rot: true });
-      }
+      el.textContent = t('gap.days', { count: Math.round(hrs / 24) });
+      el.title = t('scene.quiet', { dur: fmtDuration(f.to - f.from) });
+      root.appendChild(el);
+      axisLabels.push({ el, x: (f.x0 + f.x1) / 2, y: bottom - 16 });
     }
     if (fpts.length) {
       const g = new BufferGeometry();
@@ -613,15 +606,23 @@ export function createSky(opts: CreateSkyOptions): Sky {
     nowLine.computeLineDistances();
   }
 
+  // la píldora habla como la brújula (#109): «+2 más en curso · 1 sin noticias», no «+3 más en curso» a secas
+  function groupText(list: Array<SceneNode | undefined>): string {
+    const quiet = list.filter((n) => n?.quiet).length;
+    const moving = list.length - quiet;
+    const parts = [moving ? t('scene.moreMoving', { count: moving }) : '', quiet ? t('scene.moreQuiet', { count: quiet }) : ''];
+    return parts.filter(Boolean).join(' · ');
+  }
+
   // ---------- el grupo de «ahora» (#107): lo abierto que no lleva hilo, a un click ----------
   let groupKey = '';
   function renderGroup() {
     // se rehace solo si cambió (el reloj relayouta cada minuto: el foco del teclado no se pierde)
-    const key = `${lang()}|${grouped.map((id) => `${id}:${byId.get(id)?.status}:${byId.get(id)?.title}`).join('|')}`;
+    const key = `${lang()}|${grouped.map((id) => `${id}:${byId.get(id)?.status}:${byId.get(id)?.title}:${byId.get(id)?.quiet}`).join('|')}`;
     if (key === groupKey) return;
     groupKey = key;
     moreBtn.style.display = grouped.length ? '' : 'none';
-    moreBtn.textContent = grouped.length ? t('scene.more', { count: grouped.length }) : '';
+    moreBtn.textContent = grouped.length ? groupText(grouped.map((id) => byId.get(id))) : '';
     moreList.textContent = '';
     if (!grouped.length) {
       setGroupOpen(false);
@@ -703,22 +704,17 @@ export function createSky(opts: CreateSkyOptions): Sky {
     if (n.status === 'blocked') return 900;
     if (rel?.has(n.id)) return 850;
     if (named.has(n.id)) return 800;
-    if (graph.strict) {
-      // brújula: además de lo que tiene hilo, solo la meta, los cabos sueltos y lo que sigue; pedidos al pasar el mouse
-      if (n.kind === 'goal' || n.loose) return 700;
-      if (n.named) return 650;
-      return 0;
-    }
+    // además de lo que tiene hilo, solo la meta, los cabos sueltos y lo que sigue (#109); los pedidos, al pasar el mouse
     if (n.kind === 'goal' || n.loose) return 700;
-    if (n.kind === 'request' || n.kind === 'stream') return 600;
-    if (graph.now - n.born < 45 * 60e3) return 500;
+    if (n.named) return 650;
     return 0;
   }
 
   function prefixOf(n: SceneNode): string {
     if (n.kind === 'goal') return t('scene.goal');
     if (isEnded(n)) return t(n.closedAs === 'dropped' ? 'scene.dropped' : n.closedAs === 'replaced' ? 'scene.replaced' : 'scene.learned');
-    if (n.loose && !(graph.strict && n.named)) return t('scene.loose');
+    // un cabo suelto se ve por su anillo punteado y la ficha lo explica: el rótulo dice solo su nombre, el mismo que la
+    // brújula (una palabra por estado en toda la interfaz, #109)
     return '';
   }
 
@@ -888,7 +884,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
 
   // ---------- reconciliación ----------
   function setGraph(next: SceneGraph) {
-    graph = { nodes: next.nodes.map((n) => ({ ...n, children: [...n.children] })), edges: next.edges.map((e) => ({ ...e })), now: next.now, activity: next.activity, strict: next.strict };
+    graph = { nodes: next.nodes.map((n) => ({ ...n, children: [...n.children] })), edges: next.edges.map((e) => ({ ...e })), now: next.now, activity: next.activity };
     byId.clear();
     for (const n of graph.nodes) byId.set(n.id, n);
     computeAlive();
@@ -1197,8 +1193,8 @@ export function createSky(opts: CreateSkyOptions): Sky {
       }
       const s = Math.max(0, Math.min(1.08, v.sc));
       const vis = s > 0.01;
-      // brújula: la columna de la izquierda es del texto; lo que la cámara deja ahí detrás se apaga (no se tapa con una caja)
-      const veil = graph.strict && safe.left > 40 ? Math.max(0.1, Math.min(1, (toScreen(v.x, v.y).x - (safe.left - 70)) / 90)) : 1;
+      // la columna de la izquierda es de la brújula (#109): lo que la cámara deja ahí detrás se apaga (no se tapa con una caja)
+      const veil = safe.left > 40 ? Math.max(0.1, Math.min(1, (toScreen(v.x, v.y).x - (safe.left - 70)) / 90)) : 1;
       v.group.position.set(v.x * K, -v.y * K, 0);
       v.group.visible = vis;
 
@@ -1227,8 +1223,8 @@ export function createSky(opts: CreateSkyOptions): Sky {
         size = (big ? 17 : 12) * (fresh ? 1.12 : 1 - age * 0.3);
         spike = fresh ? (big ? 0.65 : 0.48) : big ? 0.32 : 0.16;
         glowO = fresh ? 0.95 : 0.62 - age * 0.2;
-      } else if (graph.strict && n.status === 'working' && !n.tail) {
-        // brújula: pedido u objetivo abierto, quieto (lo que late es solo el trabajo en curso)
+      } else if (n.status === 'working' && !n.tail) {
+        // pedido u objetivo abierto, quieto: lo que late es solo el trabajo en curso (#109)
         size = 13;
         spike = 0.18;
         glowO = 0.55;
@@ -1380,7 +1376,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
     const axisO = intro !== null ? Math.max(0, Math.min(1, (intro - 2.2) / 1.2)) : 1;
     for (const a of axisLabels) {
       const q = toScreen(a.x, a.y);
-      a.el.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px)${a.rot ? ' rotate(-90deg)' : ' translateX(-50%)'}`;
+      a.el.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px) translateX(-50%)`;
       a.el.style.opacity = q.ok ? String(axisO * (sel ? 0.4 : 1)) : '0';
     }
     if (L) {
@@ -1406,7 +1402,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
       const n = v.data;
       const vis = v.sc > 0.05 && v.dying < 0;
       const q = toScreen(v.x, v.y);
-      const inView = q.ok && q.y > top && q.y < bottom && q.x > (graph.strict && safe.left > 40 ? safe.left - 8 : -40) && q.x < vp.width + 40;
+      const inView = q.ok && q.y > top && q.y < bottom && q.x > (safe.left > 40 ? safe.left - 8 : -40) && q.x < vp.width + 40;
       let lx = q.x + v.lblDx + Math.sign(v.lblDx) * 11 * (zoom - 1), ly = q.y + v.lblDy - 14 * (zoom - 1);
       if (n.id === sel) {
         lx = q.x + ringPx + 8;

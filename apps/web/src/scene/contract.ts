@@ -21,10 +21,12 @@ export interface SceneNode {
   children: string[];
   /** Su último cambio (ms): estado, mensaje o respuesta. Sin él, su nacimiento. Decide qué se nombra en «ahora». */
   touched?: number;
-  /** Brújula (#109): tira su hilo hasta «ahora» y late (solo una tarea en curso o que te espera). */
+  /** Tira su hilo hasta «ahora» y late: solo una tarea en curso o que te espera (#109). */
   tail?: boolean;
-  /** Brújula (#109): la nombra la brújula (lo que sigue): se rotula también en la vista general. */
+  /** La nombra la brújula en «lo que sigue»: se rotula también en la vista general (#109). */
   named?: boolean;
+  /** En curso pero sin noticias hace más de un día (la brújula lo dice igual: «sin noticias hace 5 días»). */
+  quiet?: boolean;
 }
 
 /** `needs`: `to` necesita a `from`. `origin`: `to` nació de `from`. En los dos, el extremo brillante es `to`. */
@@ -41,11 +43,6 @@ export interface SceneGraph {
   now: number;
   /** Momentos con actividad (ms): no se pliegan como silencio. */
   activity?: number[];
-  /**
-   * Brújula (#109): solo `tail` tira hilo a «ahora» y late; se rotulan lo que te espera, lo que corre, lo `named` y la
-   * meta (pedidos y trabajo continuo, al pasar el mouse); los silencios del eje se rotulan en horizontal y cortos.
-   */
-  strict?: boolean;
 }
 
 /** Zonas de la pantalla que tapa el HUD; la vista general encuadra dentro de lo que queda. */

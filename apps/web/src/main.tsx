@@ -23,8 +23,6 @@ async function boot() {
     (window as unknown as { dagyard: typeof fixture }).dagyard = fixture;
     api = fixture;
     demo = true;
-    // prototipo #109: con `?variant=` se entra directo (cualquier clave sirve en el ejemplo)
-    if (new URLSearchParams(location.search).has('variant')) await fixture.login('prototipo');
   } else {
     api = new HttpApi();
   }

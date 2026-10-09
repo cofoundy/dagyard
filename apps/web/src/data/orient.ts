@@ -88,3 +88,58 @@ export function orientation(m: DagModel, s: Snapshot): Orientation {
 
   return { waiting, moving, next };
 }
+
+/** Filas por grupo en la brújula: 3 a la vista; desplegado, hasta 8 y el resto se busca por nombre (sin scroll dentro). */
+export const ROWS = 3;
+export const ROWS_MAX = 8;
+
+export interface Rows {
+  /** Filas que se pintan. */
+  shown: number;
+  /** Las que «+N más» despliega (0: no hay botón). */
+  more: number;
+  /** Las que ni desplegado caben: se buscan con «Busca una tarea». */
+  rest: number;
+}
+
+/**
+ * Cuántas filas de un grupo se ven. `cap` es lo que se ve plegado (3 en escritorio; 0 en celular o cuando el otro grupo
+ * está desplegado: la columna crece sin scroll y no se come el pie).
+ */
+export function rowsShown(total: number, open: boolean, cap = ROWS): Rows {
+  if (open) {
+    const shown = Math.min(total, ROWS_MAX);
+    return { shown, more: 0, rest: total - shown };
+  }
+  const shown = Math.min(total, cap);
+  return { shown, more: total - shown, rest: 0 };
+}
+
+/**
+ * Dos filas con el mismo título no se distinguen (#109, datos hostiles): a cada tarea cuyo título se repite le toca un
+ * distintivo corto. El número del issue (`gh-109` → `#109`) si lo tiene; si no, `label(task)` (la hora en que nació);
+ * y si aun así chocan, su orden (`· 2`). Un título único no lleva nada.
+ */
+export function twinTags(tasks: readonly DagTask[], label: (t: DagTask) => string): Map<string, string> {
+  const norm = (s: string) => s.trim().toLocaleLowerCase();
+  const byTitle = new Map<string, DagTask[]>();
+  for (const t of tasks) {
+    const k = norm(t.title);
+    const list = byTitle.get(k) ?? [];
+    if (!list.some((x) => x.id === t.id)) list.push(t);
+    byTitle.set(k, list);
+  }
+  const out = new Map<string, string>();
+  for (const list of byTitle.values()) {
+    if (list.length < 2) continue;
+    const tags = list.map((t) => {
+      const gh = /^gh-(\d+)$/.exec(t.id);
+      return gh ? `#${gh[1]}` : label(t);
+    });
+    list.forEach((t, i) => {
+      const clash = tags.filter((x) => x === tags[i]).length > 1;
+      out.set(t.id, clash ? `${tags[i]} · ${tags.slice(0, i + 1).filter((x) => x === tags[i]).length}` : tags[i]!);
+    });
+  }
+  return out;
+}

@@ -2,7 +2,6 @@
 // Cada texto se lee en el momento de pintar (getters), así un cambio de idioma se ve sin recargar.
 
 import type { BlockerKind, CloseAs, NodeStatus } from '../data/types';
-import type { DagCounts } from '../data/dag';
 import { isDefaultReviewOptions } from '../data/adapter';
 import { fmtRelative, fmtTime, t, type MessageKey } from '../i18n';
 
@@ -63,21 +62,6 @@ export const ANSWER_VERB = fromCatalog<BlockerKind>({
   review: 'answer.review',
   access: 'answer.access',
 });
-
-/** «Nada te espera», «1 te espera», «2 te esperan». */
-export function waitingText(n: number): string {
-  return t('count.waiting', { count: n });
-}
-
-/** El resumen del HUD: «51 tareas · 4 en curso · 6 sin empezar · 1 cabo suelto» (el último solo si hay). */
-export function summary(c: DagCounts): { tasks: string; working: string; pending: string; loose: string | null } {
-  return {
-    tasks: t('count.tasks', { count: c.total }),
-    working: t('count.inProgress', { count: c.working }),
-    pending: t('count.notStarted', { count: c.pending }),
-    loose: c.loose ? t('count.loose', { count: c.loose }) : null,
-  };
-}
 
 /** «10:18 PM» o, si no es de hoy, «Sat 10:18 PM». */
 export function clock(ms: number, now = Date.now()): string {
@@ -188,16 +172,10 @@ export const COPY = fromCatalog({
   removed: 'toast.removed',
   // la vista DAG (#75)
   answer: 'hud.answer',
-  emptyTitle: 'hud.emptyTitle',
-  emptyText: 'hud.emptyText',
   how: 'foot.how',
   howShort: 'foot.howShort',
   replay: 'foot.replay',
   replayHint: 'foot.replayHint',
-  legendDone: 'legend.done',
-  legendWorking: 'legend.working',
-  legendWaiting: 'legend.waiting',
-  legendPending: 'legend.pending',
   legendNeeds: 'legend.needs',
   legendBorn: 'legend.born',
   findPlaceholder: 'find.placeholder',

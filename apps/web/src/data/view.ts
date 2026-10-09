@@ -4,17 +4,20 @@ import type { SceneGraph } from '../scene/contract';
 import type { DagModel } from './dag';
 import type { Blocker, DagNode, Message, Snapshot } from './types';
 
+/** Lo que la brújula (#109) le dice al cielo: qué nombra de lo que sigue y qué está en curso sin noticias. */
+export interface BriefMarks {
+  named?: ReadonlySet<string>;
+  quiet?: ReadonlySet<string>;
+}
+
 /** El DAG en la forma que dibuja la escena. */
-export function toSceneGraph(
-  m: DagModel,
-  activity?: number[],
-  touched?: Map<string, number>,
-  strict?: { named: ReadonlySet<string> },
-): SceneGraph {
+export function toSceneGraph(m: DagModel, activity?: number[], touched?: Map<string, number>, marks: BriefMarks = {}): SceneGraph {
   return {
-    strict: !!strict,
     nodes: m.tasks.map((t) => ({
-      ...(strict ? { tail: t.kind === 'task' && (t.status === 'working' || t.status === 'blocked'), named: strict.named.has(t.id) } : {}),
+      // al borde de «ahora» solo llega trabajo: una tarea en curso o que te espera (un pedido o la meta vivos, no)
+      tail: t.kind === 'task' && (t.status === 'working' || t.status === 'blocked'),
+      named: !!marks.named?.has(t.id),
+      quiet: !!marks.quiet?.has(t.id),
       id: t.id,
       title: t.title,
       status: t.status,

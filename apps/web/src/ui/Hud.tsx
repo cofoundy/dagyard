@@ -1,31 +1,28 @@
-// HUD en los bordes: marca + proyecto (abre el selector) + el resumen del DAG arriba a la izquierda; arriba a la derecha
-// el único botón principal (lo que te espera); abajo la instrucción con su leyenda, «Busca una tarea» y «Repetir»;
-// avisos arriba al centro. Todo lo demás se hace tocando estrellas (design/arbol/handoff.md).
+// HUD en los bordes: marca + proyecto (abre el selector) arriba a la izquierda, con la brújula debajo (Brief.tsx, #109:
+// lo que te espera con su «Responder», lo que está en curso y lo que sigue); arriba a la derecha «Avísame»; abajo la
+// instrucción con la leyenda de las líneas, «Busca una tarea» y «Repetir»; avisos arriba al centro. Todo lo demás se
+// hace tocando estrellas (design/arbol/handoff.md, design/orientacion/handoff.md).
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
-import type { DagCounts, DagModel, DagTask } from '../data/dag';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import type { DagModel, DagTask } from '../data/dag';
 import type { ProjectSummary } from '../data/types';
-import { clock, COPY, findMore, summary, waitingText } from './copy';
+import { clock, COPY, findMore } from './copy';
 import type { ToastKind } from './feedback';
 import { LangSwitch } from './LangSwitch';
-import { t } from '../i18n';
 
 /* ------------------------------------------------------------------ marca */
 
 interface BrandProps {
-  counts: DagCounts | null;
   projectName: string;
   projects: ProjectSummary[];
   currentId: string | null;
   reconnecting: boolean;
   onPick: (projectId: string) => void;
   onLogout: () => void;
-  /** Brújula (#109): el resumen en números se va; lo dice la brújula, con nombres. */
-  noSummary?: boolean;
 }
 
 export const Brand = forwardRef<HTMLDivElement, BrandProps>(function Brand(
-  { counts, projectName, projects, currentId, reconnecting, onPick, onLogout, noSummary },
+  { projectName, projects, currentId, reconnecting, onPick, onLogout },
   ref,
 ) {
   const [open, setOpen] = useState(false);
@@ -44,7 +41,6 @@ export const Brand = forwardRef<HTMLDivElement, BrandProps>(function Brand(
     };
   }, [open]);
 
-  const sum = counts ? summary(counts) : null;
   return (
     <div className="hud brand" ref={ref}>
       <div className="word">
@@ -91,51 +87,21 @@ export const Brand = forwardRef<HTMLDivElement, BrandProps>(function Brand(
           </div>
         )}
       </div>
-      {!noSummary && <div className="now sum" aria-live="polite">
-        {reconnecting ? (
-          <span className="amber">{COPY.reconnecting}</span>
-        ) : sum && counts?.total === 0 ? (
-          sum.tasks
-        ) : sum ? (
-          <>
-            <span className="n">
-              {sum.tasks}
-              <span className="sep">·</span>
-            </span>
-            <b>{sum.working}</b>
-            <span className="opt">
-              <span className="sep">·</span>
-              {sum.pending}
-            </span>
-            {sum.loose && (
-              <>
-                <span className="sep">·</span>
-                <span className="loose">{sum.loose}</span>
-              </>
-            )}
-          </>
-        ) : (
-          ' '
-        )}
-      </div>}
     </div>
   );
 });
 
 /* ------------------------------------------------------------------ acciones */
 
+// el botón «te espera» vive en la brújula, junto a su respuesta (#109): aquí queda «Avísame»
 interface ActionsProps {
-  waiting: number;
-  onWaiting: () => void;
   /** Solo si el navegador puede avisar y todavía no le pediste permiso: el clic lo pide. */
   onNotify?: () => void;
-  /** Brújula (#109): el botón «te espera» vive en la brújula, junto a su respuesta. */
-  noWaiting?: boolean;
 }
 
-export const Actions = forwardRef<HTMLDivElement, ActionsProps>(function Actions({ waiting, onWaiting, onNotify, noWaiting }, ref) {
+export const Actions = forwardRef<HTMLDivElement, ActionsProps>(function Actions({ onNotify }, ref) {
   return (
-    <div className={`hud actions${noWaiting ? ' slim' : ''}`} ref={ref}>
+    <div className="hud actions" ref={ref}>
       {onNotify && (
         <button type="button" className="btn notify" onClick={onNotify} title={COPY.notifyMeHint} aria-label={COPY.notifyMe}>
           <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -151,13 +117,6 @@ export const Actions = forwardRef<HTMLDivElement, ActionsProps>(function Actions
           <span className="lbl">{COPY.notifyMe}</span>
         </button>
       )}
-      {!noWaiting && (
-        <button type="button" className={`btn waiting${waiting ? '' : ' calm'}`} onClick={onWaiting} disabled={!waiting} aria-disabled={!waiting}>
-          <span className="dot" aria-hidden="true" />
-          <span>{waitingText(waiting)}</span>
-          {waiting > 0 && <span className="cta">{COPY.answer}</span>}
-        </button>
-      )}
     </div>
   );
 });
@@ -170,54 +129,26 @@ interface FooterProps {
   onPick: (id: string) => void;
   onMark: (id: string | null) => void;
   onReplay: () => void;
-  /** Brújula (#109): la brújula ya lleva los colores de estado; el pie solo enseña las líneas. */
-  brief?: boolean;
+  /** La brújula lleva a «Busca una tarea» lo que no cabe en sus filas. */
+  findRef?: Ref<FindHandle>;
 }
 
-export const Footer = forwardRef<HTMLElement, FooterProps>(function Footer({ model, carded, onPick, onMark, onReplay, brief }, ref) {
+// la brújula ya dice qué es cada estado (#109): el pie solo enseña a tocar y las dos clases de línea
+export const Footer = forwardRef<HTMLElement, FooterProps>(function Footer({ model, carded, onPick, onMark, onReplay, findRef }, ref) {
   const empty = !model || !model.tasks.length;
   return (
     <footer className={`hud foot${carded ? ' carded' : ''}`} ref={ref}>
-      {!empty && brief && (
-        <p className="hint">
-          <span className="how">{t('foot.howBrief')}</span>
-          <span className="lg">
-            <i className="ln" />
-            {COPY.legendNeeds}
-          </span>
-          <span className="lg">
-            <i className="lo" />
-            {COPY.legendBorn}
-          </span>
-        </p>
-      )}
-      {!empty && !brief && (
+      {!empty && (
         <p className="hint">
           <span className="how">
             <span className="long">{COPY.how}</span>
             <span className="short">{COPY.howShort}</span>
           </span>
           <span className="lg">
-            <i className="d1" />
-            {COPY.legendDone}
-          </span>
-          <span className="lg">
-            <i className="d2" />
-            {COPY.legendWorking}
-          </span>
-          <span className="lg">
-            <i className="d3" />
-            {COPY.legendWaiting}
-          </span>
-          <span className="lg opt">
-            <i className="d4" />
-            {COPY.legendPending}
-          </span>
-          <span className="lg opt">
             <i className="ln" />
             {COPY.legendNeeds}
           </span>
-          <span className="lg opt">
+          <span className="lg">
             <i className="lo" />
             {COPY.legendBorn}
           </span>
@@ -225,7 +156,7 @@ export const Footer = forwardRef<HTMLElement, FooterProps>(function Footer({ mod
       )}
       {!empty && (
         <div className="tools">
-          <Find model={model} onPick={onPick} onMark={onMark} />
+          <Find model={model} onPick={onPick} onMark={onMark} handle={findRef} />
           <button type="button" className="ghost" onClick={onReplay} title={COPY.replayHint}>
             {COPY.replay}
           </button>
@@ -239,11 +170,26 @@ const RANK: Record<DagTask['status'], number> = { blocked: 0, working: 1, pendin
 const fold = (x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /** «Busca una tarea» (atajo `/`): por nombre, sin tildes ni mayúsculas; lo que te espera y lo que está en curso primero. */
-export function Find({ model, onPick, onMark }: { model: DagModel; onPick: (id: string) => void; onMark: (id: string | null) => void }) {
+export interface FindHandle {
+  focus(): void;
+}
+
+export function Find({
+  model,
+  onPick,
+  onMark,
+  handle,
+}: {
+  model: DagModel;
+  onPick: (id: string) => void;
+  onMark: (id: string | null) => void;
+  handle?: Ref<FindHandle>;
+}) {
   const [q, setQ] = useState('');
   const [act, setAct] = useState(0);
   const [open, setOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  useImperativeHandle(handle, () => ({ focus: () => input.current?.focus() }), []);
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
