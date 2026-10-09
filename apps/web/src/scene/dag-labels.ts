@@ -7,6 +7,7 @@ const CSS = `
 .sky-root { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .sky-lbl { position: absolute; left: 0; top: 0; white-space: nowrap; font: 400 12px/1.2 "Geist", ui-sans-serif, system-ui, sans-serif;
   color: #b9b2a5; opacity: 0; will-change: transform, opacity; text-shadow: 0 0 6px #04060a, 0 0 2px #04060a, 0 0 1px #04060a; }
+.sky-lbl.pick { pointer-events: auto; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
 .sky-lbl.working { color: #9fd3ff; }
 .sky-lbl.blocked { color: #ffb547; font-weight: 500; }
 .sky-lbl.pending { color: #8494ad; }
@@ -37,7 +38,7 @@ const CSS = `
 .sky-more-item .pre { color: #6b7a93; }
 @media (pointer: coarse) { .sky-more { padding: 10px 14px; } .sky-more-item { padding: 11px 10px; } }
 .sky-hit { position: absolute; left: 0; top: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; border: 0;
-  background: transparent; padding: 0; cursor: pointer; pointer-events: auto; display: none; }
+  background: transparent; padding: 0; cursor: pointer; pointer-events: auto; display: none; z-index: 1; }
 .sky-hit:focus-visible { outline: 1px solid #9fd3ff; outline-offset: 2px; }
 @media (pointer: coarse) { .sky-hit { width: 40px; height: 40px; margin: -20px 0 0 -20px; } }
 .sky-fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center;
@@ -51,6 +52,34 @@ export function injectStyles(doc: Document): () => void {
   s.textContent = CSS;
   doc.head.appendChild(s);
   return () => s.remove();
+}
+
+/** El ratón encima → `onHover(true)`; al salir, `onHover(false)`. Un dedo no deja «encima». */
+export function hoverable(el: HTMLElement, onHover: (on: boolean) => void): void {
+  el.addEventListener('pointerenter', (ev) => {
+    if (ev.pointerType === 'mouse') onHover(true);
+  });
+  el.addEventListener('pointerleave', () => onHover(false));
+}
+
+/** La estrella (`sky-hit`, un botón): su clic abre la tarea y no llega al lienzo, donde un clic en vacío la cierra. */
+export function pickable(el: HTMLElement, onPick: () => void, onHover: (on: boolean) => void): void {
+  el.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    onPick();
+  });
+  hoverable(el, onHover);
+}
+
+/**
+ * Qué hace soltar el puntero en el cielo. El nombre de una tarea (#114) no tiene clic propio: le pasa la presión al
+ * lienzo con su id, así arrastrar o deslizar empezando sobre un nombre mueve el cielo como en cualquier otra parte, y
+ * solo un toque sin movimiento la abre. Devuelve la tarea a abrir, `null` (toque en el vacío: se cierra la ficha) o
+ * `undefined` (fue un arrastre: nada).
+ */
+export function released(press: { moved: boolean; pick?: string } | null): string | null | undefined {
+  if (!press || press.moved) return undefined;
+  return press.pick ?? null;
 }
 
 /** Mide texto con la fuente de las etiquetas; sin canvas (tests), una estimación por carácter. */

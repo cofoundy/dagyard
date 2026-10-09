@@ -2950,9 +2950,9 @@
    "id": "hb0",
    "nodeId": "gh-271",
    "kind": "decision",
-   "question": "¿Reconciliaciónautomáticadelosmovimientosbancariosimportadosdesdeelextractomensualdelbancoyaxxx?",
+   "question": "¿Las facturas en PDF de la segunda vuelta salen con el detalle de cada línea o con un resumen por categoría? El contador pidió la referencia completa en el pie, así: FACTURA-ELECTRONICA-SERIE-F001-CORRELATIVO-000123456789-EMITIDA-DESDE-EL-PORTAL, y el cliente imprime todo en A4.",
    "options": [
-    "Opción uno con un texto bastante largo para ver cómo envuelve",
+    "Detalle de cada línea, con cantidad, precio unitario, descuento, impuesto y total, aunque la factura ocupe dos páginas en A4",
     "Opción dos",
     "🔥"
    ]

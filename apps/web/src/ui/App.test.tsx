@@ -202,6 +202,22 @@ describe('interfaz', () => {
     expect(scene.calls.at(-1)?.[0]).toBe('replay');
   });
 
+  it('con el teclado, una fila de la brújula abre la ficha con el foco dentro; Escape lo devuelve a la fila (#116)', async () => {
+    await mountIn();
+    const row = button(/^Buscador con filtros/);
+    row.focus();
+    // Enter sobre un botón es su clic
+    click(row);
+    await settle(1);
+    const card = host.querySelector('.card.open');
+    expect(card?.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement?.textContent).toBe('Buscador con filtros');
+    act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    await settle(1);
+    expect(host.querySelector('.card.open')).toBeNull();
+    expect(document.activeElement).toBe(row);
+  });
+
   it('la brújula: cada fila vuela a su estrella; desplegada crece hasta 8 sin scroll y el resto va a la búsqueda', async () => {
     await mountIn();
     click(button(/^Buscador con filtros/));

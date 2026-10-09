@@ -173,3 +173,17 @@ describe('FixtureApi', () => {
     expect(seen).toHaveLength(2);
   });
 });
+
+describe('datos hostiles (#117)', () => {
+  it('ningún pedido repite el título de otra tarea: en la ficha parecería de otra', async () => {
+    const { estresSnapshot } = await import('./fixture');
+    const s = estresSnapshot();
+    const titles = new Map(s.nodes.map((n) => [n.title.replace(/^¿|\?$/g, ''), n.id]));
+    for (const b of s.blockers) {
+      const other = titles.get(b.question.replace(/^¿|\?$/g, ''));
+      expect(other === undefined || other === b.nodeId, `${b.id} pregunta por ${other}`).toBe(true);
+    }
+    // y el pedido largo sigue ahí para probar el desborde
+    expect(Math.max(...s.blockers.map((b) => b.question.length))).toBeGreaterThanOrEqual(250);
+  });
+});
