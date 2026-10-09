@@ -46,6 +46,13 @@ una tarea (se cierra con motivo; descartar y quitar un «nació de» son de Andr
 Además del grafo, el sitio sigue drenando su inbox del bus en cada checkpoint y cierra con un mensaje
 `--to factory`: el grafo es lo que ve André; el bus es como se hablan los agentes.
 
+**Al cerrar con preguntas abiertas.** Si cierras con un bloqueante sin responder, nómbralo (nodo e id) en tu
+mensaje final a la fábrica: la respuesta de André le llegará a ella, no a ti.
+
+**La fábrica escucha (#121).** `dagyard watch --cursor <archivo>` corre como Monitor de la fábrica: una línea por
+pregunta abierta o respondida, en cualquier nodo. Una respuesta cuyo sitio sigue vivo se le reenvía por el bus;
+si ya cerró, la toma la fábrica. Así ninguna respuesta de André se pierde porque quien preguntó ya no está.
+
 ### Párrafo para pegar en un kickoff
 
 > Dogfood (épica #44): tu nodo es `gh-<n>` del proyecto «dagyard» en Dagyard. Compila el CLI una vez
@@ -93,6 +100,7 @@ qué ids no existen y qué tareas siguen sin «nació de».
 ```bash
 node packages/cli/dist/dagyard.mjs next                       # responde para «dagyard» sin --project
 node packages/cli/dist/dagyard.mjs open gh-64 --print         # el link a la ficha de esa tarea
+node packages/cli/dist/dagyard.mjs watch --since 0 --once     # todas las preguntas y respuestas del proyecto
 node packages/cli/dist/dagyard.mjs sync --github cofoundy/dagyard --dry-run
 curl -s -H "Authorization: Bearer $(cat ~/.config/dagyard/agent-key)" \
   https://dagyard.cofoundy-dev.workers.dev/api/projects/dagyard | jq '.nodes | length'
