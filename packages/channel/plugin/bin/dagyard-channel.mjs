@@ -14076,14 +14076,16 @@ var ROUTES = {
   messages: (projectId, nodeId) => `/api/projects/${p(projectId)}/nodes/${p(nodeId)}/messages`
 };
 var ApiRequestError = class extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, reason) {
     super(message);
     this.status = status;
     this.code = code;
+    this.reason = reason;
     this.name = "ApiRequestError";
   }
   status;
   code;
+  reason;
 };
 var RETRY_DELAYS_MS = [300, 900];
 var jitter = (ms) => Math.round(ms * (0.5 + Math.random()));
@@ -14185,13 +14187,15 @@ var DagyardClient = class {
     if (!res.ok) {
       let code = `http_${res.status}`;
       let message = res.statusText || "error";
+      let reason;
       try {
         const err = await res.json();
         if (err.error?.code) code = err.error.code;
         if (err.error?.message) message = err.error.message;
+        if (err.error?.reason === "exists") reason = err.error.reason;
       } catch {
       }
-      throw new ApiRequestError(res.status, code, message);
+      throw new ApiRequestError(res.status, code, message, reason);
     }
     return res;
   }

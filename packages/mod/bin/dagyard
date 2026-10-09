@@ -59,14 +59,16 @@ var ROUTES = {
   messages: (projectId, nodeId2) => `/api/projects/${p(projectId)}/nodes/${p(nodeId2)}/messages`
 };
 var ApiRequestError = class extends Error {
-  constructor(status2, code2, message) {
+  constructor(status2, code2, message, reason) {
     super(message);
     this.status = status2;
     this.code = code2;
+    this.reason = reason;
     this.name = "ApiRequestError";
   }
   status;
   code;
+  reason;
 };
 var RETRY_DELAYS_MS = [300, 900];
 var jitter = (ms) => Math.round(ms * (0.5 + Math.random()));
@@ -168,13 +170,15 @@ var DagyardClient = class {
     if (!res.ok) {
       let code2 = `http_${res.status}`;
       let message = res.statusText || "error";
+      let reason;
       try {
         const err = await res.json();
         if (err.error?.code) code2 = err.error.code;
         if (err.error?.message) message = err.error.message;
+        if (err.error?.reason === "exists") reason = err.error.reason;
       } catch {
       }
-      throw new ApiRequestError(res.status, code2, message);
+      throw new ApiRequestError(res.status, code2, message, reason);
     }
     return res;
   }
@@ -1813,6 +1817,21 @@ dagyard.run, la de DAGYARD_URL o ~/.config/dagyard/url, o una l\xEDnea de ~/.con
 La API key sale solo de DAGYARD_KEY o ~/.config/dagyard/agent-key; nunca se imprime.
 Los mensajes salen en ingl\xE9s; con LANG=es (o LC_ALL / LC_MESSAGES), en espa\xF1ol.`
 ];
+var IF_ABSENT_HELP = [
+  `With --if-absent, one that already exists is not an error: it prints \xAB<id> exists\xBB, writes nothing and exits 0.
+Any other conflict still fails (exit 1).`,
+  `Con --if-absent, si ya existe no es un error: imprime \xAB<id> exists\xBB, no escribe nada y sale 0. Cualquier otro
+conflicto sigue fallando (exit 1).`
+];
+var EXISTS = /* @__PURE__ */ Symbol("exists");
+async function ifAbsent(args, write) {
+  try {
+    return await write();
+  } catch (err) {
+    if (args.bools.has("if-absent") && err instanceof ApiRequestError && err.status === 409 && err.reason === "exists") return EXISTS;
+    throw err;
+  }
+}
 function addNodeCommand(fixed) {
   const kindFlag = fixed ? [] : ["kind"];
   const quoteFlags = fixed === "goal" ? [] : ["quote", "author"];
@@ -1820,8 +1839,8 @@ function addNodeCommand(fixed) {
   const cmd = fixed ? `${fixed} add` : "node add";
   return {
     usage: [
-      `dagyard ${cmd} <node> --title "\u2026"${opts} [--from <node> [--why "\u2026"]]\u2026 [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--report <url>] [--link <url>]`,
-      `dagyard ${cmd} <nodo> --title "\u2026"${opts} [--from <nodo> [--why "\u2026"]]\u2026 [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--report <url>] [--link <url>]`
+      `dagyard ${cmd} <node> --title "\u2026"${opts} [--from <node> [--why "\u2026"]]\u2026 [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--report <url>] [--link <url>] [--if-absent]`,
+      `dagyard ${cmd} <nodo> --title "\u2026"${opts} [--from <nodo> [--why "\u2026"]]\u2026 [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--report <url>] [--link <url>] [--if-absent]`
     ],
     summary: fixed === "goal" ? ["adds a goal: a living outcome, the root of the whys", "agrega un objetivo: un resultado vivo, ra\xEDz de los porqu\xE9s"] : fixed === "request" ? ["adds a person's request or decision, with their exact words", "agrega el pedido o la decisi\xF3n de una persona, con su cita"] : ["adds a node to the plan (a task by default)", "agrega un nodo al plan (una tarea por defecto)"],
     help: [
@@ -1833,7 +1852,7 @@ it), stream (ongoing work that spawns tasks). ${fixed ? `This is node add --kind
 a dependency: it never blocks. --dep is a dependency: this node needs <dep> closed.
 Without --stage it goes to the project's first stage. Statuses: pending, working, done (blocked is set by dagyard
 block). --report attaches its report (Basalt or the PR); --link is the technical detail (the issue or PR URL).
-Prints only the id.`,
+Prints only the id. ${IF_ABSENT_HELP[0]}`,
       `<nodo> es un id corto (T-314-A se guarda como t-314-a). --dep se repite o va separado por comas.
 Tipos: task (un due\xF1o, una sesi\xF3n, un /goal; la \xFAnica que arranca), goal (un resultado vivo; nace En progreso y nunca
 se cierra como lista), request (el pedido de una persona: --quote es su cita literal, --author qui\xE9n lo dijo), stream
@@ -1842,9 +1861,10 @@ se cierra como lista), request (el pedido de una persona: --quote es su cita lit
 depender: nunca bloquea. --dep s\xED es una dependencia: este nodo necesita <dep> cerrado.
 Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done (blocked lo pone dagyard block).
 --report cuelga su informe (Basalt o el PR); --link es el detalle t\xE9cnico (URL del issue o del PR). Imprime
-solo el id.`
+solo el id. ${IF_ABSENT_HELP[1]}`
     ],
     flags: ["title", "stage", "goal", "team", "dep", "status", "report", "link", "from", "why", ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
+    bools: ["if-absent"],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
       const input = {
@@ -1874,8 +1894,9 @@ solo el id.`
       if (report !== void 0) input.reportUrl = report;
       const link = linkArg(args);
       if (link !== void 0) input.link = link;
-      const node = await client(io, args).addNode(project(io, args), input);
-      io.stdout(`${node?.id ?? input.id}
+      const node = await ifAbsent(args, () => client(io, args).addNode(project(io, args), input));
+      io.stdout(node === EXISTS ? `${input.id} exists
+` : `${node?.id ?? input.id}
 `);
       return EXIT.ok;
     }
@@ -2015,24 +2036,31 @@ plan, a la vista. Imprime solo el id.`
     }
   },
   "edge add": {
-    usage: ['dagyard edge add <from> <to> [--kind origin --why "\u2026"]', 'dagyard edge add <de> <a> [--kind origin --why "\u2026"]'],
+    usage: ['dagyard edge add <from> <to> [--kind origin --why "\u2026"] [--if-absent]', 'dagyard edge add <de> <a> [--kind origin --why "\u2026"] [--if-absent]'],
     summary: ["adds a dependency: <to> needs <from> to be closed", "agrega una dependencia: <a> necesita que <de> est\xE9 cerrada"],
     help: [
       `With --kind origin it is not a dependency but a born-from: <to> was born from <from> (--why says why). It never
-blocks. The server rejects either kind if it closes a loop, and a dependency on a goal or a stream (they never close).`,
+blocks. The server rejects either kind if it closes a loop, and a dependency on a goal or a stream (they never close).
+Prints \xAB<from> \u2192 <to>\xBB (or \u21E2 for a born-from). With --if-absent, an edge that already exists is not an error: it
+prints \xAB<from> \u2192 <to> exists\xBB, writes nothing and exits 0. Any other conflict still fails (exit 1).`,
       `Con --kind origin no es una dependencia sino un \xABnaci\xF3 de\xBB: <a> naci\xF3 de <de> (--why dice por qu\xE9). Nunca
 bloquea. El servidor rechaza cualquiera de las dos si arma un ciclo, y una dependencia de un goal o un stream (nunca se
-cierran).`
+cierran). Imprime \xAB<de> \u2192 <a>\xBB (o \u21E2 si es un \xABnaci\xF3 de\xBB). Con --if-absent, si la arista ya existe no es un error:
+imprime \xAB<de> \u2192 <a> exists\xBB, no escribe nada y sale 0. Cualquier otro conflicto sigue fallando (exit 1).`
     ],
     flags: ["kind", "why", ...GLOBAL_FLAGS],
+    bools: ["if-absent"],
     async run({ io, args }) {
       const [from, to] = need(args, [["from", "de"], ["to", "a"]]);
       const kind2 = flag(args, "kind");
       if (kind2 !== void 0 && kind2 !== "origin" && kind2 !== "requires") throw new UsageError(t("--kind must be origin (or requires)", "--kind debe ser origin (o requires)"));
       const why = optional(args, "why", LIMITS.originWhy);
       if (why !== void 0 && kind2 !== "origin") throw new UsageError(t("--why goes with --kind origin", "--why va con --kind origin"));
-      await client(io, args).addEdge(project(io, args), nodeId(from), nodeId(to), kind2 === "origin" ? { kind: "origin", ...why ? { why } : {} } : {});
-      io.stdout(`${nodeId(from)} ${kind2 === "origin" ? "\u21E2" : "\u2192"} ${nodeId(to)}
+      const edge = await ifAbsent(
+        args,
+        () => client(io, args).addEdge(project(io, args), nodeId(from), nodeId(to), kind2 === "origin" ? { kind: "origin", ...why ? { why } : {} } : {})
+      );
+      io.stdout(`${nodeId(from)} ${kind2 === "origin" ? "\u21E2" : "\u2192"} ${nodeId(to)}${edge === EXISTS ? " exists" : ""}
 `);
       return EXIT.ok;
     }
