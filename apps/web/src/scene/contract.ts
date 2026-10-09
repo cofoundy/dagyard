@@ -21,6 +21,12 @@ export interface SceneNode {
   children: string[];
   /** Su último cambio (ms): estado, mensaje o respuesta. Sin él, su nacimiento. Decide qué se nombra en «ahora». */
   touched?: number;
+  /** Tira su hilo hasta «ahora» y late: solo una tarea en curso o que te espera (#109). */
+  tail?: boolean;
+  /** La nombra la brújula en «lo que sigue»: se rotula también en la vista general (#109). */
+  named?: boolean;
+  /** En curso pero sin noticias hace más de un día (la brújula lo dice igual: «sin noticias hace 5 días»). */
+  quiet?: boolean;
 }
 
 /** `needs`: `to` necesita a `from`. `origin`: `to` nació de `from`. En los dos, el extremo brillante es `to`. */

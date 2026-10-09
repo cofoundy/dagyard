@@ -62,6 +62,7 @@ export function toNode(n: WireNode): DagNode {
     replacedBy: opt(n.replacedBy),
     closedAt: opt(n.closedAt),
     updatedAt: opt(n.updatedAt),
+    startedAt: opt(n.startedAt),
   };
 }
 

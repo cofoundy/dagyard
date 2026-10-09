@@ -48,6 +48,8 @@ export interface DagNode {
   closedAt?: string;
   /** Último cambio del nodo (ISO). Sin él (fixtures viejos), se toma su nacimiento. */
   updatedAt?: string;
+  /** Primera vez en curso (#75): la brújula lo usa como señal de vida cuando no hay mensajes (#109). */
+  startedAt?: string;
 }
 
 /** «Nació de» (#90): `to` nació de `from`, con su porqué. Nunca bloquea. */

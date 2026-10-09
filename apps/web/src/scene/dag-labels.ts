@@ -19,7 +19,7 @@ const CSS = `
 .sky-tick, .sky-now, .sky-fold { position: absolute; left: 0; top: 0; white-space: nowrap; font: 400 12px/1 "Geist Mono", ui-monospace, monospace;
   letter-spacing: .06em; text-transform: uppercase; color: #6b7a93; opacity: 0; will-change: transform, opacity; }
 .sky-now { color: #9fd3ff; font-weight: 500; letter-spacing: .1em; }
-.sky-fold { letter-spacing: .12em; transform-origin: 0 0; }
+.sky-fold { letter-spacing: .04em; color: #48556b; text-transform: none; }
 .sky-more { position: absolute; left: 0; top: 0; white-space: nowrap; font: 400 11px/1 "Geist Mono", ui-monospace, monospace;
   letter-spacing: .08em; text-transform: uppercase; color: #8fb6d8; background: rgba(9,14,22,.72); border: 1px solid rgba(159,211,255,.22);
   border-radius: 999px; padding: 6px 10px; cursor: pointer; pointer-events: auto; opacity: 0; will-change: transform, opacity; z-index: 2; }

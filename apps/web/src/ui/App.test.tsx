@@ -102,10 +102,12 @@ describe('interfaz', () => {
   it('pinta el HUD, el pie y le pasa el DAG y el SafeArea a la escena', async () => {
     await mountIn();
     expect(text()).toContain('Marketplace de reservas');
-    expect(text()).toContain('20 tareas');
-    expect(text()).toContain('en curso');
-    expect(text()).toContain('3 te esperan');
+    // la brújula (#109): lo que te espera con su «Responder», lo que está en curso y lo que sigue, por nombre
+    expect(text()).toContain('3 cosas esperan tu respuesta');
     expect(text()).toContain('Responder');
+    expect(text()).toContain('En curso ahora');
+    expect(text()).toContain('Lo que sigue');
+    expect(host.querySelector('.brief .b-row.blocked')?.textContent).toContain('Modelo de comisiones');
     expect(host.querySelector('.foot input[type="search"]')).not.toBeNull();
     const graphs = scene.calls
       .filter(([n]) => n === 'setGraph')
@@ -162,7 +164,7 @@ describe('interfaz', () => {
     click(button('Al proveedor (10 % por reserva)'));
     await until(() => text().includes('Decidiste'), 'decisión registrada');
     expect(text()).toContain('«Al proveedor (10 % por reserva)» · el equipo sigue');
-    expect(host.querySelector('.card .chip')?.textContent).toBe('En progreso');
+    expect(host.querySelector('.card .chip')?.textContent).toBe('En curso');
 
     pick('checkout-d');
     await settle(1);
@@ -187,17 +189,36 @@ describe('interfaz', () => {
     expect(scene.calls.some(([n, a]) => n === 'pulse' && a[0] === 'pagos' && a[1] === 'working')).toBe(true);
   });
 
-  it('«te esperan» recorre lo que te toca y Escape vuelve a la vista general', async () => {
+  it('«Responder» recorre lo que te toca y Escape vuelve a la vista general', async () => {
     await mountIn();
-    click(button(/te esperan/));
+    click(button('Responder'));
     expect(scene.calls.filter(([n]) => n === 'focus').at(-1)?.[1][0]).toBe('comision');
-    click(button(/te esperan/));
+    click(button('Responder'));
     expect(scene.calls.filter(([n]) => n === 'focus').at(-1)?.[1][0]).toBe('checkout-d');
     act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
     expect(host.querySelector('.card.open')).toBeNull();
     expect(scene.calls.at(-1)?.[0]).toBe('overview');
     click(button(/^Repetir$/));
     expect(scene.calls.at(-1)?.[0]).toBe('replay');
+  });
+
+  it('la brújula: cada fila vuela a su estrella; desplegada crece hasta 8 sin scroll y el resto va a la búsqueda', async () => {
+    await mountIn();
+    click(button(/^Buscador con filtros/));
+    expect(scene.calls.filter(([n]) => n === 'focus').at(-1)?.[1][0]).toBe('buscador');
+    // «Lo que sigue» tiene 9: se ven 3 y «+6 más»; desplegado, 8, «Ver menos» y «1 más · Busca una tarea»
+    const next = () => host.querySelectorAll('.brief .b-group:last-child .b-row');
+    expect(next()).toHaveLength(3);
+    click(button('+6 más'));
+    expect(next()).toHaveLength(8);
+    // desplegar un grupo pliega el otro a su cabecera, que lo vuelve a abrir
+    expect(host.querySelectorAll('.brief .b-row.working')).toHaveLength(0);
+    expect(button(/^En curso ahora/).getAttribute('aria-expanded')).toBe('false');
+    click(button('1 más · Busca una tarea'));
+    expect(document.activeElement).toBe(host.querySelector('.foot input[type="search"]'));
+    click(button('Ver menos'));
+    expect(next()).toHaveLength(3);
+    expect(host.querySelectorAll('.brief .b-row.working')).toHaveLength(3);
   });
 
   it('la entrada rechaza una clave mala y deja pasar una buena', async () => {
@@ -210,6 +231,50 @@ describe('interfaz', () => {
     type(host.querySelector('#clave')!, 'clave-buena');
     await act(async () => void host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
     await until(() => text().includes('Marketplace de reservas'), 'entra');
+  });
+});
+
+// #109 con los datos reales de «dagyard» (9 oct): «Abrir el código» lleva 5 días sin noticias y hay pedidos abiertos.
+describe('la brújula con el proyecto «dagyard» del 9 oct', () => {
+  async function mountDagyard() {
+    window.history.replaceState(null, '', '/?p=dagyard-hoy');
+    const api = new FixtureApi({ storage: null, extra: true });
+    await api.login('clave-de-prueba');
+    act(() => root.render(<App api={api} demo />));
+    await until(() => !!host.querySelector('.brief') && text().includes('En curso ahora'), 'carga dagyard');
+    return api;
+  }
+  afterEach(() => {
+    window.history.replaceState(null, '', '/');
+    vi.unstubAllGlobals();
+  });
+
+  it('la ficha y el cielo dicen «Sin noticias» de lo quieto y no llaman «En curso» a un pedido abierto', async () => {
+    const api = await mountDagyard();
+    pick('gh-25');
+    await settle(1);
+    expect(host.querySelector('.card .chip')?.textContent).toBe('Sin noticias');
+    const graph = scene.calls.filter(([n]) => n === 'setGraph').at(-1)![1][0] as { nodes: Array<{ id: string; quiet?: boolean }> };
+    expect(graph.nodes.find((n) => n.id === 'gh-25')?.quiet).toBe(true);
+    expect(graph.nodes.filter((n) => n.quiet).map((n) => n.id)).toEqual(['gh-25']);
+
+    const snap = await api.getSnapshot('dagyard-hoy');
+    const req = snap.nodes.find((n) => n.kind === 'request' && n.status === 'working')!;
+    pick(req.id);
+    await settle(1);
+    const chips = [...host.querySelectorAll('.card .top .chip')].map((c) => c.textContent);
+    expect(chips).toEqual(['Pedido']);
+  });
+
+  it('en celular, elegir una fila de un grupo desplegado lo pliega: la ficha no lo deja cortado', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('max-width: 720px'), addEventListener() {}, removeEventListener() {} }));
+    await mountDagyard();
+    click(button(/^En curso ahora/));
+    expect(host.querySelectorAll('.brief .b-row.working')).toHaveLength(3);
+    click(button(/^Abrir el código/));
+    expect(scene.calls.filter(([n]) => n === 'focus').at(-1)?.[1][0]).toBe('gh-25');
+    expect(host.querySelectorAll('.brief .b-row.working')).toHaveLength(0);
+    expect(button(/^En curso ahora/).getAttribute('aria-expanded')).toBe('false');
   });
 });
 

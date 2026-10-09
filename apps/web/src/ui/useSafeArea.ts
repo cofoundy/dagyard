@@ -6,8 +6,22 @@ import type { SafeArea } from '../scene/contract';
 
 const GAP = 12;
 
-export function measureSafeArea(top: Array<Element | null>, bottom: Array<Element | null>, vw: number, vh: number): SafeArea {
+export function measureSafeArea(
+  top: Array<Element | null>,
+  bottom: Array<Element | null>,
+  vw: number,
+  vh: number,
+  side: Array<Element | null> = [],
+): SafeArea {
   let t = 0;
+  let l = 0;
+  // brújula (#109): en escritorio reserva su ancho a la izquierda (la altura le hace falta al grafo); en móvil, arriba
+  for (const el of side) {
+    const r = el?.getBoundingClientRect();
+    if (!r || r.height <= 0) continue;
+    if (vw <= 720) t = Math.max(t, r.bottom);
+    else l = Math.max(l, r.right);
+  }
   for (const el of top) {
     const r = el?.getBoundingClientRect();
     if (r && r.height > 0) t = Math.max(t, r.bottom);
@@ -21,7 +35,7 @@ export function measureSafeArea(top: Array<Element | null>, bottom: Array<Elemen
   return {
     top: Math.round(t ? t + GAP : 0),
     bottom: Math.round(b ? b + GAP : 0),
-    left: gutter,
+    left: l ? Math.round(l + GAP * 2) : gutter,
     right: gutter,
   };
 }
@@ -35,6 +49,7 @@ export function useSafeArea(
   bottom: Array<RefObject<Element | null>>,
   onChange: (area: SafeArea) => void,
   deps: unknown[],
+  side: Array<RefObject<Element | null>> = [],
 ): void {
   useLayoutEffect(() => {
     let last: SafeArea | null = null;
@@ -46,6 +61,7 @@ export function useSafeArea(
         bottom.map((r) => r.current),
         window.innerWidth,
         window.innerHeight,
+        side.map((r) => r.current),
       );
       if (sameArea(last, area)) return;
       last = area;
@@ -57,7 +73,7 @@ export function useSafeArea(
     run();
     window.addEventListener('resize', schedule);
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null;
-    for (const r of [...top, ...bottom]) if (r.current) ro?.observe(r.current);
+    for (const r of [...top, ...bottom, ...side]) if (r.current) ro?.observe(r.current);
     // Las fuentes web cambian el alto del HUD cuando terminan de cargar.
     void document.fonts?.ready.then(schedule);
     return () => {

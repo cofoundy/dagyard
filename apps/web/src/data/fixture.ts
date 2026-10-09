@@ -13,6 +13,9 @@ import { lang, type Lang } from '../i18n';
 import { RESOLVED_BY_YOU, resolutionSummary } from './adapter';
 import { reduce } from './reduce';
 import dagyardOct4 from './fixtures/dagyard-oct4.json';
+import dagyardOct9 from './fixtures/dagyard-oct9.json';
+import { toSnapshot } from './adapter';
+import type { ProjectSnapshot as WireSnapshot } from '@dagyard/model';
 import estres from './fixtures/estres.json';
 import { ApiError, type AppApi } from './session';
 import {
@@ -197,6 +200,7 @@ function shifted(raw: unknown, now: number): Snapshot {
     n.bornAt = move(n.bornAt);
     n.closedAt = move(n.closedAt);
     n.updatedAt = move(n.updatedAt);
+    n.startedAt = move(n.startedAt);
   }
   for (const b of snap.blockers) b.resolvedAt = move(b.resolvedAt);
   for (const m of snap.messages) m.at = move(m.at)!;
@@ -210,6 +214,26 @@ export function dagyardSnapshot(now = Date.now()): Snapshot {
 }
 
 /** Datos hostiles: 185 tareas en 3 días, títulos de 90 caracteres, emoji, RTL, markup, 4 esperas. */
+/**
+ * Prototipo de orientación (#109): el proyecto «dagyard» real de la preview el 9 oct a las 17:13Z (API, forma del
+ * cable), corrido para que su último momento caiga hace 90 s. `waiting` le suma dos pedidos abiertos de ejemplo (una
+ * decisión y una revisión) para ver la brújula cuando algo te espera.
+ */
+export function dagyardHoySnapshot(now = Date.now(), waiting = false): Snapshot {
+  const raw = dagyardOct9 as unknown as WireSnapshot & { asOf: string };
+  const snap = { ...toSnapshot(raw), asOf: raw.asOf };
+  if (waiting) {
+    snap.project = { id: 'dagyard-espera', name: snap.project.name };
+    snap.nodes = snap.nodes.map((n) => (n.id === 'gh-9' || n.id === 'gh-108' ? { ...n, status: 'blocked' } : n));
+    snap.blockers = [
+      ...snap.blockers,
+      { id: 'b-proto-1', nodeId: 'gh-9', kind: 'decision', question: '¿Dónde guardamos los datos a futuro?', options: ['Seguimos en Cloudflare', 'Pasamos a Supabase'] },
+      { id: 'b-proto-2', nodeId: 'gh-108', kind: 'review', question: 'Mira el video en el celular: ¿la entrada ya se siente rápida?', options: ['Aprobar', 'Pedir cambios'] },
+    ];
+  }
+  return shifted(snap, now);
+}
+
 export function estresSnapshot(now = Date.now()): Snapshot {
   return shifted(estres, now);
 }
@@ -264,7 +288,7 @@ export class FixtureApi implements AppApi {
     this.latency = o.latency ?? 0;
     this.now = o.now ?? Date.now;
     const t = this.now();
-    const extra = o.extra ? [dagyardSnapshot(t), estresSnapshot(t), vacioSnapshot()] : [];
+    const extra = o.extra ? [dagyardHoySnapshot(t), dagyardHoySnapshot(t, true), dagyardSnapshot(t), estresSnapshot(t), vacioSnapshot()] : [];
     for (const snap of [marketplaceSnapshot(t, this.lang), renovacionSnapshot(t), ...extra]) {
       this.projects.set(snap.project.id, { snap, log: [], listeners: new Set() });
     }

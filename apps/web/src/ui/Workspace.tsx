@@ -8,9 +8,10 @@ import type { Pulse, SceneHandlers, Sky } from '../scene/contract';
 import { ApiError, type AppApi } from '../data/session';
 import { ProjectStore, type StoreChange, type StoreState } from '../data/store';
 import { UnauthorizedError, type Blocker, type ProjectSummary, type Resolution } from '../data/types';
-import { buildDag, dagCounts } from '../data/dag';
+import { buildDag } from '../data/dag';
 import { activityOf, nodeById, openBlockers, toSceneGraph, touchedOf } from '../data/view';
-import { lang, type Lang } from '../i18n';
+import { lang, t, type Lang } from '../i18n';
+import { orientation } from '../data/orient';
 import {
   isLooking,
   newlyOpened,
@@ -23,9 +24,10 @@ import {
 import { Card } from './Card';
 import { COPY } from './copy';
 import { feedbackFor, resolvedToast, type ToastSpec } from './feedback';
-import { Actions, Brand, Footer, Toasts, type ToastItem } from './Hud';
+import { Actions, Brand, Footer, Toasts, type FindHandle, type ToastItem } from './Hud';
 import { readLink, writeLink } from './link';
 import { useSafeArea } from './useSafeArea';
+import { Brief } from './Brief';
 
 const PROJECT_KEY = 'dagyard:project';
 const TOAST_MS = 4200;
@@ -77,6 +79,8 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
   const actionsRef = useRef<HTMLDivElement>(null);
   const footRef = useRef<HTMLElement>(null);
   const noteRef = useRef<HTMLDivElement>(null);
+  const briefRef = useRef<HTMLElement>(null);
+  const findRef = useRef<FindHandle>(null);
 
   const onUnauthorizedRef = useRef(onUnauthorized);
   onUnauthorizedRef.current = onUnauthorized;
@@ -219,8 +223,20 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
   }, []);
   // el DAG se recalcula con cada evento; «ahora» es el reloj, salvo que el último nacimiento sea más nuevo
   const model = useMemo(() => (snapshot ? buildDag(snapshot, Math.max(tick, Date.now())) : null), [snapshot, tick]);
-  const graph = useMemo(() => (model && snapshot ? toSceneGraph(model, activityOf(snapshot), touchedOf(snapshot)) : null), [model, snapshot]);
-  const counts = useMemo(() => (model ? dagCounts(model) : null), [model]);
+  // la brújula (#109): qué te espera, qué está en curso y qué sigue
+  const orient = useMemo(() => (model && snapshot ? orientation(model, snapshot) : null), [model, snapshot]);
+  // lo que sigue y la brújula nombra (las 3 primeras) se rotula también en el cielo; lo quieto, la píldora lo dice igual
+  const marks = useMemo(
+    () => ({
+      named: new Set(orient?.next.slice(0, 3).map((x) => x.task.id)),
+      quiet: new Set(orient?.moving.filter((x) => x.quiet).map((x) => x.task.id)),
+    }),
+    [orient],
+  );
+  const graph = useMemo(
+    () => (model && snapshot ? toSceneGraph(model, activityOf(snapshot), touchedOf(snapshot), marks) : null),
+    [model, snapshot, marks],
+  );
   const shownProject = useRef<string | null>(null);
   useEffect(() => {
     const s = sky.current;
@@ -308,6 +324,7 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
     [footRef, noteRef],
     (area) => sky.current?.setSafeArea(area),
     [!!snapshot, demo, !!model?.tasks.length],
+    [briefRef],
   );
 
   // lo que tapa la ficha: el vuelo a una tarea la deja en el centro de lo que queda a la vista
@@ -430,8 +447,8 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
   } else if (!snapshot.nodes.length) {
     center = (
       <div className="center-note empty">
-        <h2>{COPY.emptyTitle}</h2>
-        <p>{COPY.emptyText}</p>
+        <h2>{t('brief.nothing')}</h2>
+        <p>{t('brief.emptyText')}</p>
       </div>
     );
   }
@@ -440,7 +457,6 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
     <>
       <Brand
         ref={brandRef}
-        counts={counts}
         projectName={projectName}
         projects={projects ?? []}
         currentId={projectId}
@@ -448,18 +464,27 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
         onPick={pickProject}
         onLogout={onLogout}
       />
-      <Actions
-        ref={actionsRef}
-        waiting={waitingIds.length}
-        onWaiting={nextWaiting}
-        onNotify={permission === 'default' ? askPermission : undefined}
-      />
+      <Actions ref={actionsRef} onNotify={permission === 'default' ? askPermission : undefined} />
+      {orient && model && !!model.tasks.length && (
+        <Brief
+          ref={briefRef}
+          o={orient}
+          now={model.now}
+          reconnecting={state.status === 'reconnecting'}
+          onAnswer={nextWaiting}
+          onPick={focus}
+          onMark={mark}
+          onFind={() => findRef.current?.focus()}
+          floor={() => footRef.current?.getBoundingClientRect().top ?? window.innerHeight}
+        />
+      )}
       <Toasts items={toasts} onOpen={focus} />
       {snapshot && (
         <Card
           snapshot={snapshot}
           model={model ?? undefined}
           node={focusedNode}
+          quiet={!!focusedNode && marks.quiet.has(focusedNode.id)}
           offline={state.status === 'reconnecting'}
           onClose={overview}
           onFocus={focus}
@@ -473,7 +498,7 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
           {COPY.demoNote}
         </div>
       )}
-      {snapshot && <Footer ref={footRef} model={model} carded={!!focusedNode} onPick={focus} onMark={mark} onReplay={replay} />}
+      {snapshot && <Footer ref={footRef} model={model} carded={!!focusedNode} onPick={focus} onMark={mark} onReplay={replay} findRef={findRef} />}
       {center}
     </>
   );
