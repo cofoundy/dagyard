@@ -1,0 +1,2994 @@
+{
+ "asOf": "2026-10-05T13:21:06.123Z",
+ "project": {
+  "id": "estres",
+  "name": "Prueba de estrés: tres días de fábrica"
+ },
+ "stages": [
+  {
+   "id": "construccion",
+   "name": "Construcción"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "gh-101",
+   "stageId": "construccion",
+   "title": "Proyecto de estrés: tres días seguidos",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 16",
+   "kind": "request",
+   "bornAt": "2026-10-02T13:00:00.000Z",
+   "quote": "quiero ver si esto aguanta tres días de fábrica sin parar",
+   "quoteBy": "André"
+  },
+  {
+   "id": "gh-102",
+   "stageId": "construccion",
+   "title": "Sprint gigante: 30 tareas nacen de aquí",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-02T13:10:00.000Z"
+  },
+  {
+   "id": "gh-103",
+   "stageId": "construccion",
+   "title": "Reconciliaciónautomáticadelosmovimientosbancariosimportadosdesdeelextractomensualdelbancoyaxxx",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 1",
+   "kind": "task",
+   "bornAt": "2026-10-02T13:30:23.615Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-104",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 2",
+   "kind": "task",
+   "bornAt": "2026-10-02T16:30:23.615Z"
+  },
+  {
+   "id": "gh-105",
+   "stageId": "construccion",
+   "title": "Modo oscuro",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-02T16:43:42.263Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-106",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-02T16:54:17.852Z"
+  },
+  {
+   "id": "gh-107",
+   "stageId": "construccion",
+   "title": "Reseñas",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-02T16:56:58.979Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-108",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 6",
+   "kind": "task",
+   "bornAt": "2026-10-02T16:58:50.574Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-109",
+   "stageId": "construccion",
+   "title": "Importar contactos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 7",
+   "kind": "task",
+   "bornAt": "2026-10-02T17:10:07.029Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-110",
+   "stageId": "construccion",
+   "title": "Calendario compartido (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-02T17:32:02.217Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-111",
+   "stageId": "construccion",
+   "title": "Reseñas (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-02T17:35:53.068Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-112",
+   "stageId": "construccion",
+   "title": "🔥🔥",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-02T17:47:49.865Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-113",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-02T18:01:52.511Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-114",
+   "stageId": "construccion",
+   "title": "Panel del proveedor (segunda vuelta)",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-02T18:21:20.489Z"
+  },
+  {
+   "id": "gh-115",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-02T21:21:20.489Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-116",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-02T21:30:31.368Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-117",
+   "stageId": "construccion",
+   "title": "Reseñas (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 15",
+   "kind": "task",
+   "bornAt": "2026-10-02T21:45:54.990Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-118",
+   "stageId": "construccion",
+   "title": "Modo oscuro",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-02T21:56:09.975Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-119",
+   "stageId": "construccion",
+   "title": "Modo oscuro",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-02T21:57:50.482Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-120",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 1",
+   "kind": "task",
+   "bornAt": "2026-10-02T22:07:25.597Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-121",
+   "stageId": "construccion",
+   "title": "👨‍👩‍👧‍👦 familia",
+   "status": "pending",
+   "progress": 0.4,
+   "kind": "task",
+   "bornAt": "2026-10-02T22:29:05.667Z"
+  },
+  {
+   "id": "gh-122",
+   "stageId": "construccion",
+   "title": "Panel del proveedor",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-02T22:50:40.042Z"
+  },
+  {
+   "id": "gh-123",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-02T22:54:45.537Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-124",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-02T23:05:34.069Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-125",
+   "stageId": "construccion",
+   "title": "Importar contactos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 6",
+   "kind": "task",
+   "bornAt": "2026-10-02T23:06:51.061Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-126",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 7",
+   "kind": "task",
+   "bornAt": "2026-10-02T23:16:20.653Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-127",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-02T23:24:33.327Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-128",
+   "stageId": "construccion",
+   "title": "Modo oscuro",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-02T23:24:51.309Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-129",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-02T23:29:21.707Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-130",
+   "stageId": "construccion",
+   "title": "MIGRAR TODO EL ESTADO A LA NUEVA BASE DE DATOS ANTES DEL LANZAMIENTO",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-03T02:29:21.707Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-131",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-03T02:29:31.743Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-132",
+   "stageId": "construccion",
+   "title": "Exportar a Excel",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-03T02:50:18.643Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-133",
+   "stageId": "construccion",
+   "title": "Reseñas (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-03T03:10:39.457Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-134",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 15",
+   "kind": "task",
+   "bornAt": "2026-10-03T03:23:10.739Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-135",
+   "stageId": "construccion",
+   "title": "Importar contactos (segunda vuelta)",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-03T03:38:24.401Z"
+  },
+  {
+   "id": "gh-136",
+   "stageId": "construccion",
+   "title": "Facturas en PDF (segunda vuelta)",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-03T03:56:36.370Z"
+  },
+  {
+   "id": "gh-137",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 1",
+   "kind": "task",
+   "bornAt": "2026-10-03T06:56:36.370Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-138",
+   "stageId": "construccion",
+   "title": "Panel del proveedor",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T07:02:22.568Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-139",
+   "stageId": "construccion",
+   "title": "<b>negrita</b> {{1}} *literal*",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-03T07:16:53.981Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-140",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-03T07:19:00.995Z"
+  },
+  {
+   "id": "gh-141",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-03T10:19:00.995Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-142",
+   "stageId": "construccion",
+   "title": "Reseñas",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T10:19:21.506Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-143",
+   "stageId": "construccion",
+   "title": "Exportar a Excel (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 7",
+   "kind": "task",
+   "bornAt": "2026-10-03T10:32:31.331Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-144",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-03T10:47:32.422Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-145",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-03T11:03:36.415Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-146",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-03T11:04:06.986Z"
+  },
+  {
+   "id": "gh-147",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-03T11:15:35.010Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-148",
+   "stageId": "construccion",
+   "title": "تحسين واجهة المستخدم للهاتف",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-03T11:15:59.324Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-149",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-03T14:15:59.324Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-150",
+   "stageId": "construccion",
+   "title": "Calendario compartido",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-03T14:35:03.657Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-151",
+   "stageId": "construccion",
+   "title": "Facturas en PDF",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 15",
+   "kind": "task",
+   "bornAt": "2026-10-03T14:45:44.369Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-152",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-03T14:56:26.899Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-153",
+   "stageId": "construccion",
+   "title": "Caché del listado (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-03T15:10:11.690Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-154",
+   "stageId": "construccion",
+   "title": "Exportar a Excel",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T15:12:54.082Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-155",
+   "stageId": "construccion",
+   "title": "Panel del proveedor",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T15:28:23.056Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-156",
+   "stageId": "construccion",
+   "title": "Reseñas (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T15:31:42.490Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-157",
+   "stageId": "construccion",
+   "title": "Оплата картой (кириллица que parece latín)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-03T15:37:26.574Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-158",
+   "stageId": "construccion",
+   "title": "Roles y permisos (segunda vuelta)",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-03T15:58:11.925Z"
+  },
+  {
+   "id": "gh-159",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T16:13:02.793Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-160",
+   "stageId": "construccion",
+   "title": "Importar contactos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 7",
+   "kind": "task",
+   "bornAt": "2026-10-03T16:32:57.347Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-161",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-03T16:50:17.248Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-162",
+   "stageId": "construccion",
+   "title": "Caché del listado (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-03T16:57:04.196Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-163",
+   "stageId": "construccion",
+   "title": "Reseñas",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T17:11:53.999Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-164",
+   "stageId": "construccion",
+   "title": "Modo oscuro (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T17:16:57.347Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-165",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "working",
+   "progress": 0.4,
+   "kind": "task",
+   "bornAt": "2026-10-03T17:26:02.420Z"
+  },
+  {
+   "id": "gh-166",
+   "stageId": "construccion",
+   "title": "   espacios al inicio y al final   ",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-03T17:42:10.120Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-167",
+   "stageId": "construccion",
+   "title": "Reseñas",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-03T17:48:11.117Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-168",
+   "stageId": "construccion",
+   "title": "Caché del listado (segunda vuelta)",
+   "status": "working",
+   "progress": 0.4,
+   "kind": "task",
+   "bornAt": "2026-10-03T18:02:15.427Z"
+  },
+  {
+   "id": "gh-169",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-03T18:18:31.462Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-170",
+   "stageId": "construccion",
+   "title": "Modo oscuro (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-03T18:29:55.220Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-171",
+   "stageId": "construccion",
+   "title": "Caché del listado",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-03T18:30:54.392Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-172",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook (segunda vuelta)",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 2",
+   "kind": "task",
+   "bornAt": "2026-10-03T21:30:54.392Z"
+  },
+  {
+   "id": "gh-173",
+   "stageId": "construccion",
+   "title": "Reseñas",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-03T21:41:03.705Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-174",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-03T21:48:46.340Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-175",
+   "stageId": "construccion",
+   "title": "x",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-03T22:10:06.145Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-176",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 6",
+   "kind": "task",
+   "bornAt": "2026-10-03T22:24:21.121Z"
+  },
+  {
+   "id": "gh-177",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta (segunda vuelta)",
+   "status": "pending",
+   "progress": 0.4,
+   "kind": "task",
+   "bornAt": "2026-10-03T22:45:35.883Z"
+  },
+  {
+   "id": "gh-178",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-03T23:03:47.959Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-179",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-03T23:07:07.698Z"
+  },
+  {
+   "id": "gh-180",
+   "stageId": "construccion",
+   "title": "Panel del proveedor (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-03T23:07:54.847Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-181",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-04T02:07:54.847Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-182",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:07:54.847Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-183",
+   "stageId": "construccion",
+   "title": "Panel del proveedor",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:29:45.874Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-184",
+   "stageId": "construccion",
+   "title": "Una tarea con un título larguísimo que ocupa tres renglones cuando se envuelve, porque el agente escribió todo el contexto en el título en vez del cuerpo",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-04T08:29:45.874Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-185",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 15",
+   "kind": "task",
+   "bornAt": "2026-10-04T08:47:22.756Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-186",
+   "stageId": "construccion",
+   "title": "Modo oscuro (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-04T08:50:52.005Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-187",
+   "stageId": "construccion",
+   "title": "Calendario compartido (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-04T09:09:21.023Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-188",
+   "stageId": "construccion",
+   "title": "Roles y permisos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 1",
+   "kind": "task",
+   "bornAt": "2026-10-04T12:09:21.023Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-189",
+   "stageId": "construccion",
+   "title": "Panel del proveedor",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 2",
+   "kind": "task",
+   "bornAt": "2026-10-04T12:19:21.172Z"
+  },
+  {
+   "id": "gh-190",
+   "stageId": "construccion",
+   "title": "Búsqueda con filtros",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-04T12:34:40.897Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-191",
+   "stageId": "construccion",
+   "title": "Búsqueda con filtros",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-04T12:44:43.885Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-192",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-04T12:49:48.202Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-193",
+   "stageId": "construccion",
+   "title": "Reconciliaciónautomáticadelosmovimientosbancariosimportadosdesdeelextractomensualdelbancoyaxxx",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 6",
+   "kind": "task",
+   "bornAt": "2026-10-04T13:05:43.190Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-194",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 7",
+   "kind": "task",
+   "bornAt": "2026-10-04T13:05:52.292Z"
+  },
+  {
+   "id": "gh-195",
+   "stageId": "construccion",
+   "title": "Exportar a Excel",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-04T13:26:40.596Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-196",
+   "stageId": "construccion",
+   "title": "Panel del proveedor",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-04T13:33:45.532Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-197",
+   "stageId": "construccion",
+   "title": "Modo oscuro",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-04T13:34:57.137Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-198",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-04T13:48:52.369Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-199",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-04T13:55:25.661Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-200",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-04T14:15:31.521Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-201",
+   "stageId": "construccion",
+   "title": "Caché del listado",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-04T14:17:35.734Z"
+  },
+  {
+   "id": "gh-202",
+   "stageId": "construccion",
+   "title": "🔥🔥",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-04T14:29:24.187Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-203",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-04T14:29:35.328Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-204",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-04T14:41:01.361Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-205",
+   "stageId": "construccion",
+   "title": "Panel del proveedor",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 1",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:00:23.036Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-206",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 2",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:08:04.002Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-207",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:13:00.807Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-208",
+   "stageId": "construccion",
+   "title": "Facturas en PDF (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-04T15:29:19.723Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-209",
+   "stageId": "construccion",
+   "title": "Exportar a Excel",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:36:01.220Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-210",
+   "stageId": "construccion",
+   "title": "Modo oscuro",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 6",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:47:24.683Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-211",
+   "stageId": "construccion",
+   "title": "👨‍👩‍👧‍👦 familia",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 7",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:54:48.343Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-212",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña (segunda vuelta)",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-04T16:10:51.041Z"
+  },
+  {
+   "id": "gh-213",
+   "stageId": "construccion",
+   "title": "Importar contactos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-04T16:24:09.145Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-214",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-04T16:37:10.247Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-215",
+   "stageId": "construccion",
+   "title": "Búsqueda con filtros",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:37:10.247Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-216",
+   "stageId": "construccion",
+   "title": "Búsqueda con filtros",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:57:21.505Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-217",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:58:06.718Z"
+  },
+  {
+   "id": "gh-218",
+   "stageId": "construccion",
+   "title": "Importar contactos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-04T20:06:19.323Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-219",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 15",
+   "kind": "task",
+   "bornAt": "2026-10-04T20:28:15.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-220",
+   "stageId": "construccion",
+   "title": "MIGRAR TODO EL ESTADO A LA NUEVA BASE DE DATOS ANTES DEL LANZAMIENTO",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-04T20:41:34.920Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-221",
+   "stageId": "construccion",
+   "title": "Modo oscuro (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-04T20:46:11.450Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-222",
+   "stageId": "construccion",
+   "title": "Facturas en PDF",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 1",
+   "kind": "task",
+   "bornAt": "2026-10-04T20:49:13.062Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-223",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta (segunda vuelta)",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 2",
+   "kind": "task",
+   "bornAt": "2026-10-04T21:01:34.480Z"
+  },
+  {
+   "id": "gh-224",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-04T21:08:29.977Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-225",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-04T21:14:46.506Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-226",
+   "stageId": "construccion",
+   "title": "Modo oscuro",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-04T21:15:06.984Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-227",
+   "stageId": "construccion",
+   "title": "Importar contactos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 6",
+   "kind": "task",
+   "bornAt": "2026-10-05T00:15:06.984Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-228",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 7",
+   "kind": "task",
+   "bornAt": "2026-10-05T00:27:14.560Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-229",
+   "stageId": "construccion",
+   "title": "<b>negrita</b> {{1}} *literal*",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T00:33:04.357Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-230",
+   "stageId": "construccion",
+   "title": "Modo oscuro (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T00:44:19.597Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-231",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-05T00:46:19.546Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-232",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T01:07:16.942Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-233",
+   "stageId": "construccion",
+   "title": "Importar contactos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-05T01:20:17.777Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-234",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-05T01:29:46.631Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-235",
+   "stageId": "construccion",
+   "title": "Caché del listado",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-05T01:35:06.104Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-236",
+   "stageId": "construccion",
+   "title": "Roles y permisos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 15",
+   "kind": "task",
+   "bornAt": "2026-10-05T01:51:35.359Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-237",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-05T02:08:10.584Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-238",
+   "stageId": "construccion",
+   "title": "تحسين واجهة المستخدم للهاتف",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-05T02:26:43.840Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-239",
+   "stageId": "construccion",
+   "title": "Búsqueda con filtros",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 1",
+   "kind": "task",
+   "bornAt": "2026-10-05T02:30:36.194Z"
+  },
+  {
+   "id": "gh-240",
+   "stageId": "construccion",
+   "title": "Búsqueda con filtros",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 2",
+   "kind": "task",
+   "bornAt": "2026-10-05T02:31:01.354Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-241",
+   "stageId": "construccion",
+   "title": "Calendario compartido (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-05T02:43:00.837Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-242",
+   "stageId": "construccion",
+   "title": "Calendario compartido (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-05T02:51:25.524Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-243",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-05T02:54:02.973Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-244",
+   "stageId": "construccion",
+   "title": "Exportar a Excel",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T03:05:06.108Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-245",
+   "stageId": "construccion",
+   "title": "Facturas en PDF",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T03:26:08.157Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-246",
+   "stageId": "construccion",
+   "title": "Exportar a Excel",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-05T03:30:22.952Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-247",
+   "stageId": "construccion",
+   "title": "Оплата картой (кириллица que parece latín)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-05T03:44:07.990Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-248",
+   "stageId": "construccion",
+   "title": "Caché del listado",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-05T03:45:13.682Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-249",
+   "stageId": "construccion",
+   "title": "Reseñas (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-05T03:53:37.281Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-250",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-05T04:04:46.243Z"
+  },
+  {
+   "id": "gh-251",
+   "stageId": "construccion",
+   "title": "Panel del proveedor",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-05T04:26:13.792Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-252",
+   "stageId": "construccion",
+   "title": "Modo oscuro (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-05T04:47:20.076Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-253",
+   "stageId": "construccion",
+   "title": "Panel del proveedor (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 15",
+   "kind": "task",
+   "bornAt": "2026-10-05T05:00:52.311Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-254",
+   "stageId": "construccion",
+   "title": "Calendario compartido",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-05T05:17:22.149Z"
+  },
+  {
+   "id": "gh-255",
+   "stageId": "construccion",
+   "title": "Importar contactos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-05T05:29:32.571Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-256",
+   "stageId": "construccion",
+   "title": "   espacios al inicio y al final   ",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T05:50:48.559Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-257",
+   "stageId": "construccion",
+   "title": "Avisos por correo (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 2",
+   "kind": "task",
+   "bornAt": "2026-10-05T06:02:09.378Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-258",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T06:18:54.519Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-259",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-05T06:27:46.439Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-260",
+   "stageId": "construccion",
+   "title": "Exportar a Excel (segunda vuelta)",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 5",
+   "kind": "task",
+   "bornAt": "2026-10-05T06:28:42.380Z"
+  },
+  {
+   "id": "gh-261",
+   "stageId": "construccion",
+   "title": "Calendario compartido",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 6",
+   "kind": "task",
+   "bornAt": "2026-10-05T06:45:52.287Z"
+  },
+  {
+   "id": "gh-262",
+   "stageId": "construccion",
+   "title": "Calendario compartido",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 7",
+   "kind": "task",
+   "bornAt": "2026-10-05T06:50:40.605Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-263",
+   "stageId": "construccion",
+   "title": "Recuperar contraseña",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-05T07:10:14.580Z"
+  },
+  {
+   "id": "gh-264",
+   "stageId": "construccion",
+   "title": "Facturas en PDF",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-05T07:24:41.756Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-265",
+   "stageId": "construccion",
+   "title": "x",
+   "status": "working",
+   "progress": 0.4,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-05T07:44:26.283Z"
+  },
+  {
+   "id": "gh-266",
+   "stageId": "construccion",
+   "title": "Calendario compartido",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-05T07:49:19.717Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-267",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-05T07:53:06.071Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-268",
+   "stageId": "construccion",
+   "title": "Avisos por correo (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T07:58:30.652Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-269",
+   "stageId": "construccion",
+   "title": "Importar contactos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 14",
+   "kind": "task",
+   "bornAt": "2026-10-05T08:09:36.759Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-270",
+   "stageId": "construccion",
+   "title": "Búsqueda con filtros (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 15",
+   "kind": "task",
+   "bornAt": "2026-10-05T08:16:08.541Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-271",
+   "stageId": "construccion",
+   "title": "Facturas en PDF (segunda vuelta)",
+   "status": "blocked",
+   "progress": 0.4,
+   "team": "Equipo 16",
+   "kind": "task",
+   "bornAt": "2026-10-05T08:22:09.897Z"
+  },
+  {
+   "id": "gh-272",
+   "stageId": "construccion",
+   "title": "Modo oscuro",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 0",
+   "kind": "task",
+   "bornAt": "2026-10-05T08:28:19.517Z"
+  },
+  {
+   "id": "gh-273",
+   "stageId": "construccion",
+   "title": "Avisos por correo",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 1",
+   "kind": "task",
+   "bornAt": "2026-10-05T08:29:53.356Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-274",
+   "stageId": "construccion",
+   "title": "Una tarea con un título larguísimo que ocupa tres renglones cuando se envuelve, porque el agente escribió todo el contexto en el título en vez del cuerpo",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 2",
+   "kind": "task",
+   "bornAt": "2026-10-05T08:41:42.544Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-275",
+   "stageId": "construccion",
+   "title": "Pagos con tarjeta",
+   "status": "blocked",
+   "progress": 0.4,
+   "team": "Equipo 3",
+   "kind": "task",
+   "bornAt": "2026-10-05T11:41:42.544Z"
+  },
+  {
+   "id": "gh-276",
+   "stageId": "construccion",
+   "title": "Reseñas (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 4",
+   "kind": "task",
+   "bornAt": "2026-10-05T11:44:25.016Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-277",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T11:55:32.192Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-278",
+   "stageId": "construccion",
+   "title": "Auditoría de accesos (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 6",
+   "kind": "task",
+   "bornAt": "2026-10-05T12:03:33.438Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-279",
+   "stageId": "construccion",
+   "title": "Reseñas (segunda vuelta)",
+   "status": "done",
+   "progress": 1,
+   "kind": "task",
+   "bornAt": "2026-10-05T12:04:45.622Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-280",
+   "stageId": "construccion",
+   "title": "Exportar a Excel",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 8",
+   "kind": "task",
+   "bornAt": "2026-10-05T12:09:19.541Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-281",
+   "stageId": "construccion",
+   "title": "Reintentos del webhook",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 9",
+   "kind": "task",
+   "bornAt": "2026-10-05T12:14:23.209Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-282",
+   "stageId": "construccion",
+   "title": "Búsqueda con filtros",
+   "status": "pending",
+   "progress": 0.4,
+   "team": "Equipo 10",
+   "kind": "task",
+   "bornAt": "2026-10-05T12:16:15.057Z"
+  },
+  {
+   "id": "gh-283",
+   "stageId": "construccion",
+   "title": "Reconciliaciónautomáticadelosmovimientosbancariosimportadosdesdeelextractomensualdelbancoyaxxx",
+   "status": "blocked",
+   "progress": 0.4,
+   "team": "Equipo 11",
+   "kind": "task",
+   "bornAt": "2026-10-05T12:30:44.988Z"
+  },
+  {
+   "id": "gh-284",
+   "stageId": "construccion",
+   "title": "Importar contactos",
+   "status": "done",
+   "progress": 1,
+   "team": "Equipo 12",
+   "kind": "task",
+   "bornAt": "2026-10-05T12:35:18.648Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-285",
+   "stageId": "construccion",
+   "title": "Calendario compartido",
+   "status": "blocked",
+   "progress": 0.4,
+   "team": "Equipo 13",
+   "kind": "task",
+   "bornAt": "2026-10-05T12:44:20.751Z"
+  }
+ ],
+ "edges": [
+  {
+   "from": "gh-115",
+   "to": "gh-117"
+  },
+  {
+   "from": "gh-117",
+   "to": "gh-119"
+  },
+  {
+   "from": "gh-121",
+   "to": "gh-123"
+  },
+  {
+   "from": "gh-147",
+   "to": "gh-149"
+  },
+  {
+   "from": "gh-155",
+   "to": "gh-157"
+  },
+  {
+   "from": "gh-158",
+   "to": "gh-160"
+  },
+  {
+   "from": "gh-159",
+   "to": "gh-161"
+  },
+  {
+   "from": "gh-164",
+   "to": "gh-166"
+  },
+  {
+   "from": "gh-177",
+   "to": "gh-179"
+  },
+  {
+   "from": "gh-182",
+   "to": "gh-184"
+  },
+  {
+   "from": "gh-190",
+   "to": "gh-192"
+  },
+  {
+   "from": "gh-202",
+   "to": "gh-204"
+  },
+  {
+   "from": "gh-213",
+   "to": "gh-215"
+  },
+  {
+   "from": "gh-216",
+   "to": "gh-218"
+  },
+  {
+   "from": "gh-230",
+   "to": "gh-232"
+  },
+  {
+   "from": "gh-236",
+   "to": "gh-238"
+  },
+  {
+   "from": "gh-260",
+   "to": "gh-262"
+  },
+  {
+   "from": "gh-262",
+   "to": "gh-264"
+  },
+  {
+   "from": "gh-265",
+   "to": "gh-267"
+  },
+  {
+   "from": "gh-272",
+   "to": "gh-274"
+  }
+ ],
+ "origins": [
+  {
+   "from": "gh-101",
+   "to": "gh-102",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-103",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-104",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-105",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-106",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-107",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-108",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-109",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-110",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-111",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-112",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-113",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-114",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-115",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-116",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-117",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-118",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-119",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-120",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-121",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-122",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-123",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-124",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-125",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-126",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-127",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-128",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-129",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-130",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-131",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-102",
+   "to": "gh-132",
+   "why": "Parte del plan"
+  },
+  {
+   "from": "gh-121",
+   "to": "gh-133",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-131",
+   "to": "gh-134",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-129",
+   "to": "gh-135",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-115",
+   "to": "gh-136",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-115",
+   "to": "gh-137",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-120",
+   "to": "gh-138",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-134",
+   "to": "gh-139",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-122",
+   "to": "gh-140",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-121",
+   "to": "gh-141",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-121",
+   "to": "gh-142",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-120",
+   "to": "gh-143",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-119",
+   "to": "gh-144",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-138",
+   "to": "gh-145",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-136",
+   "to": "gh-146",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-128",
+   "to": "gh-147",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-140",
+   "to": "gh-148",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-124",
+   "to": "gh-149",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-126",
+   "to": "gh-150",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-145",
+   "to": "gh-151",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-143",
+   "to": "gh-152",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-143",
+   "to": "gh-153",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-149",
+   "to": "gh-154",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-147",
+   "to": "gh-155",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-133",
+   "to": "gh-157",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-149",
+   "to": "gh-158",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-140",
+   "to": "gh-159",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-145",
+   "to": "gh-160",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-147",
+   "to": "gh-161",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-141",
+   "to": "gh-162",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-159",
+   "to": "gh-163",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-147",
+   "to": "gh-164",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-140",
+   "to": "gh-165",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-153",
+   "to": "gh-166",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-166",
+   "to": "gh-167",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-148",
+   "to": "gh-170",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-167",
+   "to": "gh-171",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-168",
+   "to": "gh-172",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-163",
+   "to": "gh-173",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-167",
+   "to": "gh-174",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-165",
+   "to": "gh-175",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-157",
+   "to": "gh-176",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-172",
+   "to": "gh-177",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-177",
+   "to": "gh-178",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-178",
+   "to": "gh-179",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-163",
+   "to": "gh-180",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-168",
+   "to": "gh-182",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-170",
+   "to": "gh-183",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-159",
+   "to": "gh-184",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-167",
+   "to": "gh-185",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-181",
+   "to": "gh-186",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-174",
+   "to": "gh-187",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-186",
+   "to": "gh-188",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-173",
+   "to": "gh-189",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-166",
+   "to": "gh-190",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-177",
+   "to": "gh-192",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-179",
+   "to": "gh-193",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-175",
+   "to": "gh-194",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-172",
+   "to": "gh-195",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-175",
+   "to": "gh-196",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-176",
+   "to": "gh-197",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-180",
+   "to": "gh-198",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-190",
+   "to": "gh-199",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-199",
+   "to": "gh-200",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-190",
+   "to": "gh-201",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-195",
+   "to": "gh-202",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-186",
+   "to": "gh-203",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-195",
+   "to": "gh-204",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-200",
+   "to": "gh-205",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-201",
+   "to": "gh-206",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-202",
+   "to": "gh-207",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-201",
+   "to": "gh-208",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-184",
+   "to": "gh-209",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-208",
+   "to": "gh-210",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-186",
+   "to": "gh-211",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-191",
+   "to": "gh-212",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-200",
+   "to": "gh-213",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-205",
+   "to": "gh-214",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-207",
+   "to": "gh-215",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-201",
+   "to": "gh-216",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-196",
+   "to": "gh-217",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-202",
+   "to": "gh-218",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-208",
+   "to": "gh-219",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-206",
+   "to": "gh-220",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-197",
+   "to": "gh-221",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-213",
+   "to": "gh-222",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-219",
+   "to": "gh-224",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-222",
+   "to": "gh-225",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-214",
+   "to": "gh-226",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-203",
+   "to": "gh-227",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-214",
+   "to": "gh-229",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-224",
+   "to": "gh-230",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-226",
+   "to": "gh-231",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-208",
+   "to": "gh-232",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-219",
+   "to": "gh-233",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-218",
+   "to": "gh-234",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-211",
+   "to": "gh-235",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-232",
+   "to": "gh-236",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-225",
+   "to": "gh-237",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-233",
+   "to": "gh-238",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-231",
+   "to": "gh-239",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-237",
+   "to": "gh-240",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-230",
+   "to": "gh-241",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-237",
+   "to": "gh-242",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-219",
+   "to": "gh-243",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-230",
+   "to": "gh-244",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-242",
+   "to": "gh-246",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-244",
+   "to": "gh-247",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-226",
+   "to": "gh-248",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-246",
+   "to": "gh-249",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-226",
+   "to": "gh-250",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-230",
+   "to": "gh-251",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-230",
+   "to": "gh-252",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-246",
+   "to": "gh-253",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-235",
+   "to": "gh-254",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-237",
+   "to": "gh-255",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-249",
+   "to": "gh-256",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-244",
+   "to": "gh-257",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-255",
+   "to": "gh-258",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-243",
+   "to": "gh-259",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-239",
+   "to": "gh-260",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-243",
+   "to": "gh-261",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-257",
+   "to": "gh-262",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-260",
+   "to": "gh-263",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-249",
+   "to": "gh-264",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-262",
+   "to": "gh-265",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-252",
+   "to": "gh-266",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-252",
+   "to": "gh-267",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-245",
+   "to": "gh-268",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-258",
+   "to": "gh-269",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-259",
+   "to": "gh-270",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-268",
+   "to": "gh-271",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-264",
+   "to": "gh-272",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-263",
+   "to": "gh-273",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-259",
+   "to": "gh-274",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-262",
+   "to": "gh-275",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-258",
+   "to": "gh-276",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-264",
+   "to": "gh-277",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-266",
+   "to": "gh-278",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-262",
+   "to": "gh-279",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-255",
+   "to": "gh-280",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-261",
+   "to": "gh-281",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-266",
+   "to": "gh-282",
+   "why": "Un paso que siguió"
+  },
+  {
+   "from": "gh-282",
+   "to": "gh-283",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-277",
+   "to": "gh-284",
+   "why": "Apareció mientras se trabajaba en esto"
+  },
+  {
+   "from": "gh-264",
+   "to": "gh-285",
+   "why": "Un paso que siguió"
+  }
+ ],
+ "blockers": [
+  {
+   "id": "hb0",
+   "nodeId": "gh-271",
+   "kind": "decision",
+   "question": "¿Reconciliaciónautomáticadelosmovimientosbancariosimportadosdesdeelextractomensualdelbancoyaxxx?",
+   "options": [
+    "Opción uno con un texto bastante largo para ver cómo envuelve",
+    "Opción dos",
+    "🔥"
+   ]
+  },
+  {
+   "id": "hb1",
+   "nodeId": "gh-275",
+   "kind": "decision",
+   "question": "¿Seguimos con la opción AA?",
+   "options": [
+    "Sí"
+   ]
+  },
+  {
+   "id": "hb2",
+   "nodeId": "gh-283",
+   "kind": "decision",
+   "question": "¿Seguimos con la opción AAA?",
+   "options": [
+    "Opción uno con un texto bastante largo para ver cómo envuelve",
+    "Opción dos",
+    "🔥"
+   ]
+  },
+  {
+   "id": "hb3",
+   "nodeId": "gh-285",
+   "kind": "decision",
+   "question": "¿Seguimos con la opción AAAA?",
+   "options": [
+    "Opción uno con un texto bastante largo para ver cómo envuelve",
+    "Opción dos",
+    "🔥"
+   ]
+  }
+ ],
+ "messages": [],
+ "seq": 0
+}

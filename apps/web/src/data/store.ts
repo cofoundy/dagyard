@@ -61,6 +61,16 @@ export class ProjectStore {
     return b;
   }
 
+  /** «Enlazarlo»: el cambio llega por el tiempo real, como cualquier otro. */
+  link(from: string, to: string, why?: string): Promise<void> {
+    return this.api.linkOrigin(this.projectId, from, to, why);
+  }
+
+  /** «Dejarlo ir»: se cierra como descartada. */
+  drop(nodeId: string, why?: string): Promise<void> {
+    return this.api.dropNode(this.projectId, nodeId, why);
+  }
+
   dispose(): void {
     this.disposed = true;
     this.unsubscribe?.();

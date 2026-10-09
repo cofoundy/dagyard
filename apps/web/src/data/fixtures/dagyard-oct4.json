@@ -1,0 +1,1895 @@
+{
+ "asOf": "2026-10-04T22:18:22.650Z",
+ "project": {
+  "id": "dagyard",
+  "name": "Dagyard"
+ },
+ "stages": [
+  {
+   "id": "descubrimiento",
+   "name": "Descubrimiento"
+  },
+  {
+   "id": "diseno",
+   "name": "Diseño"
+  },
+  {
+   "id": "construccion",
+   "name": "Construcción"
+  },
+  {
+   "id": "pruebas",
+   "name": "Pruebas"
+  },
+  {
+   "id": "lanzamiento",
+   "name": "Lanzamiento"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "intencion",
+   "stageId": "descubrimiento",
+   "title": "La intención de André, por escrito",
+   "status": "done",
+   "progress": 1,
+   "team": "Fábrica",
+   "kind": "task",
+   "bornAt": "2026-10-04T04:17:03.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "spec",
+   "stageId": "descubrimiento",
+   "title": "El plan de la v0",
+   "status": "done",
+   "progress": 1,
+   "team": "Fábrica",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:28:26.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "preview",
+   "stageId": "diseno",
+   "title": "La constelación del preview",
+   "status": "done",
+   "progress": 1,
+   "team": "Diseño",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:28:27.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-2",
+   "stageId": "construccion",
+   "title": "El servidor con tiempo real",
+   "status": "done",
+   "progress": 1,
+   "team": "Núcleo",
+   "link": "https://github.com/cofoundy/dagyard/issues/2",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:34:59.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-3",
+   "stageId": "construccion",
+   "title": "El cielo 3D conectado al servidor",
+   "status": "done",
+   "progress": 1,
+   "team": "Cielo",
+   "link": "https://github.com/cofoundy/dagyard/issues/3",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:35:01.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-4",
+   "stageId": "construccion",
+   "title": "La línea de comandos para agentes",
+   "status": "done",
+   "progress": 1,
+   "team": "Agentes",
+   "link": "https://github.com/cofoundy/dagyard/issues/4",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:35:02.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-12",
+   "stageId": "construccion",
+   "title": "Sesiones y accesos más seguros",
+   "status": "done",
+   "progress": 1,
+   "team": "Seguridad",
+   "link": "https://github.com/cofoundy/dagyard/issues/12",
+   "kind": "task",
+   "bornAt": "2026-10-04T06:09:26.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-18",
+   "stageId": "construccion",
+   "title": "Los agentes no pisan tus respuestas",
+   "status": "done",
+   "progress": 1,
+   "team": "Contrato",
+   "link": "https://github.com/cofoundy/dagyard/issues/18",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:06:33.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-20",
+   "stageId": "construccion",
+   "title": "Proyectos importados que se leen",
+   "status": "done",
+   "progress": 1,
+   "team": "Legible",
+   "link": "https://github.com/cofoundy/dagyard/issues/20",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:09:02.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-30",
+   "stageId": "construccion",
+   "title": "Proyectos grandes en calma, con títulos de producto",
+   "status": "done",
+   "progress": 1,
+   "team": "Móvil",
+   "link": "https://github.com/cofoundy/dagyard/issues/30",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:50:37.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-6",
+   "stageId": "construccion",
+   "title": "Tus respuestas llegan a la sesión del agente",
+   "status": "done",
+   "progress": 1,
+   "team": "Canal",
+   "link": "https://github.com/cofoundy/dagyard/issues/6",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:35:06.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-45",
+   "stageId": "construccion",
+   "title": "Dagyard se construye con su propio grafo",
+   "status": "done",
+   "progress": 1,
+   "team": "Dogfood",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/50",
+   "link": "https://github.com/cofoundy/dagyard/issues/45",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:41:34.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-46",
+   "stageId": "construccion",
+   "title": "Dagyard dentro de Claude Code: banda y menú",
+   "status": "done",
+   "progress": 1,
+   "team": "Terminal",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/49",
+   "link": "https://github.com/cofoundy/dagyard/issues/46",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:41:36.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-47",
+   "stageId": "construccion",
+   "title": "Avisos cuando algo te espera",
+   "status": "done",
+   "progress": 1,
+   "team": "Avisos",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/52",
+   "link": "https://github.com/cofoundy/dagyard/issues/47",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:41:37.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-48",
+   "stageId": "construccion",
+   "title": "Tiempo real más rápido",
+   "status": "done",
+   "progress": 1,
+   "team": "Velocidad",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/56",
+   "link": "https://github.com/cofoundy/dagyard/issues/48",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:41:39.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-5",
+   "stageId": "pruebas",
+   "title": "Prueba de punta a punta de la v0",
+   "status": "done",
+   "progress": 1,
+   "team": "Entrega",
+   "reportUrl": "https://app.basalt.cofoundy.ai/cofoundy/dagyard/handoff-2026-10-04",
+   "link": "https://github.com/cofoundy/dagyard/issues/5",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:35:04.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "prueba-dogfood",
+   "stageId": "pruebas",
+   "title": "Prueba del dogfooding con sitios reales",
+   "status": "done",
+   "progress": 1,
+   "team": "Fábrica",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/44",
+   "kind": "task",
+   "bornAt": "2026-10-04T15:42:20.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "reporte-v0",
+   "stageId": "lanzamiento",
+   "title": "Reporte de la v0 para André",
+   "status": "done",
+   "progress": 1,
+   "team": "Fábrica",
+   "reportUrl": "https://app.basalt.cofoundy.ai/cofoundy/dagyard/reporte-po-v0",
+   "kind": "task",
+   "bornAt": "2026-10-04T08:58:00.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-7",
+   "stageId": "lanzamiento",
+   "title": "Dominio propio",
+   "status": "done",
+   "progress": 1,
+   "team": "Fábrica",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/7",
+   "link": "https://github.com/cofoundy/dagyard/issues/7",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:35:08.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-25",
+   "stageId": "lanzamiento",
+   "title": "Abrir el código",
+   "status": "working",
+   "progress": 0.9,
+   "team": "Fábrica",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/70",
+   "link": "https://github.com/cofoundy/dagyard/issues/25",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:12:19.000Z"
+  },
+  {
+   "id": "v1",
+   "stageId": "lanzamiento",
+   "title": "Dagyard v1 para el equipo",
+   "status": "pending",
+   "progress": 0,
+   "kind": "task",
+   "bornAt": "2026-10-04T05:28:28.000Z"
+  },
+  {
+   "id": "gh-9",
+   "stageId": "construccion",
+   "title": "Elegir dónde guardar los datos a futuro",
+   "status": "pending",
+   "progress": 0,
+   "link": "https://github.com/cofoundy/dagyard/issues/9",
+   "kind": "task",
+   "bornAt": "2026-10-04T05:45:57.000Z"
+  },
+  {
+   "id": "gh-38",
+   "stageId": "construccion",
+   "title": "El resumen del import cuenta bien lo que te espera",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/38",
+   "kind": "task",
+   "bornAt": "2026-10-04T08:20:29.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-41",
+   "stageId": "construccion",
+   "title": "Celulares angostos con todos sus títulos",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/41",
+   "kind": "task",
+   "bornAt": "2026-10-04T08:45:59.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-54",
+   "stageId": "construccion",
+   "title": "Nada se pierde mientras se publica una versión",
+   "status": "done",
+   "progress": 1,
+   "team": "Deploys",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/60",
+   "link": "https://github.com/cofoundy/dagyard/issues/54",
+   "kind": "task",
+   "bornAt": "2026-10-04T16:21:36.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-55",
+   "stageId": "construccion",
+   "title": "El cielo se pone al día al instante tras una versión nueva",
+   "status": "done",
+   "progress": 1,
+   "team": "Deploys",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/60",
+   "link": "https://github.com/cofoundy/dagyard/issues/55",
+   "kind": "task",
+   "bornAt": "2026-10-04T16:21:37.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-58",
+   "stageId": "construccion",
+   "title": "Celulares chicos con los 20 títulos de la demo",
+   "status": "done",
+   "progress": 1,
+   "team": "Pulido",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/63",
+   "link": "https://github.com/cofoundy/dagyard/issues/58",
+   "kind": "task",
+   "bornAt": "2026-10-04T16:33:05.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-59",
+   "stageId": "construccion",
+   "title": "Cada informe dice a dónde te lleva",
+   "status": "done",
+   "progress": 1,
+   "team": "Pulido",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/63",
+   "link": "https://github.com/cofoundy/dagyard/issues/59",
+   "kind": "task",
+   "bornAt": "2026-10-04T16:35:50.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-61",
+   "stageId": "construccion",
+   "title": "Un proyecto recreado no pierde el tiempo real",
+   "status": "done",
+   "progress": 1,
+   "team": "Robusto",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/65",
+   "link": "https://github.com/cofoundy/dagyard/issues/61",
+   "kind": "task",
+   "bornAt": "2026-10-04T16:40:49.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-62",
+   "stageId": "construccion",
+   "title": "La terminal no falla mientras se publica una versión",
+   "status": "done",
+   "progress": 1,
+   "team": "Robusto",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/65",
+   "link": "https://github.com/cofoundy/dagyard/issues/62",
+   "kind": "task",
+   "bornAt": "2026-10-04T16:40:55.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-64",
+   "stageId": "construccion",
+   "title": "Un link te lleva directo a un proyecto o a una tarea",
+   "status": "done",
+   "progress": 1,
+   "team": "Enlace",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/68",
+   "link": "https://github.com/cofoundy/dagyard/issues/64",
+   "kind": "task",
+   "bornAt": "2026-10-04T17:15:15.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-67",
+   "stageId": "construccion",
+   "title": "Un proyecto recreado nunca mezcla su historia con la vieja",
+   "status": "done",
+   "progress": 1,
+   "team": "WebSocket",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/72",
+   "link": "https://github.com/cofoundy/dagyard/issues/67",
+   "kind": "task",
+   "bornAt": "2026-10-04T17:22:35.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-69",
+   "stageId": "construccion",
+   "title": "Cualquier agente se conecta al tiempo real",
+   "status": "done",
+   "progress": 1,
+   "team": "WebSocket",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/72",
+   "link": "https://github.com/cofoundy/dagyard/issues/69",
+   "kind": "task",
+   "bornAt": "2026-10-04T17:33:21.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-13",
+   "stageId": "construccion",
+   "title": "Solo tú destrabas lo que te espera",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/13",
+   "kind": "task",
+   "bornAt": "2026-10-04T06:09:28.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-14",
+   "stageId": "construccion",
+   "title": "El tiempo real solo acepta a la propia web",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/14",
+   "kind": "task",
+   "bornAt": "2026-10-04T06:09:29.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-19",
+   "stageId": "construccion",
+   "title": "Dos importaciones a la vez no se pisan",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/19",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:06:35.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-21",
+   "stageId": "construccion",
+   "title": "Etapas con nombre y títulos sin jerga al importar",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/21",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:09:04.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-27",
+   "stageId": "construccion",
+   "title": "En celular un proyecto denso muestra pocos títulos",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/27",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:31:50.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-29",
+   "stageId": "construccion",
+   "title": "Al entrar se abre la demo, no el último proyecto importado",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/29",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:50:35.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-32",
+   "stageId": "construccion",
+   "title": "Los mensajes del equipo no se pierden al actualizar",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/32",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:54:53.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-33",
+   "stageId": "construccion",
+   "title": "Nada queda «listo» mientras te espera",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/33",
+   "kind": "task",
+   "bornAt": "2026-10-04T07:54:55.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-35",
+   "stageId": "construccion",
+   "title": "Importar no falla cuando algo pide a una persona",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/35",
+   "kind": "task",
+   "bornAt": "2026-10-04T08:03:29.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-71",
+   "stageId": "construccion",
+   "title": "Borrar y recrear un proyecto no repite cambios viejos",
+   "status": "done",
+   "progress": 1,
+   "link": "https://github.com/cofoundy/dagyard/issues/71",
+   "kind": "task",
+   "bornAt": "2026-10-04T17:43:28.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-73",
+   "stageId": "construccion",
+   "title": "Dagyard en inglés, y en español si tu sistema lo está",
+   "status": "done",
+   "progress": 1,
+   "team": "Idiomas",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/82",
+   "link": "https://github.com/cofoundy/dagyard/issues/73",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:03:58.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-74",
+   "stageId": "construccion",
+   "title": "Una demo viva, en inglés y en español",
+   "status": "done",
+   "progress": 1,
+   "team": "Demo",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/79",
+   "link": "https://github.com/cofoundy/dagyard/issues/74",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:04:00.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-75",
+   "stageId": "diseno",
+   "title": "Ver la fábrica en el tiempo: quién arrancó, cuándo y qué apareció",
+   "status": "working",
+   "progress": 0.5,
+   "team": "Tiempo",
+   "link": "https://github.com/cofoundy/dagyard/issues/75",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:07:13.000Z"
+  },
+  {
+   "id": "gh-77",
+   "stageId": "construccion",
+   "title": "Proyectos nuevos con etapas en el idioma de quien los crea",
+   "status": "done",
+   "progress": 1,
+   "team": "Idiomas",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/87",
+   "link": "https://github.com/cofoundy/dagyard/issues/77",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:14:39.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-80",
+   "stageId": "construccion",
+   "title": "Un README que se ve, no que se lee",
+   "status": "done",
+   "progress": 1,
+   "team": "Readme",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/86",
+   "link": "https://github.com/cofoundy/dagyard/issues/80",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:27:48.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "gh-83",
+   "stageId": "construccion",
+   "title": "Los últimos textos en español, también en inglés",
+   "status": "done",
+   "progress": 1,
+   "team": "Idiomas",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/85",
+   "link": "https://github.com/cofoundy/dagyard/issues/83",
+   "kind": "task",
+   "bornAt": "2026-10-04T19:43:24.000Z",
+   "closedAs": "done"
+  },
+  {
+   "id": "goal-fabrica",
+   "stageId": "descubrimiento",
+   "title": "El equipo usa Dagyard para ver su fábrica",
+   "status": "working",
+   "progress": 0,
+   "kind": "goal",
+   "bornAt": "2026-10-04T05:24:00.000Z"
+  },
+  {
+   "id": "req-v0",
+   "stageId": "descubrimiento",
+   "title": "La v0 terminada al despertar",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T05:24:00.000Z",
+   "quote": "necesito el proyecto terminado al despertar",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-m7",
+   "stageId": "descubrimiento",
+   "title": "Que Dagyard se construya con su propio grafo",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T15:38:00.000Z",
+   "quote": "ponte a construir todo lo q falte y quiero el dogfooding de dagyard funcionando y q sirva el mismo grafo para su construccion y tu figure out all the neccesary context scaffolding",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-m7-menu",
+   "stageId": "descubrimiento",
+   "title": "Un menú en Claude Code para responder todo",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T15:38:00.000Z",
+   "quote": "esta genial aunque tal vez seria bueno q sea un menu donde podamos responder a todo?",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-ver-grafo",
+   "stageId": "descubrimiento",
+   "title": "Poder abrir el grafo con un link",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T17:14:00.000Z",
+   "quote": "quiero ver el grafo, cómo lo veo? creo q hay ese gap",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-m8",
+   "stageId": "descubrimiento",
+   "title": "Inglés primero y una demo más vistosa",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T19:02:00.000Z",
+   "quote": "oye q sea main english con system detect i18n spanish, q la demo tmb sea en english y q sea mas vistoza",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-m9",
+   "stageId": "descubrimiento",
+   "title": "Que Dagyard reemplace el informe de la fábrica, en el tiempo",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T19:05:00.000Z",
+   "quote": "creo q deberíamos de hacer q esta plataforma reemplace el reporte de factory para q tenga seecuencia temporal, q podamos ver cuando abrieron cada agente y q los nuevos se vayan desplegando, also no se xq siempre lo pones como matriz",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-readme",
+   "stageId": "descubrimiento",
+   "title": "Un README que se vea",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T19:27:00.000Z",
+   "quote": "el readme todavia se ve medio feito",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-m10",
+   "stageId": "descubrimiento",
+   "title": "Una sola vista: el grafo que crece solo",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T22:25:00.000Z",
+   "quote": "Podría ser más como un grafo de dependencias que se ve autoactualizando todo el tiempo.",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-m11",
+   "stageId": "descubrimiento",
+   "title": "Un DAG donde cada tarea tiene un propósito",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T23:00:00.000Z",
+   "quote": "no tenia q ser arbol, tenia q ser DAG. cada task tiene q tener un propósito o poder ser continuada no?",
+   "quoteBy": "André"
+  },
+  {
+   "id": "req-m11-go",
+   "stageId": "descubrimiento",
+   "title": "Modelo primero, después plugin, después factory",
+   "status": "pending",
+   "progress": 0,
+   "kind": "request",
+   "bornAt": "2026-10-04T23:17:00.000Z",
+   "quote": "Sí go",
+   "quoteBy": "André"
+  }
+ ],
+ "edges": [
+  {
+   "from": "intencion",
+   "to": "spec"
+  },
+  {
+   "from": "spec",
+   "to": "preview"
+  },
+  {
+   "from": "spec",
+   "to": "gh-2"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-3"
+  },
+  {
+   "from": "preview",
+   "to": "gh-3"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-4"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-12"
+  },
+  {
+   "from": "gh-4",
+   "to": "gh-18"
+  },
+  {
+   "from": "gh-12",
+   "to": "gh-18"
+  },
+  {
+   "from": "gh-3",
+   "to": "gh-20"
+  },
+  {
+   "from": "gh-4",
+   "to": "gh-20"
+  },
+  {
+   "from": "gh-20",
+   "to": "gh-30"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-6"
+  },
+  {
+   "from": "gh-4",
+   "to": "gh-45"
+  },
+  {
+   "from": "gh-18",
+   "to": "gh-45"
+  },
+  {
+   "from": "gh-4",
+   "to": "gh-46"
+  },
+  {
+   "from": "gh-3",
+   "to": "gh-47"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-48"
+  },
+  {
+   "from": "gh-3",
+   "to": "gh-5"
+  },
+  {
+   "from": "gh-4",
+   "to": "gh-5"
+  },
+  {
+   "from": "gh-45",
+   "to": "prueba-dogfood"
+  },
+  {
+   "from": "gh-46",
+   "to": "prueba-dogfood"
+  },
+  {
+   "from": "gh-47",
+   "to": "prueba-dogfood"
+  },
+  {
+   "from": "gh-5",
+   "to": "reporte-v0"
+  },
+  {
+   "from": "reporte-v0",
+   "to": "gh-7"
+  },
+  {
+   "from": "reporte-v0",
+   "to": "gh-25"
+  },
+  {
+   "from": "prueba-dogfood",
+   "to": "v1"
+  },
+  {
+   "from": "gh-7",
+   "to": "v1"
+  },
+  {
+   "from": "gh-25",
+   "to": "v1"
+  },
+  {
+   "from": "gh-48",
+   "to": "v1"
+  }
+ ],
+ "origins": [
+  {
+   "from": "goal-fabrica",
+   "to": "req-v0",
+   "why": "el encargo de la corrida nocturna (épica #1)"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "req-m7",
+   "why": "Mensaje 7, tras ver la v0 (épica #44)"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "req-m7-menu",
+   "why": "Mensaje 7, tras probar el mod de Claude Code"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "req-ver-grafo",
+   "why": "André no encontraba cómo abrir el proyecto"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "req-m8",
+   "why": "Mensaje 8"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "req-m9",
+   "why": "Mensaje 9, con una captura del proyecto «Dagyard»"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "req-readme",
+   "why": "André, mirando el README antes de abrir el código"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "req-m10",
+   "why": "Mensaje 10, tras ver los prototipos A/B/C"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "req-m11",
+   "why": "Mensaje 11"
+  },
+  {
+   "from": "req-m11",
+   "to": "req-m11-go",
+   "why": "aprobó el orden: modelo → plugin → factory usa Dagyard (D12)"
+  },
+  {
+   "from": "req-v0",
+   "to": "intencion",
+   "why": "la intención se escribió para la corrida"
+  },
+  {
+   "from": "intencion",
+   "to": "spec",
+   "why": "el plan de la v0 sale de la intención"
+  },
+  {
+   "from": "intencion",
+   "to": "preview",
+   "why": "la dirección visual (D11)"
+  },
+  {
+   "from": "spec",
+   "to": "gh-2",
+   "why": "el servidor del plan de la v0"
+  },
+  {
+   "from": "spec",
+   "to": "gh-3",
+   "why": "el cielo 3D del plan de la v0"
+  },
+  {
+   "from": "spec",
+   "to": "gh-4",
+   "why": "la interfaz para agentes del plan de la v0"
+  },
+  {
+   "from": "spec",
+   "to": "gh-5",
+   "why": "la entrega de la v0"
+  },
+  {
+   "from": "spec",
+   "to": "gh-6",
+   "why": "el stretch del plan de la v0"
+  },
+  {
+   "from": "spec",
+   "to": "gh-7",
+   "why": "el dominio quedó para André"
+  },
+  {
+   "from": "spec",
+   "to": "gh-25",
+   "why": "el plan deja el código privado hasta que André lo apruebe"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-9",
+   "why": "el token de Cloudflare no tenía permiso de D1"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-12",
+   "why": "salió de la revisión del servidor (PR #11)"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-13",
+   "why": "salió de la revisión del servidor (PR #11)"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-14",
+   "why": "salió de la revisión del servidor (PR #11)"
+  },
+  {
+   "from": "gh-13",
+   "to": "gh-18",
+   "why": "salió de la revisión de #13"
+  },
+  {
+   "from": "gh-13",
+   "to": "gh-19",
+   "why": "salió de la revisión de #13"
+  },
+  {
+   "from": "gh-5",
+   "to": "gh-20",
+   "why": "lo encontró la entrega al abrir el proyecto importado"
+  },
+  {
+   "from": "gh-5",
+   "to": "gh-21",
+   "why": "lo encontró la entrega al abrir el proyecto importado"
+  },
+  {
+   "from": "gh-20",
+   "to": "gh-27",
+   "why": "apareció al cerrar #20"
+  },
+  {
+   "from": "gh-27",
+   "to": "gh-41",
+   "why": "apareció al cerrar #27"
+  },
+  {
+   "from": "gh-41",
+   "to": "gh-58",
+   "why": "apareció al cerrar #41"
+  },
+  {
+   "from": "req-v0",
+   "to": "gh-29",
+   "why": "lo pidió el supervisor de la corrida (02:50)"
+  },
+  {
+   "from": "req-v0",
+   "to": "gh-30",
+   "why": "lo pidió el supervisor de la corrida (02:50)"
+  },
+  {
+   "from": "gh-18",
+   "to": "gh-32",
+   "why": "salió de la revisión de #18 y #19"
+  },
+  {
+   "from": "gh-18",
+   "to": "gh-33",
+   "why": "salió de la revisión de #18 y #19"
+  },
+  {
+   "from": "gh-32",
+   "to": "gh-35",
+   "why": "salió de la revisión de #32 y #33"
+  },
+  {
+   "from": "gh-35",
+   "to": "gh-38",
+   "why": "el arreglo de #35 dejó el contador en 0"
+  },
+  {
+   "from": "gh-5",
+   "to": "reporte-v0",
+   "why": "el cierre de la entrega"
+  },
+  {
+   "from": "goal-fabrica",
+   "to": "v1",
+   "why": "el siguiente hito para el equipo"
+  },
+  {
+   "from": "req-m7",
+   "to": "prueba-dogfood",
+   "why": "probar el dogfooding con sitios reales"
+  },
+  {
+   "from": "req-m7",
+   "to": "gh-45",
+   "why": "el mismo grafo para construir Dagyard"
+  },
+  {
+   "from": "req-m7-menu",
+   "to": "gh-46",
+   "why": "el menú para responder desde la terminal"
+  },
+  {
+   "from": "intencion",
+   "to": "gh-47",
+   "why": "la intención pide avisos cuando tu entrada es necesaria (§3.4)"
+  },
+  {
+   "from": "gh-2",
+   "to": "gh-48",
+   "why": "el tiempo real subió de 0,6 s a 1,8 s"
+  },
+  {
+   "from": "gh-48",
+   "to": "gh-54",
+   "why": "lo encontró la medición de #48"
+  },
+  {
+   "from": "gh-48",
+   "to": "gh-55",
+   "why": "lo encontró la medición de #48"
+  },
+  {
+   "from": "gh-54",
+   "to": "gh-61",
+   "why": "salió de la revisión de #54 (PR #60)"
+  },
+  {
+   "from": "gh-54",
+   "to": "gh-62",
+   "why": "salió de #54 (PR #60)"
+  },
+  {
+   "from": "gh-61",
+   "to": "gh-67",
+   "why": "salió de la revisión de #61"
+  },
+  {
+   "from": "gh-67",
+   "to": "gh-71",
+   "why": "salió de #67"
+  },
+  {
+   "from": "gh-45",
+   "to": "gh-59",
+   "why": "el protocolo cuelga el PR como informe"
+  },
+  {
+   "from": "req-ver-grafo",
+   "to": "gh-64",
+   "why": "un link directo al proyecto o a la tarea"
+  },
+  {
+   "from": "gh-64",
+   "to": "gh-69",
+   "why": "lo encontró el sitio enlace"
+  },
+  {
+   "from": "req-m8",
+   "to": "gh-73",
+   "why": "inglés por defecto"
+  },
+  {
+   "from": "req-m8",
+   "to": "gh-74",
+   "why": "la demo en inglés y más vistosa"
+  },
+  {
+   "from": "gh-73",
+   "to": "gh-77",
+   "why": "lo que el CLI escribe seguía en español"
+  },
+  {
+   "from": "gh-73",
+   "to": "gh-83",
+   "why": "textos que quedaron solo en español"
+  },
+  {
+   "from": "req-readme",
+   "to": "gh-80",
+   "why": "un README visual"
+  },
+  {
+   "from": "req-m9",
+   "to": "gh-75",
+   "why": "la fábrica en el tiempo"
+  },
+  {
+   "from": "req-m10",
+   "to": "gh-75",
+   "why": "una sola vista que crece"
+  }
+ ],
+ "blockers": [
+  {
+   "id": "b_s3vcdhjbtfrv6xha",
+   "nodeId": "gh-7",
+   "kind": "decision",
+   "question": "¿Compramos dagyard.run ahora, sin renovación automática?",
+   "options": [
+    "Todavía no: seguimos en la dirección provisional",
+    "Sí, cómpralo"
+   ],
+   "resolution": "«Todavía no: seguimos en la dirección provisional» · Desde Claude Code",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T17:18:29.079Z"
+  },
+  {
+   "id": "b_34ywpn0e78o8axyd",
+   "nodeId": "gh-25",
+   "kind": "decision",
+   "question": "¿Cuándo abrimos el código de Dagyard?",
+   "options": [
+    "En una semana de uso",
+    "Ya"
+   ],
+   "resolution": "«Ya» · Desde Claude Code",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T17:21:13.841Z"
+  },
+  {
+   "id": "b_eui1sj4ctgkg7dm",
+   "nodeId": "gh-47",
+   "kind": "decision",
+   "question": "Cuando algo te espera y no tienes Dagyard abierto, ¿por dónde quieres el aviso?",
+   "options": [
+    "Solo navegador y Claude Code por ahora (recomendado)",
+    "WhatsApp",
+    "Buzz",
+    "Correo"
+   ],
+   "resolution": "«Solo navegador y Claude Code por ahora (recomendado)» · Desde Claude Code",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T17:28:01.629Z"
+  },
+  {
+   "id": "b_a6wdlkj26jaiwws5",
+   "nodeId": "gh-46",
+   "kind": "review",
+   "question": "Prueba del aviso del mod (QA automática, se cierra sola)",
+   "options": [
+    "Aprobar",
+    "Pedir cambios"
+   ],
+   "resolution": "«Aprobar» · QA automática del mod (#46): el aviso llegó en 8,9 s",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T15:49:36.877Z"
+  },
+  {
+   "id": "b_yyyct1nppce33zy",
+   "nodeId": "gh-46",
+   "kind": "review",
+   "question": "Prueba del aviso del mod (QA automática, se cierra sola)",
+   "options": [
+    "Aprobar",
+    "Pedir cambios"
+   ],
+   "resolution": "«Aprobar» · QA automática del mod (#46)",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T15:58:44.635Z"
+  },
+  {
+   "id": "b_pyf9saphemsy5ety",
+   "nodeId": "gh-25",
+   "kind": "decision",
+   "question": "¿Con qué licencia abrimos Dagyard?",
+   "options": [
+    "MIT: la más simple, cualquiera la usa (recomendada)",
+    "AGPL-3.0: si alguien lo ofrece como servicio, tiene que compartir sus cambios",
+    "Apache-2.0: como MIT, con protección de patentes"
+   ],
+   "resolution": "«MIT: la más simple, cualquiera la usa (recomendada)» · Desde Claude Code",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T17:43:57.756Z"
+  },
+  {
+   "id": "b_nk3h5aahcxrglx85",
+   "nodeId": "gh-25",
+   "kind": "decision",
+   "question": "La revisión encontró datos internos en el historial del repo (un prospecto en capturas, el gateway, el roadmap de Basalt). ¿Cómo publicamos?",
+   "options": [
+    "En un repo nuevo con la historia limpia, desde el código saneado (recomendado)",
+    "Este repo tal cual, con su historial",
+    "Esperar: no publicar todavía"
+   ],
+   "resolution": "«En un repo nuevo con la historia limpia, desde el código saneado (recomendado)» · André en el chat (13:10): conservar los commits pasados en un repo nuevo con la historia filtrada",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T18:10:46.431Z"
+  },
+  {
+   "id": "b_oinxfjinig6gpbsg",
+   "nodeId": "gh-25",
+   "kind": "decision",
+   "question": "dagyard-oss quedó limpio (154 commits, cero secretos y cero datos internos). ¿Lo hacemos público?",
+   "options": [
+    "Sí, con mi correo de Cofoundy en vez del de la uni en los commits, y desde ahora se trabaja en el público (recomendado)",
+    "Sí, tal cual está",
+    "Todavía no"
+   ],
+   "resolution": "«Sí, con mi correo de Cofoundy en vez del de la uni en los commits, y desde ahora se trabaja en el público (recomendado)» · Desde Claude Code",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T19:02:23.305Z"
+  },
+  {
+   "id": "b_77sku5qvufw4jlpv",
+   "nodeId": "gh-75",
+   "kind": "decision",
+   "question": "¿Qué forma toma la vista en el tiempo? Las 3 usan los datos reales de hoy y se reproducen con play; capturas en los mensajes de esta tarea. Si en 30 min no eliges, sigo con A.",
+   "options": [
+    "A · Carriles por equipo (recomendada) https://claude.ai/artifact/UHs369dDncUXufyo6cqZYm",
+    "B · Espiral del día https://claude.ai/artifact/MKgjLJafJ6Lqaj1FZqV4Np",
+    "C · Cielo vivo por etapas https://claude.ai/artifact/NX5HM33aLmcMSWNoh3EUJ6"
+   ],
+   "resolution": "«A · Carriles por equipo (recomendada) https://claude.ai/artifact/UHs369dDncUXufyo6cqZYm» · Desde Claude Code",
+   "resolvedBy": "you",
+   "resolvedAt": "2026-10-04T22:18:22.650Z"
+  }
+ ],
+ "messages": [
+  {
+   "id": "m_8uj8nlna0crerckw",
+   "nodeId": "reporte-v0",
+   "from": "Fábrica",
+   "text": "La v0 quedó lista en la noche: demo, tiempo real ≤3 s, Basalt importado. El reporte está en Basalt.",
+   "reportUrl": "https://app.basalt.cofoundy.ai/cofoundy/dagyard/reporte-po-v0",
+   "at": "2026-10-04T15:42:20.275Z"
+  },
+  {
+   "id": "m_qdoafxmw9kzwpikb",
+   "nodeId": "gh-45",
+   "from": "Fábrica",
+   "text": "Este proyecto es el dogfood: los sitios mueven estos nodos con el CLI mientras construyen.",
+   "at": "2026-10-04T15:42:20.275Z"
+  },
+  {
+   "id": "m_j25kssm5rdvmsyd",
+   "nodeId": "gh-45",
+   "from": "Equipo de Dogfood",
+   "text": "Arranqué. Dos equipos en paralelo: uno le da a cada tarea su enlace técnico y otro enseña a la línea de comandos a leer el proyecto del repo y a sincronizarse con la cola de issues.",
+   "at": "2026-10-04T15:47:13.925Z"
+  },
+  {
+   "id": "m_oa0uzqfzqsxk4oyf",
+   "nodeId": "gh-46",
+   "from": "Equipo de Terminal",
+   "text": "Gracias. Sigo desde donde me quedé.",
+   "at": "2026-10-04T15:49:36.877Z"
+  },
+  {
+   "id": "m_v1wevbhcaaktt7xq",
+   "nodeId": "gh-45",
+   "from": "Equipo de Dogfood",
+   "text": "Ya está todo junto en una rama: cada tarea puede llevar su detalle técnico y la línea de comandos sabe a qué proyecto pertenece el repo. Ajusto la sincronización con la cola para que no repita preguntas que ya te hicimos.",
+   "at": "2026-10-04T15:58:40.365Z"
+  },
+  {
+   "id": "m_dtfuztzx8tdtqyhx",
+   "nodeId": "gh-46",
+   "from": "Equipo de Terminal",
+   "text": "Gracias. Sigo desde donde me quedé.",
+   "at": "2026-10-04T15:58:44.635Z"
+  },
+  {
+   "id": "m_80xurrjurvid1ul",
+   "nodeId": "gh-46",
+   "from": "Equipo de Terminal",
+   "text": "Listo para revisar: la banda y el menú de Dagyard en Claude Code ahora viven en el repo, miran el proyecto del repo y avisan en segundos cuando algo nuevo te espera. Se instala con una línea.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/49",
+   "at": "2026-10-04T15:59:42.770Z"
+  },
+  {
+   "id": "m_du8al5ufwza20zfr",
+   "nodeId": "gh-45",
+   "from": "Equipo de Dogfood",
+   "text": "Abrí el cambio para revisión: el detalle técnico en cada tarea, el proyecto leído del repo y la sincronización con la cola. Una revisión independiente lo está atacando antes de entrar.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/50",
+   "at": "2026-10-04T16:01:53.652Z"
+  },
+  {
+   "id": "m_axl5s4cxf54u2ll",
+   "nodeId": "gh-46",
+   "from": "Equipo de Terminal",
+   "text": "En la web: desplegado desde main (b0afff2). La entrada con clave funciona y el tiempo real responde en ~0,6 s. El mod se instala con una línea y avisa en ~9 s cuando algo nuevo te espera.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/49",
+   "at": "2026-10-04T16:02:32.196Z"
+  },
+  {
+   "id": "m_g7opvokntqr6v3oz",
+   "nodeId": "gh-48",
+   "from": "Equipo de Velocidad",
+   "text": "20 corridas con la máquina cargada (load ~10): p50 604 ms, máx 828 ms. El navegador pone 0–3 ms; el resto es CLI + red + servidor. Siguiente: probar si el 1857 ms fue el arranque en frío tras un deploy.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/48",
+   "at": "2026-10-04T16:07:55.439Z"
+  },
+  {
+   "id": "m_5dhtcywhj3sij9zl",
+   "nodeId": "gh-47",
+   "from": "Equipo de Avisos",
+   "text": "Listo para revisar: la pestaña cuenta lo que te espera, el favicon se pone ámbar y, si das permiso, el navegador te avisa con un clic que abre la ficha.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/52",
+   "at": "2026-10-04T16:13:15.408Z"
+  },
+  {
+   "id": "m_2sco4h1bsmho9sm",
+   "nodeId": "gh-45",
+   "from": "Equipo de Dogfood",
+   "text": "Ya está en vivo: cada tarea del plan lleva su detalle técnico y el plan de Dagyard se pone al día solo con la cola de trabajo, sin repetirte preguntas. El protocolo para los equipos quedó publicado.",
+   "reportUrl": "https://app.basalt.cofoundy.ai/cofoundy/dagyard/dogfooding",
+   "at": "2026-10-04T16:15:25.079Z"
+  },
+  {
+   "id": "m_l4b5advnxqsyzji",
+   "nodeId": "gh-47",
+   "from": "Equipo de Avisos",
+   "text": "Ya está en la web: la pestaña y el favicon te avisan, y el navegador también si le das permiso. Tiempo real en 0,6 s. Falta lo de celulares angostos.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/52",
+   "at": "2026-10-04T16:16:08.327Z"
+  },
+  {
+   "id": "m_jl1zro8ezcgekew4",
+   "nodeId": "gh-48",
+   "from": "Equipo de Velocidad",
+   "text": "Causa: el 1857 ms fue una medición cruzada con un deploy (corta el socket de la página). Sin deploy: p50 593 ms, máx 664. No hizo falta arreglo. Hallazgos en #54 y #55.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/48#issuecomment-5982074373",
+   "at": "2026-10-04T16:26:40.477Z"
+  },
+  {
+   "id": "m_ex5k6ucr1e42yupt",
+   "nodeId": "gh-54",
+   "from": "Equipo de Deploys",
+   "text": "Empezamos: que un cambio publicado mientras la fábrica escribe no deje mensajes a medias ni duplicados.",
+   "at": "2026-10-04T16:30:25.993Z"
+  },
+  {
+   "id": "m_mkt98mfadvwju6c",
+   "nodeId": "gh-55",
+   "from": "Equipo de Deploys",
+   "text": "Empezamos: que la página se ponga al día al instante después de publicar una versión nueva.",
+   "at": "2026-10-04T16:30:27.573Z"
+  },
+  {
+   "id": "m_lzfonjfgyl2sko",
+   "nodeId": "gh-54",
+   "from": "Equipo de Deploys",
+   "text": "Listo para revisión: si publicamos una versión mientras la fábrica escribe, el aviso se reintenta solo y nunca queda repetido.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/60",
+   "at": "2026-10-04T16:36:51.021Z"
+  },
+  {
+   "id": "m_il2p5fqpuehqjow",
+   "nodeId": "gh-55",
+   "from": "Equipo de Deploys",
+   "text": "Listo para revisión: tras publicar una versión, la página vuelve a conectarse al instante en vez de esperar.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/60",
+   "at": "2026-10-04T16:36:52.293Z"
+  },
+  {
+   "id": "m_axs8tnhxmzjt79j",
+   "nodeId": "gh-47",
+   "from": "Equipo de Avisos",
+   "text": "Listo y desplegado: la pestaña, el favicon y el navegador te avisan (0,6 s), y en celulares angostos ya se ven todos los títulos. Te queda decidir el canal fuera del navegador.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/57",
+   "at": "2026-10-04T16:37:17.335Z"
+  },
+  {
+   "id": "m_ygqltnbcedcdu34w",
+   "nodeId": "gh-58",
+   "from": "Equipo de Pulido",
+   "text": "En celulares bajos los títulos del cielo ahora se recortan a una línea en vez de desaparecer: en un iPhone SE con las barras del navegador se ven los 20, antes 8. Completos al tocar la tarea.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/63",
+   "at": "2026-10-04T16:55:52.511Z"
+  },
+  {
+   "id": "m_hzgky5gsaj7xp9d",
+   "nodeId": "gh-59",
+   "from": "Equipo de Pulido",
+   "text": "El enlace del informe ya no dice «Basalt» cuando apunta a otro lado (por ejemplo, a GitHub): solo dice «Informe en Basalt» si de verdad vive en Basalt.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/63",
+   "at": "2026-10-04T16:55:53.838Z"
+  },
+  {
+   "id": "m_vrsix6sewh90mf",
+   "nodeId": "gh-54",
+   "from": "Equipo de Deploys",
+   "text": "Publicado y medido: con una versión nueva saliendo en medio, 60 de 60 avisos llegaron, ninguno falló y ninguno quedó repetido.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/54",
+   "at": "2026-10-04T16:58:58.231Z"
+  },
+  {
+   "id": "m_r5xk5gxfojzirymv",
+   "nodeId": "gh-55",
+   "from": "Equipo de Deploys",
+   "text": "Publicado y medido: tras una versión nueva, la página se pone al día en 1,3 s como máximo (antes 2,7 s).",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/55",
+   "at": "2026-10-04T16:58:59.528Z"
+  },
+  {
+   "id": "m_jsomu4g76ltiocp",
+   "nodeId": "prueba-dogfood",
+   "from": "Equipo de Fábrica",
+   "text": "Probado: 7 sitios movieron sus tareas solos (empezar, avanzar, avisar, terminar), el sync con GitHub trae lo nuevo sin duplicar y lo tuyo te espera aquí y en Claude Code.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/44",
+   "at": "2026-10-04T17:00:42.949Z"
+  },
+  {
+   "id": "m_26fol32f7sgytq8h",
+   "nodeId": "gh-61",
+   "from": "Equipo de Robusto",
+   "text": "Listo para revisión: si borras un proyecto durante una actualización y lo vuelves a crear con el mismo nombre, la página nueva vuelve a ver los cambios en vivo.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/65",
+   "at": "2026-10-04T17:16:14.360Z"
+  },
+  {
+   "id": "m_fpfwni6kfhamhdus",
+   "nodeId": "gh-62",
+   "from": "Equipo de Robusto",
+   "text": "Listo para revisión: tomar o avanzar una tarea desde Claude Code ya no falla si Dagyard se está actualizando; reintenta solo y sin duplicar nada.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/65",
+   "at": "2026-10-04T17:16:15.781Z"
+  },
+  {
+   "id": "m_eynci88l82j5hkaz",
+   "nodeId": "gh-64",
+   "from": "Equipo de Enlace",
+   "text": "Empecé: pronto podrás abrir un proyecto o una tarea directo con un link, sin pasar por el selector.",
+   "at": "2026-10-04T17:18:28.538Z"
+  },
+  {
+   "id": "m_yuuiigi1zdgj4",
+   "nodeId": "gh-7",
+   "from": "Equipo de Fábrica",
+   "text": "Gracias. Sigo desde donde me quedé.",
+   "at": "2026-10-04T17:18:29.079Z"
+  },
+  {
+   "id": "m_ns1vvhrvq8tmtuut",
+   "nodeId": "gh-7",
+   "from": "Equipo de Fábrica",
+   "text": "Decidiste: todavía no. Seguimos en la dirección provisional; si cambias de idea, se reabre.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/7",
+   "at": "2026-10-04T17:19:07.523Z"
+  },
+  {
+   "id": "m_mqn3rb0mcqanri",
+   "nodeId": "gh-25",
+   "from": "Equipo de Fábrica",
+   "text": "Gracias. Sigo desde donde me quedé.",
+   "at": "2026-10-04T17:21:13.841Z"
+  },
+  {
+   "id": "m_jzj6z3x7mnutt9q2",
+   "nodeId": "gh-64",
+   "from": "Equipo de Enlace",
+   "text": "La web ya abre un proyecto o una tarea desde un link y la dirección sigue a lo que miras; en revisión para publicarlo.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/66",
+   "at": "2026-10-04T17:22:00.135Z"
+  },
+  {
+   "id": "m_yadokrfkojnnart7",
+   "nodeId": "gh-61",
+   "from": "Equipo de Robusto",
+   "text": "Ya está en la preview: borrar y volver a crear un proyecto con el mismo nombre durante una actualización ya no deja la página sin cambios en vivo.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/65",
+   "at": "2026-10-04T17:26:24.718Z"
+  },
+  {
+   "id": "m_keqkeohzgv17dlbi",
+   "nodeId": "gh-62",
+   "from": "Equipo de Robusto",
+   "text": "Ya está en la preview: tomar o avanzar una tarea desde Claude Code reintenta sola si Dagyard se está actualizando, sin duplicar nada.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/65",
+   "at": "2026-10-04T17:26:33.608Z"
+  },
+  {
+   "id": "m_sm2idzxdagrmv3zy",
+   "nodeId": "gh-64",
+   "from": "Equipo de Enlace",
+   "text": "Publicado: un link como /?p=dagyard&n=gh-47 abre el proyecto y la ficha de esa tarea; si no tienes sesión, te lleva ahí después de entrar. Falta el botón del mod y el comando del CLI.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/66",
+   "at": "2026-10-04T17:26:46.733Z"
+  },
+  {
+   "id": "m_e1occsaebpbd6tak",
+   "nodeId": "gh-47",
+   "from": "Equipo de Avisos",
+   "text": "Gracias. Sigo desde donde me quedé.",
+   "at": "2026-10-04T17:28:01.629Z"
+  },
+  {
+   "id": "m_3952y26d8hv2alg",
+   "nodeId": "gh-47",
+   "from": "Equipo de Avisos",
+   "text": "Decidiste: avisos solo en el navegador y en Claude Code por ahora. Ya funcionan los dos; WhatsApp, Buzz o correo quedan para después.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/47",
+   "at": "2026-10-04T17:29:12.244Z"
+  },
+  {
+   "id": "m_9kcfp25jhh2nbhfi",
+   "nodeId": "gh-64",
+   "from": "Equipo de Enlace",
+   "text": "Publicado también: el botón del mod y el comando «dagyard open» te llevan directo a la tarea en el cielo.",
+   "at": "2026-10-04T17:31:30.641Z"
+  },
+  {
+   "id": "m_i4epv2hvkcbrvhlw",
+   "nodeId": "gh-25",
+   "from": "Equipo de Fábrica",
+   "text": "Revisé todo el historial: ninguna contraseña ni llave. Sí hay datos internos viejos (un prospecto, el gateway, el plan de Basalt), por eso te pregunto cómo publicar. Ya dejé el código limpio y el README en inglés y español.",
+   "at": "2026-10-04T17:32:09.316Z"
+  },
+  {
+   "id": "m_darduk7dfx4ncp7c",
+   "nodeId": "gh-25",
+   "from": "Equipo de Fábrica",
+   "text": "Listo para revisar: código sin datos internos, README en inglés y español y guía para contribuir. Falta que elijas la licencia y cómo publicar.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/70",
+   "at": "2026-10-04T17:34:53.680Z"
+  },
+  {
+   "id": "m_jnufgjazziqpem2p",
+   "nodeId": "gh-69",
+   "from": "Equipo de WebSocket",
+   "text": "Confirmado: un agente que se conecta al tiempo real solo con su llave no logra entrar. Ya está la causa; el arreglo va en camino.",
+   "at": "2026-10-04T17:36:46.182Z"
+  },
+  {
+   "id": "m_ptgfsntotsdh03r",
+   "nodeId": "gh-67",
+   "from": "Equipo de WebSocket",
+   "text": "Arreglado y revisado: una página abierta de un proyecto que se borró y se volvió a crear ya no recibe cambios del proyecto nuevo; se cierra y avisa.",
+   "at": "2026-10-04T17:48:39.206Z"
+  },
+  {
+   "id": "m_1axkc4l0g7iasuld",
+   "nodeId": "gh-69",
+   "from": "Equipo de WebSocket",
+   "text": "El arreglo está listo para revisión, con pruebas.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/72",
+   "at": "2026-10-04T17:50:12.812Z"
+  },
+  {
+   "id": "m_oqoletnwkrftl68k",
+   "nodeId": "gh-67",
+   "from": "Equipo de WebSocket",
+   "text": "El arreglo está listo para revisión, con pruebas.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/72",
+   "at": "2026-10-04T17:50:14.191Z"
+  },
+  {
+   "id": "m_jwelsfe22i41t11e",
+   "nodeId": "gh-69",
+   "from": "Equipo de WebSocket",
+   "text": "Ya está publicado: un agente puede conectarse al tiempo real solo con su llave.",
+   "at": "2026-10-04T17:53:39.061Z"
+  },
+  {
+   "id": "m_nab1goqzd4ghcsio",
+   "nodeId": "gh-67",
+   "from": "Equipo de WebSocket",
+   "text": "Publicado: si se borra y se recrea un proyecto con una página abierta, esa página se cierra y ya no mezcla datos de los dos.",
+   "at": "2026-10-04T18:05:56.129Z"
+  },
+  {
+   "id": "m_jqgfu3rpzcrfmk",
+   "nodeId": "gh-25",
+   "from": "Equipo de Fábrica",
+   "text": "Gracias. Sigo desde donde me quedé.",
+   "at": "2026-10-04T18:10:46.431Z"
+  },
+  {
+   "id": "m_oyfoylepq5aurzpt",
+   "nodeId": "gh-25",
+   "from": "Equipo de Fábrica",
+   "text": "Listo el repo nuevo, todavía privado: conserva toda la historia de commits y ya no tiene datos internos ni llaves (revisado dos veces). Solo falta tu OK para hacerlo público.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/issues/25#issuecomment-5982954647",
+   "at": "2026-10-04T18:15:22.752Z"
+  },
+  {
+   "id": "m_8ioytyeqp0w7m86",
+   "nodeId": "gh-25",
+   "from": "Equipo de Fábrica",
+   "text": "Gracias. Sigo desde donde me quedé.",
+   "at": "2026-10-04T19:02:23.305Z"
+  },
+  {
+   "id": "m_p4dscfykkdjlyrnc",
+   "nodeId": "gh-74",
+   "from": "Equipo de Demo",
+   "text": "Plan listo: la demo vendrá en inglés y en español, y cobrará vida sola mientras la miras (avances, mensajes, tareas que se completan). Las 3 cosas que te esperan siguen siendo tuyas.",
+   "at": "2026-10-04T19:12:07.859Z"
+  },
+  {
+   "id": "m_fysuxpncgnjg5uc2",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Ya está la base para que Dagyard hable inglés o español según tu navegador. Ahora pasamos todos los textos de la pantalla.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/76",
+   "at": "2026-10-04T19:14:28.185Z"
+  },
+  {
+   "id": "m_pzksusx0jebun1v",
+   "nodeId": "gh-74",
+   "from": "Equipo de Demo",
+   "text": "La demo ya existe en inglés y en español, y late sola en el servidor mientras alguien la mira; las 3 cosas que te esperan nunca se tocan. Falta abrir la de tu idioma por defecto y publicarla.",
+   "at": "2026-10-04T19:23:47.912Z"
+  },
+  {
+   "id": "m_jivmlbxsuvpm6cgj",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "El asistente de terminal y la banda de Claude Code ya te hablan en inglés, o en español si tu equipo está en español.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/78",
+   "at": "2026-10-04T19:24:46.087Z"
+  },
+  {
+   "id": "m_ckrjjgyevojhzwez",
+   "nodeId": "gh-74",
+   "from": "Equipo de Demo",
+   "text": "Listo para revisión: al entrar se abre la demo en el idioma de tu navegador y se mueve sola mientras la miras.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/79",
+   "at": "2026-10-04T19:25:47.364Z"
+  },
+  {
+   "id": "m_rdxckb9cfugsx",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Dagyard ya habla inglés por defecto y español si tu equipo está en español, con un selector EN · ES. Está publicado en la preview.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/81",
+   "at": "2026-10-04T19:37:55.983Z"
+  },
+  {
+   "id": "m_e0ynm1tvy41wt1p",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "QA tiempo real: este mensaje tiene que aparecer solo, sin recargar.",
+   "at": "2026-10-04T19:42:09.212Z"
+  },
+  {
+   "id": "m_326lslsmqs8keka",
+   "nodeId": "gh-74",
+   "from": "Equipo de Demo",
+   "text": "Desplegado: la demo se abre en el idioma de tu navegador y se mueve sola mientras la miras (21 cambios en 60 s, sin tocar nada). Las 3 cosas que te esperan siguen siendo tuyas.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/79",
+   "at": "2026-10-04T19:42:32.354Z"
+  },
+  {
+   "id": "m_fvpv2lfcjusjrt",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Prueba de tiempo real RT-1791143108",
+   "at": "2026-10-04T19:45:09.144Z"
+  },
+  {
+   "id": "m_6wb3epgu4vfhei1b",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Prueba de tiempo real tras cambiar a EN RT-1791143120",
+   "at": "2026-10-04T19:45:21.165Z"
+  },
+  {
+   "id": "m_cgcp8lsn9z96xvze",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Espía WS 1791143190",
+   "at": "2026-10-04T19:46:31.081Z"
+  },
+  {
+   "id": "m_rlt7o5yktht48aap",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Carrera1-1791143228",
+   "at": "2026-10-04T19:47:09.650Z"
+  },
+  {
+   "id": "m_dllcrn8oimlhrsnr",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Carrera2-1791143230",
+   "at": "2026-10-04T19:47:12.844Z"
+  },
+  {
+   "id": "m_de44ljvl3eckxvhq",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Carrera3-1791143233",
+   "at": "2026-10-04T19:47:13.735Z"
+  },
+  {
+   "id": "m_jokilzabinknegkh",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Carrera1-1791143246",
+   "at": "2026-10-04T19:47:27.284Z"
+  },
+  {
+   "id": "m_4b7oujrg0yxyptbw",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Carrera2-1791143247",
+   "at": "2026-10-04T19:47:28.516Z"
+  },
+  {
+   "id": "m_nnwz8ieeh1jgysm",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Carrera3-1791143249",
+   "at": "2026-10-04T19:47:29.611Z"
+  },
+  {
+   "id": "m_uq1plvnyuptnsdth",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "Carrera4-1791143250",
+   "at": "2026-10-04T19:47:30.743Z"
+  },
+  {
+   "id": "m_06dfthuargjky7te",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "antes-1791143299",
+   "at": "2026-10-04T19:48:19.985Z"
+  },
+  {
+   "id": "m_r3i8ohntlkwvuwyl",
+   "nodeId": "gh-73",
+   "from": "Equipo de Idiomas",
+   "text": "despues-1791143300",
+   "at": "2026-10-04T19:48:20.872Z"
+  },
+  {
+   "id": "m_qzv3gbs3yl3r36sl",
+   "nodeId": "gh-74",
+   "from": "Equipo de Demo",
+   "text": "Lista: la demo te habla en tu idioma y se mueve sola (21 cambios por minuto en inglés, 23 en español). Las 3 cosas que te esperan siguen siendo tuyas.",
+   "reportUrl": "https://app.basalt.cofoundy.ai/cofoundy/dagyard/qa/demo-viva/readme",
+   "at": "2026-10-04T20:14:29.234Z"
+  },
+  {
+   "id": "m_gbyuywnqe1mbd6p",
+   "nodeId": "gh-83",
+   "from": "Equipo de Idiomas",
+   "text": "Listo para revisar: si el navegador no puede dibujar el cielo, el aviso sale en el idioma del PM, y el proyecto de ejemplo sin servidor ya existe en inglés.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/85",
+   "at": "2026-10-04T20:26:47.487Z"
+  },
+  {
+   "id": "m_hgpuyhkeimfsmag8",
+   "nodeId": "gh-80",
+   "from": "Equipo de Readme",
+   "text": "The README now shows Dagyard instead of describing it: an animated sky at the top, one picture per feature and a simple diagram. Under review.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/86",
+   "at": "2026-10-04T20:31:33.712Z"
+  },
+  {
+   "id": "m_uoiqojks6ebd7vq",
+   "nodeId": "gh-77",
+   "from": "Equipo de Idiomas",
+   "text": "En revisión: cada proyecto tendrá su idioma; uno nuevo nace en inglés (etapas y opciones), y los que ya existen siguen en español sin importar quién los toque.",
+   "at": "2026-10-04T20:33:02.779Z"
+  },
+  {
+   "id": "m_okifdikhbnxobc0",
+   "nodeId": "gh-77",
+   "from": "Equipo de Idiomas",
+   "text": "Listo para revisar: cada proyecto tiene su idioma. Uno nuevo nace con etapas y opciones en inglés; los que ya existen siguen en español sin importar quién los toque.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/87",
+   "at": "2026-10-04T20:39:55.730Z"
+  },
+  {
+   "id": "m_2dyzhummk0sb3pq",
+   "nodeId": "gh-80",
+   "from": "Equipo de Readme",
+   "text": "The README is live: an animated sky at the top, one picture per feature and a simple diagram, in English and Spanish. It can be re-recorded after the sky redesign without touching the text.",
+   "reportUrl": "https://github.com/cofoundy/dagyard/pull/86",
+   "at": "2026-10-04T20:41:25.986Z"
+  },
+  {
+   "id": "m_ofzdob6xycpikv8h",
+   "nodeId": "gh-77",
+   "from": "Equipo de Idiomas",
+   "text": "Ya está en la versión de prueba: los proyectos nuevos nacen en inglés y dagyard y la demo en español siguen como estaban.",
+   "at": "2026-10-04T20:43:10.588Z"
+  },
+  {
+   "id": "m_e7kbambrl5yywe4r",
+   "nodeId": "gh-83",
+   "from": "Equipo de Idiomas",
+   "text": "Ya está en la versión de prueba.",
+   "at": "2026-10-04T20:43:11.910Z"
+  },
+  {
+   "id": "m_ca5kijszbzqcadt",
+   "nodeId": "gh-75",
+   "from": "Equipo de Tiempo",
+   "text": "A · Carriles por equipo (recomendada): cada equipo es una línea que nace a su hora, lo que te esperó va en ámbar y «desde tu última visita» resume lo nuevo. Captura: https://github.com/cofoundy/dagyard/blob/7469124/design/tiempo/a-carriles.png",
+   "at": "2026-10-04T20:58:26.743Z"
+  },
+  {
+   "id": "m_r6u9dgaoqjjrtx",
+   "nodeId": "gh-75",
+   "from": "Equipo de Tiempo",
+   "text": "B · Espiral del día: el día gira desde la fábrica hasta ahora. Es la más vistosa, pero cuesta leer a qué hora arrancó cada equipo. Captura: https://github.com/cofoundy/dagyard/blob/7469124/design/tiempo/b-espiral.png",
+   "at": "2026-10-04T20:58:27.426Z"
+  },
+  {
+   "id": "m_3c6iotlribemynk",
+   "nodeId": "gh-75",
+   "from": "Equipo de Tiempo",
+   "text": "C · Cielo vivo: la constelación por etapas crece con el tiempo. Construcción vuelve a verse como un racimo de estrellas iguales. Captura: https://github.com/cofoundy/dagyard/blob/7469124/design/tiempo/c-cielo-vivo.png",
+   "at": "2026-10-04T20:58:28.143Z"
+  },
+  {
+   "id": "m_lc9zub0dgm1denm",
+   "nodeId": "gh-75",
+   "from": "Equipo de Tiempo",
+   "text": "Pasaron los 30 min sin elección: sigo con A, carriles por equipo. Si prefieres B o C, elígela aquí y cambio de rumbo. Ya están listos los equipos y sus horas en el servidor.",
+   "at": "2026-10-04T21:28:41.440Z"
+  },
+  {
+   "id": "m_uio2wubcluoodflf",
+   "nodeId": "gh-75",
+   "from": "Equipo de Tiempo",
+   "text": "Gracias. Sigo desde donde me quedé.",
+   "at": "2026-10-04T22:18:22.650Z"
+  }
+ ],
+ "seq": 0
+}

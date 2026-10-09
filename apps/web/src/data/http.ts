@@ -112,6 +112,14 @@ export class HttpApi implements AppApi {
     return toBlocker(w);
   }
 
+  async linkOrigin(projectId: string, from: string, to: string, why?: string): Promise<void> {
+    await this.request('POST', `/projects/${enc(projectId)}/edges`, { from, to, kind: 'origin', ...(why ? { why } : {}) });
+  }
+
+  async dropNode(projectId: string, nodeId: string, why?: string): Promise<void> {
+    await this.request('DELETE', `/projects/${enc(projectId)}/nodes/${enc(nodeId)}${why ? `?why=${encodeURIComponent(why)}` : ''}`);
+  }
+
   /* ---------------------------------------------------------------- tiempo real */
 
   subscribe(projectId: string, sinceSeq: number, handlers: Handlers): () => void {

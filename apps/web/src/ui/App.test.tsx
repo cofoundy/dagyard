@@ -24,7 +24,10 @@ vi.mock('../scene', () => ({
       setGraph: rec('setGraph'),
       pulse: rec('pulse'),
       overview: rec('overview'),
-      flyStage: rec('flyStage'),
+      replay: rec('replay'),
+      // la ficha y la búsqueda las llaman al pintar: no se registran para no tapar lo que se prueba
+      mark: () => {},
+      setCardArea: () => {},
       focus: rec('focus'),
       setSafeArea: rec('setSafeArea'),
       dispose: rec('dispose'),
@@ -91,20 +94,26 @@ async function mountIn() {
   const api = new FixtureApi({ storage: null });
   await api.login('clave-de-prueba');
   act(() => root.render(<App api={api} demo />));
-  await until(() => text().includes('Descubrimiento') && !!scene.opts, 'carga el plan');
+  await until(() => !!host.querySelector('.foot .tools') && !!scene.opts, 'carga el plan');
   return api;
 }
 
 describe('interfaz', () => {
-  it('pinta el HUD, el carril y le pasa el grafo y el SafeArea a la escena', async () => {
+  it('pinta el HUD, el pie y le pasa el DAG y el SafeArea a la escena', async () => {
     await mountIn();
     expect(text()).toContain('Marketplace de reservas');
-    expect(text()).toContain('5 de 20 listas');
+    expect(text()).toContain('20 tareas');
+    expect(text()).toContain('en curso');
     expect(text()).toContain('3 te esperan');
-    expect(text()).toContain('II · Diseño');
-    expect(text()).toContain('3 de 3 listas');
-    const graphs = scene.calls.filter(([n]) => n === 'setGraph').map(([, a]) => a[0] as { nodes: unknown[] });
+    expect(text()).toContain('Responder');
+    expect(host.querySelector('.foot input[type="search"]')).not.toBeNull();
+    const graphs = scene.calls
+      .filter(([n]) => n === 'setGraph')
+      .map(([, a]) => a[0] as { nodes: Array<{ born: number }>; edges: Array<{ kind: string }> });
     expect(graphs.at(-1)?.nodes).toHaveLength(20);
+    // sin #90 en el cable, la escena recibe solo dependencias (los orígenes deducidos no se dibujan dos veces)
+    expect(graphs.at(-1)?.edges.every((e) => e.kind === 'needs')).toBe(true);
+    expect(graphs.at(-1)?.nodes.every((n) => Number.isFinite(n.born))).toBe(true);
     expect(scene.calls.some(([n]) => n === 'setSafeArea')).toBe(true);
   });
 
@@ -187,9 +196,8 @@ describe('interfaz', () => {
     act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
     expect(host.querySelector('.card.open')).toBeNull();
     expect(scene.calls.at(-1)?.[0]).toBe('overview');
-    click(button(/^III · Construcción/));
-    expect(scene.calls.at(-1)).toEqual(['flyStage', [2]]);
-    expect(host.querySelector('.stage.sel')?.textContent).toContain('Construcción');
+    click(button(/^Repetir$/));
+    expect(scene.calls.at(-1)?.[0]).toBe('replay');
   });
 
   it('la entrada rechaza una clave mala y deja pasar una buena', async () => {
@@ -245,7 +253,7 @@ describe('proyecto al entrar', () => {
     await api.login('clave-de-prueba');
     expect((await api.listProjects())[0]!.id).not.toBe(P);
     act(() => root.render(<App api={api} demo />));
-    await until(() => text().includes('Descubrimiento'), 'carga la demo');
+    await until(() => !!host.querySelector('.foot .tools'), 'carga la demo');
     expect(host.querySelector('.proj')?.textContent).toBe('Marketplace de reservas');
 
     click(host.querySelector('.proj')!);
@@ -255,7 +263,7 @@ describe('proyecto al entrar', () => {
     act(() => root.unmount());
     root = createRoot(host);
     act(() => root.render(<App api={api} demo />));
-    await until(() => !!host.querySelector('.rail'), 'recarga');
+    await until(() => !!host.querySelector('.foot .tools'), 'recarga');
     expect(host.querySelector('.proj')?.textContent).toBe('Renovación del sitio web');
   });
 });

@@ -148,3 +148,24 @@ export function fmtRelative(value: DateInput | undefined, now = Date.now(), l: L
   if (s < 172_800) return rtf.format(-1, 'day');
   return fmtDate(time, undefined, l);
 }
+
+/** Hora o fecha con las opciones de Intl: «10:18 PM» / «22:18», «Sat» / «sáb». '' si no es una fecha. */
+export function fmtTime(value: DateInput | undefined, options: Intl.DateTimeFormatOptions, l: Lang = current): string {
+  if (value === undefined) return '';
+  const time = toTime(value);
+  if (Number.isNaN(time)) return '';
+  return new Intl.DateTimeFormat(LOCALES[l], options)
+    .formatToParts(time)
+    .map((p) => (p.type === 'weekday' || p.type === 'month' ? p.value.replace(/\.$/, '') : p.value))
+    .join('');
+}
+
+/** «less than a minute», «25 min», «2 h», «6 h 37 min», «3 days» — y su par en español. */
+export function fmtDuration(ms: number, l: Lang = current): string {
+  const m = Math.max(0, Math.round(ms / 60e3));
+  if (m < 1) return t('dur.lessMin', undefined, l);
+  if (m < 60) return t('dur.min', { m }, l);
+  const h = Math.floor(m / 60), r = m % 60;
+  if (h >= 48) return t('dur.days', { count: Math.round(h / 24) }, l);
+  return r ? t('dur.hm', { h, m: r }, l) : t('dur.h', { h }, l);
+}

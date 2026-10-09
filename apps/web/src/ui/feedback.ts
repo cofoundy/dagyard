@@ -66,7 +66,11 @@ export function feedbackFor(prev: Snapshot, next: Snapshot, e: DagEvent): Feedba
     }
     case 'message.posted': {
       const n = next.nodes.find((x) => x.id === e.message.nodeId);
-      return { toast: { kind: 'work', title: e.message.from, text: truncate(e.message.text, 96), nodeId: n?.id } };
+      // la estrella destella (una transmisión, menor que un cambio de estado)
+      return {
+        ...(n ? { pulse: { nodeId: n.id, kind: 'message' as const } } : {}),
+        toast: { kind: 'work', title: e.message.from, text: truncate(e.message.text, 96), nodeId: n?.id },
+      };
     }
     default:
       return {};

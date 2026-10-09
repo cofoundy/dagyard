@@ -9,7 +9,7 @@ describe('scaffold', () => {
       handlers: { onPick: () => {} },
       safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
     });
-    for (const k of ['setGraph', 'pulse', 'overview', 'flyStage', 'focus', 'setSafeArea', 'dispose'] as const) {
+    for (const k of ['setGraph', 'pulse', 'overview', 'focus', 'mark', 'replay', 'setSafeArea', 'setCardArea', 'dispose'] as const) {
       expect(typeof sky[k]).toBe('function');
     }
   });
