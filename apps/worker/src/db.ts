@@ -104,7 +104,7 @@ export class Store extends DurableObject<Env> {
       return { ok: true, value, events, incarnation };
     } catch (err) {
       // ApiFailure revierte la transacción y viaja como dato (las clases no cruzan la RPC)
-      if (err instanceof ApiFailure) return { ok: false, error: { code: err.code, message: err.message } };
+      if (err instanceof ApiFailure) return { ok: false, error: { code: err.code, message: err.message, ...(err.reason ? { reason: err.reason } : {}) } };
       throw err;
     }
   }

@@ -140,7 +140,7 @@ export async function write<K extends WriteOp['kind']>(
       await new Promise((r) => setTimeout(r, jitter(retryMs[attempt]!)));
       continue;
     }
-    if (!res.ok) throw new ApiFailure(res.error.code, res.error.message);
+    if (!res.ok) throw new ApiFailure(res.error.code, res.error.message, res.error.reason);
     await publish(env, op.pid, res.events as DagEvent[], res.incarnation);
     return res.value as WriteValues[K];
   }

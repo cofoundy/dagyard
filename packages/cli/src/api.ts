@@ -10,6 +10,7 @@ import type {
   DagNode,
   Edge,
   EdgeKind,
+  ErrorReason,
   Message,
   MessageInput,
   NextResult,
@@ -63,6 +64,8 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** afina `code` sin cambiarlo (#110): `exists` = el 409 de algo que ya existe */
+    readonly reason?: ErrorReason,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -204,14 +207,16 @@ export class DagyardClient {
     if (!res.ok) {
       let code = `http_${res.status}`;
       let message = res.statusText || 'error';
+      let reason: ErrorReason | undefined;
       try {
         const err = (await res.json()) as Partial<ApiError>;
         if (err.error?.code) code = err.error.code;
         if (err.error?.message) message = err.error.message;
+        if (err.error?.reason === 'exists') reason = err.error.reason;
       } catch {
         // cuerpo no-JSON: nos quedamos con el status
       }
-      throw new ApiRequestError(res.status, code, message);
+      throw new ApiRequestError(res.status, code, message, reason);
     }
     return res;
   }
