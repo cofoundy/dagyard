@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDag, type DagTask } from './dag';
 import { dagyardHoySnapshot, estresSnapshot } from './fixture';
-import { orientation, ROWS, ROWS_MAX, rowsShown, twinTags } from './orient';
+import { orientation, ROWS, ROWS_MAX, rowsShown, stateKey, twinTags } from './orient';
 
 const NOW = Date.parse('2026-10-09T17:15:00Z');
 
@@ -86,5 +86,24 @@ describe('títulos repetidos: un distintivo corto, solo cuando se repiten', () =
     const cal = all.filter((x) => x.title === 'Calendario compartido');
     expect(cal.length).toBeGreaterThan(1);
     expect(new Set(cal.map((x) => tags.get(x.id))).size).toBe(cal.length);
+  });
+});
+
+describe('una palabra por estado (#109): la de la brújula, también en la ficha y en el cielo', () => {
+  it('una tarea en curso quieta dice «Sin noticias»; con noticias, «En curso»', () => {
+    expect(stateKey({ status: 'working', kind: 'task' }, true)).toBe('status.quiet');
+    expect(stateKey({ status: 'working', kind: 'task' })).toBe('status.working');
+  });
+
+  it('un pedido, una meta o un trabajo continuo abiertos no son trabajo en curso: se nombran por lo que son', () => {
+    expect(stateKey({ status: 'working', kind: 'request' })).toBe('kind.request');
+    expect(stateKey({ status: 'working', kind: 'goal' }, true)).toBe('kind.goal');
+    expect(stateKey({ status: 'working', kind: 'stream' })).toBe('kind.stream');
+  });
+
+  it('lo demás, por su estado', () => {
+    expect(stateKey({ status: 'blocked', kind: 'task' })).toBe('status.blocked');
+    expect(stateKey({ status: 'pending', kind: 'task' }, true)).toBe('status.pending');
+    expect(stateKey({ status: 'done', kind: 'request' })).toBe('status.done');
   });
 });

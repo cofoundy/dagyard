@@ -79,6 +79,8 @@ export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now
         className={`b-row ${cls}`}
         onClick={() => {
           onMark(null);
+          // en celular la ficha sube desde abajo: el grupo se pliega para no quedar cortado debajo de ella
+          if (mobile) setOpen(null);
           onPick(task.id);
         }}
         onMouseEnter={() => onMark(task.id)}

@@ -6,7 +6,8 @@
 //                          con lo primero que esperan.
 
 import type { DagModel, DagTask } from './dag';
-import type { Blocker, Snapshot } from './types';
+import type { MessageKey } from '../i18n';
+import type { Blocker, NodeKind, NodeStatus, Snapshot } from './types';
 import { openBlockers } from './view';
 
 export interface WaitingItem {
@@ -143,4 +144,15 @@ export function twinTags(tasks: readonly DagTask[], label: (t: DagTask) => strin
     });
   }
   return out;
+}
+
+/**
+ * La palabra de estado de un nodo abierto, la misma en la brújula, la ficha y el cielo (#109). Una tarea en curso sin
+ * noticias hace más de un día es «Sin noticias», no «En curso»; un pedido, una meta o un trabajo continuo abiertos no
+ * son trabajo en curso: se nombran por lo que son («Pedido», como su ficha).
+ */
+export function stateKey(n: { status: NodeStatus; kind: NodeKind }, quiet = false): MessageKey {
+  if (n.status === 'working' && n.kind !== 'task') return `kind.${n.kind}`;
+  if (n.status === 'working' && quiet) return 'status.quiet';
+  return `status.${n.status}`;
 }

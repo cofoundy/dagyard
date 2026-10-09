@@ -18,6 +18,7 @@ export const en = {
   'status.working': 'Moving',
   'status.blocked': 'Needs you',
   'status.pending': 'Up next',
+  'status.quiet': 'Quiet',
 
   // lo que te pide una tarea
   'block.decision': 'Needs your decision',
@@ -207,6 +208,7 @@ export const es: Catalog = {
   'status.working': 'En curso',
   'status.blocked': 'Te espera',
   'status.pending': 'Lo que sigue',
+  'status.quiet': 'Sin noticias',
 
   'block.decision': 'Necesita tu decisión',
   'block.review': 'Necesita tu revisión',

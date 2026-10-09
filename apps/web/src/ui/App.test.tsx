@@ -234,6 +234,50 @@ describe('interfaz', () => {
   });
 });
 
+// #109 con los datos reales de «dagyard» (9 oct): «Abrir el código» lleva 5 días sin noticias y hay pedidos abiertos.
+describe('la brújula con el proyecto «dagyard» del 9 oct', () => {
+  async function mountDagyard() {
+    window.history.replaceState(null, '', '/?p=dagyard-hoy');
+    const api = new FixtureApi({ storage: null, extra: true });
+    await api.login('clave-de-prueba');
+    act(() => root.render(<App api={api} demo />));
+    await until(() => !!host.querySelector('.brief') && text().includes('En curso ahora'), 'carga dagyard');
+    return api;
+  }
+  afterEach(() => {
+    window.history.replaceState(null, '', '/');
+    vi.unstubAllGlobals();
+  });
+
+  it('la ficha y el cielo dicen «Sin noticias» de lo quieto y no llaman «En curso» a un pedido abierto', async () => {
+    const api = await mountDagyard();
+    pick('gh-25');
+    await settle(1);
+    expect(host.querySelector('.card .chip')?.textContent).toBe('Sin noticias');
+    const graph = scene.calls.filter(([n]) => n === 'setGraph').at(-1)![1][0] as { nodes: Array<{ id: string; quiet?: boolean }> };
+    expect(graph.nodes.find((n) => n.id === 'gh-25')?.quiet).toBe(true);
+    expect(graph.nodes.filter((n) => n.quiet).map((n) => n.id)).toEqual(['gh-25']);
+
+    const snap = await api.getSnapshot('dagyard-hoy');
+    const req = snap.nodes.find((n) => n.kind === 'request' && n.status === 'working')!;
+    pick(req.id);
+    await settle(1);
+    const chips = [...host.querySelectorAll('.card .top .chip')].map((c) => c.textContent);
+    expect(chips).toEqual(['Pedido']);
+  });
+
+  it('en celular, elegir una fila de un grupo desplegado lo pliega: la ficha no lo deja cortado', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('max-width: 720px'), addEventListener() {}, removeEventListener() {} }));
+    await mountDagyard();
+    click(button(/^En curso ahora/));
+    expect(host.querySelectorAll('.brief .b-row.working')).toHaveLength(3);
+    click(button(/^Abrir el código/));
+    expect(scene.calls.filter(([n]) => n === 'focus').at(-1)?.[1][0]).toBe('gh-25');
+    expect(host.querySelectorAll('.brief .b-row.working')).toHaveLength(0);
+    expect(button(/^En curso ahora/).getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
 // #29: el servidor lista por última actualización, así que lo último importado llega primero; al entrar sin elección
 // previa se abre la demo, y lo que el usuario elige se recuerda al recargar.
 describe('proyecto al entrar', () => {

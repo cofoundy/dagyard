@@ -66,6 +66,7 @@ import {
   type Viewport,
 } from './dag-motion';
 import { nowEdge } from './now-edge';
+import { stateKey } from '../data/orient';
 import { makeTextures, type SkyTextures } from './textures';
 
 const COL = { done: 0xf4eee2, working: 0x9fd3ff, blocked: 0xffb547, pending: 0x8494ad, loose: 0x9aa6b8, ended: 0x5d6a80 } as const;
@@ -781,9 +782,10 @@ export function createSky(opts: CreateSkyOptions): Sky {
   }
 
   function hitLabel(n: SceneNode): string {
+    // la misma palabra que la brújula y la ficha: «Sin noticias» si está quieta, «Pedido» si es un pedido abierto
+    const status = t(stateKey(n, n.quiet));
     const pre = prefixOf(n);
-    const status = t(n.status === 'done' ? 'status.done' : n.status === 'working' ? 'status.working' : n.status === 'blocked' ? 'status.blocked' : 'status.pending');
-    return t('scene.hit', { title: `${pre ? `${pre}: ` : ''}${n.title}`, status, time: fmtTime(n.born, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) });
+    return t('scene.hit', { title: `${pre && pre !== status ? `${pre}: ` : ''}${n.title}`, status, time: fmtTime(n.born, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) });
   }
 
   // ---------- cámara ----------

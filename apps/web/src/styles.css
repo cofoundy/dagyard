@@ -177,6 +177,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .chip { font: 500 10px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; padding: 6px 9px; border-radius: 999px; border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; width: max-content; }
 .chip.done { color: var(--star); }
 .chip.working { color: var(--work); border-color: rgba(159,211,255,.35); }
+.chip.working.quiet { color: var(--text); border-style: dashed; }
 .chip.blocked { color: var(--amber); border-color: rgba(255,181,71,.45); }
 .chip.queued { color: var(--mute); }
 .chip.ended { color: var(--mute); border-style: dashed; }

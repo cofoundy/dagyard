@@ -13,13 +13,6 @@ function fromCatalog<K extends string>(keys: Record<K, MessageKey>): Readonly<Re
   return out;
 }
 
-export const STATUS_TEXT = fromCatalog<NodeStatus>({
-  done: 'status.done',
-  working: 'status.working',
-  blocked: 'status.blocked',
-  pending: 'status.pending',
-});
-
 /** Clase visual por estado (los tokens del preview). */
 export const STATUS_CLASS: Record<NodeStatus, 'done' | 'working' | 'blocked' | 'queued'> = {
   done: 'done',

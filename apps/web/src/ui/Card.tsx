@@ -7,7 +7,8 @@ import { buildDag, chain, goalOf, type DagModel, type DagTask } from '../data/da
 import type { Blocker, DagNode, Resolution, Snapshot } from '../data/types';
 import { messagesOf, openBlockerOf, resolvedBlockersOf } from '../data/view';
 import { isResolvedByYou, RESOLVED_BY_AGENT } from '../data/adapter';
-import { useLang } from '../i18n';
+import { t, useLang } from '../i18n';
+import { stateKey } from '../data/orient';
 import {
   ago,
   answeredBy,
@@ -24,12 +25,13 @@ import {
   reportLabel,
   reviewLabels,
   STATUS_CLASS,
-  STATUS_TEXT,
   teamName,
 } from './copy';
 
 export interface CardProps {
   snapshot: Snapshot;
+  /** En curso sin noticias hace más de un día (lo calcula la brújula): el chip lo dice igual que ella. */
+  quiet?: boolean;
   node: DagNode | undefined;
   /** El DAG ya calculado (si no viene, se calcula del snapshot). */
   model?: DagModel;
@@ -119,7 +121,7 @@ function Sec({ title, children, className }: { title: string; children: ReactNod
   );
 }
 
-function CardBody({ snapshot, node, model: given, offline, onClose, onFocus, onResolve, onLink, onDrop }: CardProps & { node: DagNode }) {
+function CardBody({ snapshot, node, quiet, model: given, offline, onClose, onFocus, onResolve, onLink, onDrop }: CardProps & { node: DagNode }) {
   const model = useMemo(() => given ?? buildDag(snapshot), [given, snapshot]);
   const [chainOpen, setChainOpen] = useState(false);
   useEffect(() => setChainOpen(false), [node.id]);
@@ -133,6 +135,7 @@ function CardBody({ snapshot, node, model: given, offline, onClose, onFocus, onR
   const messages = messagesOf(snapshot, node.id).slice(0, 3);
   const team = teamName(node.team);
   const cls = STATUS_CLASS[node.status];
+  const state = stateKey({ status: node.status, kind: task.kind }, quiet);
   const neededBy = list(task.neededBy);
   const needs = list(task.needs);
   const children = list(task.children);
@@ -218,7 +221,10 @@ function CardBody({ snapshot, node, model: given, offline, onClose, onFocus, onR
     <>
       <div className="top">
         {/* una rama que murió (descartada, reemplazada, «aprendimos») nunca se ve como lista (#102) */}
-        <span className={`chip ${ended ? 'ended' : cls}`}>{ended ? CLOSE_TEXT[task.closedAs!] : STATUS_TEXT[node.status]}</span>
+        {/* la palabra de la brújula (#109): «Sin noticias» si está quieta; un pedido o una meta abiertos los nombra su tipo */}
+        {(ended || state.startsWith('status.')) && (
+          <span className={`chip ${ended ? 'ended' : cls}${quiet ? ' quiet' : ''}`}>{ended ? CLOSE_TEXT[task.closedAs!] : t(state)}</span>
+        )}
         {kindLabel && <span className="chip kind">{kindLabel}</span>}
         <span className="born">{bornLine(task.born, model.now)}</span>
         <button className="x" type="button" aria-label={COPY.close} onClick={onClose}>

@@ -484,6 +484,7 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
           snapshot={snapshot}
           model={model ?? undefined}
           node={focusedNode}
+          quiet={!!focusedNode && marks.quiet.has(focusedNode.id)}
           offline={state.status === 'reconnecting'}
           onClose={overview}
           onFocus={focus}
