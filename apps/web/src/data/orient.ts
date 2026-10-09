@@ -66,7 +66,8 @@ export function orientation(m: DagModel, s: Snapshot): Orientation {
   const started = new Map(s.nodes.map((n) => [n.id, n.startedAt ? Date.parse(n.startedAt) : NaN]));
 
   const moving: MovingItem[] = m.tasks
-    .filter((t) => t.kind === 'task' && t.status === 'working')
+    // una tarea va en un solo grupo: si te espera, no se repite como «en curso»
+    .filter((t) => t.kind === 'task' && t.status === 'working' && !seenTask.has(t.id))
     .map((task) => {
       const st = started.get(task.id);
       const said = lastMsg.get(task.id) ?? -Infinity;
