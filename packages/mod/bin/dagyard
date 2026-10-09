@@ -2,9 +2,9 @@
 
 // src/cli.ts
 import { execFileSync, spawn } from "node:child_process";
-import { readFileSync as readFileSync3 } from "node:fs";
+import { mkdirSync, readFileSync as readFileSync3, renameSync, writeFileSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { basename as basename2, join as join3 } from "node:path";
+import { basename as basename2, dirname as dirname3, join as join3 } from "node:path";
 
 // src/i18n.ts
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -36,6 +36,11 @@ var ROUTES = {
    * 409 si el grafo nuevo quita una tarea que tiene alguno.
    */
   project: (projectId) => `/api/projects/${p(projectId)}`,
+  /**
+   * GET `?since=<seq>`: los eventos con `seq > since` (≤500 por página). `resync: true` = el log ya no llega
+   * hasta `since`: vuelve a pedir el snapshot.
+   */
+  events: (projectId) => `/api/projects/${p(projectId)}/events`,
   /** GET: el siguiente nodo arrancable y su línea `/goal`. */
   next: (projectId) => `/api/projects/${p(projectId)}/next`,
   /** POST: crea un nodo. */
@@ -92,6 +97,10 @@ var DagyardClient = class {
   }
   snapshot(projectId) {
     return this.json("GET", ROUTES.project(projectId));
+  }
+  /** Una página del log de eventos después de `since` (`dagyard watch`, #121). */
+  events(projectId, since) {
+    return this.json("GET", `${ROUTES.events(projectId)}?since=${since}`);
   }
   next(projectId) {
     return this.json("GET", ROUTES.next(projectId));
@@ -1792,9 +1801,118 @@ function formatSync(r) {
 `;
 }
 
+// src/watch.ts
+var EVENTS_PAGE = 500;
+var WATCH_BACKOFF_MS = [1e3, 2e3, 5e3, 1e4];
+var WATCH_GIVE_UP = 12;
+var DOWN = /* @__PURE__ */ Symbol("down");
+async function watch(o) {
+  let failures = 0;
+  let since = o.since;
+  const emit = (line) => o.out(o.json ? `${JSON.stringify(line)}
+` : `${formatLine(line)}
+`);
+  async function call(f) {
+    for (; ; ) {
+      try {
+        const r = await f();
+        if (failures) o.err(t("dagyard: the server answers again\n", "dagyard: el servidor volvi\xF3 a responder\n"));
+        failures = 0;
+        return r;
+      } catch (err) {
+        if (!(err instanceof ApiRequestError) || !transient2(err)) throw err;
+        failures++;
+        if (failures === 1) o.err(t(`dagyard: the server is not answering (${err.message}); retrying
+`, `dagyard: el servidor no responde (${err.message}); reintento
+`));
+        if (failures >= WATCH_GIVE_UP) {
+          const resume = since === null ? "" : ` --since ${since}`;
+          o.err(
+            t(
+              `dagyard: the server did not answer ${failures} times in a row; I stop. Resume with \xABdagyard watch${resume}\xBB
+`,
+              `dagyard: el servidor no respondi\xF3 ${failures} veces seguidas; me detengo. Reanuda con \xABdagyard watch${resume}\xBB
+`
+            )
+          );
+          return DOWN;
+        }
+        await o.sleep(WATCH_BACKOFF_MS[Math.min(failures - 1, WATCH_BACKOFF_MS.length - 1)]);
+      }
+    }
+  }
+  async function fromSnapshot(resyncFrom) {
+    const snap = await call(() => o.api.snapshot(o.project));
+    if (snap === DOWN) return false;
+    if (resyncFrom !== void 0) emit({ type: "resync", seq: snap.seq, since: resyncFrom });
+    for (const b of openBlockers(snap)) emit(blockerLine("blocker.opened", snap.seq, b, b.createdAt, true));
+    since = snap.seq;
+    o.saveCursor?.(since);
+    return true;
+  }
+  if (since === null && !await fromSnapshot()) return "unreachable";
+  o.err(t(`dagyard: listening to \xAB${o.project}\xBB after event #${since}
+`, `dagyard: escuchando \xAB${o.project}\xBB despu\xE9s del evento #${since}
+`));
+  for (; ; ) {
+    const from = since;
+    const page = await call(() => o.api.events(o.project, from));
+    if (page === DOWN) return "unreachable";
+    if (page.resync) {
+      if (!await fromSnapshot(from)) return "unreachable";
+      continue;
+    }
+    for (const ev of page.events) {
+      if (ev.seq <= since) continue;
+      const line = eventLine(ev);
+      if (line) emit(line);
+      since = ev.seq;
+    }
+    if (since !== from) o.saveCursor?.(since);
+    if (page.events.length >= EVENTS_PAGE) continue;
+    if (o.once) return "ok";
+    await o.sleep(o.intervalMs);
+  }
+}
+var transient2 = (err) => err.status === 0 || err.status >= 500 || err.status === 429;
+function openBlockers(snap) {
+  return snap.blockers.filter((b) => b.status === "open").sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+function eventLine(ev) {
+  if (ev.type === "blocker.opened" || ev.type === "blocker.resolved") return blockerLine(ev.type, ev.seq, ev.payload.blocker, ev.at);
+  return null;
+}
+function blockerLine(type, seq, b, at, snapshot = false) {
+  const line = { type, seq, node: b.nodeId, blocker: b.id, kind: b.kind, question: b.question, options: b.options, at };
+  if (type === "blocker.resolved") {
+    line.choice = b.resolution?.choice ?? null;
+    line.note = b.resolution?.note ?? null;
+    line.by = b.resolvedBy;
+  }
+  if (snapshot) line.snapshot = true;
+  return line;
+}
+function formatLine(l) {
+  if (l.type === "resync") {
+    return t(
+      `#${l.seq} resync: the server no longer has the events after #${l.since}; going on from the current state`,
+      `#${l.seq} resync: el servidor ya no tiene los eventos despu\xE9s de #${l.since}; sigo desde el estado actual`
+    );
+  }
+  const q = `\xAB${oneLine(l.question, 500)}\xBB`;
+  if (l.type === "blocker.opened") {
+    const opts = l.options.length ? ` [${l.options.join(" | ")}]` : "";
+    const verb = l.snapshot ? t("still waiting", "sigue esperando") : t("asks", "pregunta");
+    return `#${l.seq} ${l.node} ${verb} (${l.kind}): ${q}${opts} \xB7 ${l.blocker}`;
+  }
+  const answer = l.kind === "access" ? t(`access saved (read it with \xABdagyard wait ${l.node} --blocker ${l.blocker}\xBB)`, `acceso guardado (l\xE9elo con \xABdagyard wait ${l.node} --blocker ${l.blocker}\xBB)`) : l.choice ?? t("(no option)", "(sin opci\xF3n)");
+  const note = l.note ? ` \u2014 ${t("note", "nota")}: ${oneLine(l.note, 2e3)}` : "";
+  return `#${l.seq} ${l.node} ${t("answered", "respondieron")} ${q}: ${answer}${note} \xB7 ${l.blocker}`;
+}
+
 // src/cli.ts
 var VERSION = "0.1.0";
-var EXIT = { ok: 0, api: 1, timeout: 2, nothing: 3, usage: 64 };
+var EXIT = { ok: 0, api: 1, timeout: 2, nothing: 3, unreachable: 4, usage: 64 };
 var tx = (text) => t(text[0], text[1]);
 var GLOBAL_FLAGS = ["project", "url"];
 var HELP_GLOBAL = [
@@ -2160,6 +2278,53 @@ Sin --timeout espera para siempre. Exit 2 si vence.`
           return EXIT.ok;
         }
       }
+    }
+  },
+  watch: {
+    usage: [
+      "dagyard watch [--since <seq>] [--cursor <file>] [--interval <sec>] [--once] [--json]",
+      "dagyard watch [--since <seq>] [--cursor <archivo>] [--interval <seg>] [--once] [--json]"
+    ],
+    summary: ["listens to the project's questions and answers, one line each", "escucha las preguntas y respuestas del proyecto, una l\xEDnea por cada una"],
+    help: [
+      `For whoever orchestrates: one line per blocker opened (\xABasks\xBB) or answered (\xABanswered\xBB, with the option and the
+note), each with its event number (#seq). Runs until killed.
+Without --since it starts now and first lists the blockers already open (\xABstill waiting\xBB); --since <seq> replays
+what came after that event. --cursor <file> keeps the last event seen there and, without --since, resumes from it.
+If the server no longer has the events after --since (\xABresync\xBB), it says so and goes on from the current state.
+Checks every --interval seconds (default 5). --once catches up and exits 0.
+If the server stops answering it retries with backoff; after ~1.5 min it exits 4 saying how to resume.`,
+      `Para quien orquesta: una l\xEDnea por bloqueante abierto (\xABpregunta\xBB) o respondido (\xABrespondieron\xBB, con la opci\xF3n y
+la nota), cada una con su n\xFAmero de evento (#seq). Corre hasta que lo maten.
+Sin --since empieza ahora y antes lista los bloqueantes ya abiertos (\xABsigue esperando\xBB); --since <seq> repite lo
+que vino despu\xE9s de ese evento. --cursor <archivo> guarda ah\xED el \xFAltimo evento visto y, sin --since, reanuda desde \xE9l.
+Si el servidor ya no tiene los eventos despu\xE9s de --since (\xABresync\xBB), lo avisa y sigue desde el estado actual.
+Mira cada --interval segundos (5 por defecto). --once se pone al d\xEDa y sale 0.
+Si el servidor deja de responder reintenta con backoff; tras ~1,5 min sale 4 y dice c\xF3mo reanudar.`
+    ],
+    flags: ["since", "cursor", "interval", ...GLOBAL_FLAGS],
+    bools: ["once", "json"],
+    async run({ io, args }) {
+      const sinceRaw = flag(args, "since");
+      const cursor = flag(args, "cursor");
+      let since = sinceRaw === void 0 ? null : seqArg(sinceRaw, "--since");
+      if (since === null && cursor !== void 0) since = readCursor(cursor);
+      const intervalRaw = flag(args, "interval");
+      const interval = intervalRaw === void 0 ? 5 : Number(intervalRaw);
+      if (!Number.isFinite(interval) || interval < 1) throw new UsageError(t("--interval is in seconds (\u22651)", "--interval va en segundos (\u22651)"));
+      const result = await watch({
+        api: client(io, args),
+        project: project(io, args),
+        since,
+        intervalMs: interval * 1e3,
+        once: args.bools.has("once"),
+        json: args.bools.has("json"),
+        out: io.stdout,
+        err: io.stderr,
+        sleep: io.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
+        ...cursor !== void 0 ? { saveCursor: (seq) => writeCursor(cursor, seq) } : {}
+      });
+      return result === "ok" ? EXIT.ok : EXIT.unreachable;
     }
   },
   msg: {
@@ -2741,6 +2906,27 @@ async function blockerOf(api, proj, node) {
   const pick = mine.filter((b) => b.status === "open").pop() ?? mine.pop();
   if (!pick) throw new UsageError(t(`${node} has no blockers; open one with \xABdagyard block ${node} \u2026\xBB`, `${node} no tiene bloqueantes; \xE1brelo con \xABdagyard block ${node} \u2026\xBB`));
   return pick.id;
+}
+function seqArg(raw, name) {
+  if (!/^\d+$/.test(raw.trim())) throw new UsageError(t(`${name} is an event number (an integer \u22650)`, `${name} es un n\xFAmero de evento (un entero \u22650)`));
+  return Number(raw.trim());
+}
+function readCursor(file) {
+  let raw;
+  try {
+    raw = readFileSync3(file, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  return seqArg(raw, file);
+}
+function writeCursor(file, seq) {
+  mkdirSync(dirname3(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, `${seq}
+`);
+  renameSync(tmp, file);
 }
 function required(args, key, max) {
   const v = optional(args, key, max);

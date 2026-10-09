@@ -14053,6 +14053,11 @@ var ROUTES = {
    * 409 si el grafo nuevo quita una tarea que tiene alguno.
    */
   project: (projectId) => `/api/projects/${p(projectId)}`,
+  /**
+   * GET `?since=<seq>`: los eventos con `seq > since` (≤500 por página). `resync: true` = el log ya no llega
+   * hasta `since`: vuelve a pedir el snapshot.
+   */
+  events: (projectId) => `/api/projects/${p(projectId)}/events`,
   /** GET: el siguiente nodo arrancable y su línea `/goal`. */
   next: (projectId) => `/api/projects/${p(projectId)}/next`,
   /** POST: crea un nodo. */
@@ -14109,6 +14114,10 @@ var DagyardClient = class {
   }
   snapshot(projectId) {
     return this.json("GET", ROUTES.project(projectId));
+  }
+  /** Una página del log de eventos después de `since` (`dagyard watch`, #121). */
+  events(projectId, since) {
+    return this.json("GET", `${ROUTES.events(projectId)}?since=${since}`);
   }
   next(projectId) {
     return this.json("GET", ROUTES.next(projectId));
