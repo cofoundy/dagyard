@@ -104,11 +104,12 @@ export interface Rows {
 
 /**
  * Cuántas filas de un grupo se ven. `cap` es lo que se ve plegado (3 en escritorio; 0 en celular o cuando el otro grupo
- * está desplegado: la columna crece sin scroll y no se come el pie).
+ * está desplegado). `max` es el tope desplegado: 8, o menos si la pantalla no da (la columna crece sin scroll y no se
+ * come el pie).
  */
-export function rowsShown(total: number, open: boolean, cap = ROWS): Rows {
+export function rowsShown(total: number, open: boolean, cap = ROWS, max = ROWS_MAX): Rows {
   if (open) {
-    const shown = Math.min(total, ROWS_MAX);
+    const shown = Math.min(total, Math.max(1, max));
     return { shown, more: 0, rest: total - shown };
   }
   const shown = Math.min(total, cap);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDag, type DagTask } from './dag';
 import { dagyardHoySnapshot, estresSnapshot } from './fixture';
-import { orientation, ROWS_MAX, rowsShown, twinTags } from './orient';
+import { orientation, ROWS, ROWS_MAX, rowsShown, twinTags } from './orient';
 
 const NOW = Date.parse('2026-10-09T17:15:00Z');
 
@@ -43,6 +43,11 @@ describe('filas de la brújula: sin scroll, tope 8 y el resto a la búsqueda', (
   it('desplegado crece hasta 8 y lo que no cabe se busca por nombre', () => {
     expect(rowsShown(14, true)).toEqual({ shown: ROWS_MAX, more: 0, rest: 6 });
     expect(rowsShown(5, true)).toEqual({ shown: 5, more: 0, rest: 0 });
+  });
+
+  it('en una pantalla baja el tope baja (nunca de 1) y el resto también va a la búsqueda', () => {
+    expect(rowsShown(14, true, ROWS, 5)).toEqual({ shown: 5, more: 0, rest: 9 });
+    expect(rowsShown(14, true, ROWS, 0)).toEqual({ shown: 1, more: 0, rest: 13 });
   });
 
   it('plegado a su cabecera (celular, o el otro grupo abierto): ninguna fila, todo en «+N más»', () => {

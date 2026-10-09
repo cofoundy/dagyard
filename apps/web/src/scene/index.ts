@@ -1075,6 +1075,19 @@ export function createSky(opts: CreateSkyOptions): Sky {
     r.sprite.visible = true;
   }
 
+  // ---------- la columna de la brújula (#109) ----------
+  // En escritorio la brújula reserva su columna a la izquierda (`safe.left`): la vista general encuadra a su derecha,
+  // pero el cielo se desplaza y lo viejo pasa por detrás. Ahí todo se apaga a un 10 % en una rampa de 90 px antes del
+  // borde (estrellas, líneas, hilos y eje, de una vez, con una máscara del lienzo: no es una caja), y no hay etiquetas
+  // ni blancos táctiles. En celular la brújula va arriba y no hay columna.
+  const hasColumn = () => safe.left > 40;
+  const underBrief = (x: number) => hasColumn() && x < safe.left - 8;
+  function veilBrief() {
+    const mask = hasColumn() ? `linear-gradient(90deg, rgba(0,0,0,.1) ${safe.left - 24}px, #000 ${safe.left + 66}px)` : '';
+    canvas.style.maskImage = mask;
+    canvas.style.setProperty('-webkit-mask-image', mask);
+  }
+
   // ---------- loop ----------
   let last = performance.now();
   let elapsed = 0;
@@ -1193,8 +1206,6 @@ export function createSky(opts: CreateSkyOptions): Sky {
       }
       const s = Math.max(0, Math.min(1.08, v.sc));
       const vis = s > 0.01;
-      // la columna de la izquierda es de la brújula (#109): lo que la cámara deja ahí detrás se apaga (no se tapa con una caja)
-      const veil = safe.left > 40 ? Math.max(0.1, Math.min(1, (toScreen(v.x, v.y).x - (safe.left - 70)) / 90)) : 1;
       v.group.position.set(v.x * K, -v.y * K, 0);
       v.group.visible = vis;
 
@@ -1246,10 +1257,10 @@ export function createSky(opts: CreateSkyOptions): Sky {
       size *= (1 + v.flash * 1.2) * s;
       const px = size * K;
       v.glow.material.color.copy(v.color);
-      v.glow.material.opacity = glowO * v.dim * veil;
+      v.glow.material.opacity = glowO * v.dim;
       v.glow.scale.setScalar(Math.max(1e-4, px * 2.1));
       v.spike.material.color.copy(v.color);
-      v.spike.material.opacity = Math.min(1, spike + v.spikeBoost * 0.6) * v.dim * veil;
+      v.spike.material.opacity = Math.min(1, spike + v.spikeBoost * 0.6) * v.dim;
       v.spike.scale.setScalar(Math.max(1e-4, px * (3.6 + v.spikeBoost * 2)));
       // retícula ámbar en lo que te espera: un anillo con marcas que se abre y se apaga, una y otra vez
       if (n.status === 'blocked') {
@@ -1373,11 +1384,15 @@ export function createSky(opts: CreateSkyOptions): Sky {
     }
 
     // eje, «ahora» y etiquetas: proyección con la cámara real
-    const axisO = intro !== null ? Math.max(0, Math.min(1, (intro - 2.2) / 1.2)) : 1;
+    // en celular, con un grupo de la brújula desplegado, al cielo casi no le queda alto: sus rótulos se callan en vez de
+    // caer sobre el pie (vuelven al plegarlo)
+    const cramped = vp.height - safe.top - safe.bottom < 120;
+    const axisO = cramped ? 0 : intro !== null ? Math.max(0, Math.min(1, (intro - 2.2) / 1.2)) : 1;
+    moreBtn.style.pointerEvents = cramped ? 'none' : '';
     for (const a of axisLabels) {
       const q = toScreen(a.x, a.y);
       a.el.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px) translateX(-50%)`;
-      a.el.style.opacity = q.ok ? String(axisO * (sel ? 0.4 : 1)) : '0';
+      a.el.style.opacity = q.ok && !underBrief(q.x) ? String(axisO * (sel ? 0.4 : 1)) : '0';
     }
     if (L) {
       const q = toScreen(L.nowX, 4);
@@ -1402,7 +1417,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
       const n = v.data;
       const vis = v.sc > 0.05 && v.dying < 0;
       const q = toScreen(v.x, v.y);
-      const inView = q.ok && q.y > top && q.y < bottom && q.x > (safe.left > 40 ? safe.left - 8 : -40) && q.x < vp.width + 40;
+      const inView = q.ok && q.y > top && q.y < bottom && !underBrief(q.x) && q.x > -40 && q.x < vp.width + 40;
       let lx = q.x + v.lblDx + Math.sign(v.lblDx) * 11 * (zoom - 1), ly = q.y + v.lblDy - 14 * (zoom - 1);
       if (n.id === sel) {
         lx = q.x + ringPx + 8;
@@ -1517,6 +1532,7 @@ export function createSky(opts: CreateSkyOptions): Sky {
     setSafeArea(area) {
       if (area.top === safe.top && area.right === safe.right && area.bottom === safe.bottom && area.left === safe.left) return;
       safe = { ...area };
+      veilBrief();
       dirtyLayout = true;
     },
     setCardArea(area) {

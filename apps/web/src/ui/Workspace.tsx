@@ -475,6 +475,7 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
           onPick={focus}
           onMark={mark}
           onFind={() => findRef.current?.focus()}
+          floor={() => footRef.current?.getBoundingClientRect().top ?? window.innerHeight}
         />
       )}
       <Toasts items={toasts} onOpen={focus} />

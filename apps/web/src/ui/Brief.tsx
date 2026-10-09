@@ -7,9 +7,9 @@
 // un grupo desplegado muestra hasta 8 filas y pliega el otro; lo que no cabe se busca por nombre. En celular, lo que te
 // espera va completo y los otros dos grupos son una línea cada uno que se despliega (uno a la vez).
 
-import { forwardRef, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DagTask } from '../data/dag';
-import { ROWS, rowsShown, twinTags, type Orientation } from '../data/orient';
+import { ROWS, ROWS_MAX, rowsShown, twinTags, type Orientation } from '../data/orient';
 import { fmtDuration, fmtRelative, t } from '../i18n';
 import { clock, COPY } from './copy';
 
@@ -36,12 +36,33 @@ interface BriefProps {
   onMark: (id: string | null) => void;
   /** Lo que no cabe en las filas se busca por nombre: lleva el foco a «Busca una tarea». */
   onFind: () => void;
+  /** Hasta dónde puede crecer (px desde arriba): el borde del pie. Un grupo desplegado no lo pasa. */
+  floor?: () => number;
 }
 
-export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now, reconnecting, onAnswer, onPick, onMark, onFind }, ref) {
+export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now, reconnecting, onAnswer, onPick, onMark, onFind, floor }, ref) {
   const mobile = useMobile();
+  const self = useRef<HTMLElement>(null);
+  useImperativeHandle(ref, () => self.current as HTMLElement);
   // un grupo desplegado a la vez; en celular, plegado es una sola línea
   const [open, setOpen] = useState<Group | null>(null);
+  // el tope desplegado: 8, o las que quepan sobre el pie (se mide antes de pintar: sin salto)
+  const [fit, setFit] = useState(ROWS_MAX);
+  useLayoutEffect(() => setFit(ROWS_MAX), [open, mobile, o]);
+  useLayoutEffect(() => {
+    const el = self.current;
+    const limit = floor?.() ?? 0;
+    // sin layout (limit 0: jsdom, o el pie todavía sin medir) no se recorta nada
+    if (!el || !open || limit <= 0) return;
+    const over = el.getBoundingClientRect().bottom - (limit - 12);
+    const rowH = el.querySelector('.b-group .b-row')?.getBoundingClientRect().height ?? 44;
+    if (over > 0 && fit > 1) setFit(Math.max(1, fit - Math.ceil(over / rowH)));
+  });
+  useEffect(() => {
+    const on = () => setFit(ROWS_MAX);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
   const quietN = o.moving.filter((x) => x.quiet).length;
   const waiting = o.waiting.length;
   const tags = useMemo(
@@ -130,14 +151,14 @@ export const Brief = forwardRef<HTMLElement, BriefProps>(function Brief({ o, now
     );
   };
 
-  const mv = rowsShown(o.moving.length, open === 'moving', capOf('moving'));
-  const nx = rowsShown(o.next.length, open === 'next', capOf('next'));
+  const mv = rowsShown(o.moving.length, open === 'moving', capOf('moving'), fit);
+  const nx = rowsShown(o.next.length, open === 'next', capOf('next'), fit);
   const wt = rowsShown(waiting, true);
   /** Plegado a su cabecera (celular, o el otro grupo desplegado): sin lista. */
   const listed = (g: Group, rows: ReturnType<typeof rowsShown>) => rows.shown > 0 || (rows.more > 0 && capOf(g) > 0);
 
   return (
-    <nav className={`hud brief${open ? ' open' : ''}`} ref={ref} aria-label={t('brief.label')}>
+    <nav className={`hud brief${open ? ' open' : ''}`} ref={self} aria-label={t('brief.label')}>
       {/* 1 · ¿algo te espera? */}
       {waiting > 0 ? (
         <div className="b-head wait">
