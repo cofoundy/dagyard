@@ -171,6 +171,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .ref:hover { text-decoration-color: var(--star); }
 .toward { margin: 0; }
 .loose-why { color: var(--text) !important; }
+.loose-actions { display: grid; gap: 10px; margin-top: 10px; justify-items: start; }
 .closed b { font-weight: 500; color: var(--star); }
 .kids { display: flex; flex-wrap: wrap; gap: 6px; }
 .kids button { font-size: 12px; color: var(--done-text); background: none; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; cursor: pointer; max-width: 100%; display: inline-flex; gap: 6px; align-items: center; transition: color .2s, border-color .2s; }
@@ -196,6 +197,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .chip.working { color: var(--work); border-color: rgba(159,211,255,.35); }
 .chip.blocked { color: var(--amber); border-color: rgba(255,181,71,.45); }
 .chip.queued { color: var(--mute); }
+.chip.ended { color: var(--mute); border-style: dashed; }
 .msgs { display: grid; gap: 12px; }
 .msg { display: grid; gap: 6px; padding-left: 12px; border-left: 1px solid var(--line); }
 .msg .who { font: 11px var(--font-mono); color: var(--mute); letter-spacing: .04em; }

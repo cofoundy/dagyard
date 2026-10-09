@@ -96,6 +96,24 @@ describe('propósito (#90)', () => {
     expect(relatedOf(m, 'g')).toEqual(new Set(['g', 'c']));
   });
 
+  it('#101: los conteos son de tareas; objetivos, pedidos y trabajo continuo no cuentan', () => {
+    const m = buildDag(
+      snap(
+        [
+          node('g', { kind: 'goal', status: 'working' }),
+          node('r', { kind: 'request', status: 'working', quote: 'quiero cupones' }),
+          node('s', { kind: 'stream', status: 'working' }),
+          node('precios', { status: 'done', closedAs: 'done' }),
+          node('cupones', { status: 'done', closedAs: 'dropped', closedReason: 'no entra' }),
+          node('pagos', { status: 'working' }),
+        ],
+        { origins: [{ from: 'g', to: 'precios' }, { from: 'g', to: 'cupones' }, { from: 'g', to: 'pagos' }, { from: 'g', to: 'r' }, { from: 'g', to: 's' }] },
+      ),
+      NOW,
+    );
+    expect(dagCounts(m)).toMatchObject({ total: 3, working: 1, pending: 0 });
+  });
+
   it('aguanta los datos hostiles', () => {
     const m = buildDag(estresSnapshot(NOW), NOW);
     expect(m.tasks.length).toBe(185);

@@ -378,6 +378,15 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
     }
   };
 
+  /** Un error de «Enlazarlo» o «Dejarla ir» en palabras de la ficha (la sesión vencida vuelve a la entrada). */
+  const rethrowForCard = (e: unknown): never => {
+    if (e instanceof UnauthorizedError) {
+      onUnauthorizedRef.current();
+      throw new Error(COPY.entryExpired);
+    }
+    throw new Error(COPY.sendError);
+  };
+
   /* ---------------------------------------------------------------- vista */
 
   const current = projects?.find((p) => p.id === projectId);
@@ -455,6 +464,8 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
           onClose={overview}
           onFocus={focus}
           onResolve={resolve}
+          onLink={store ? (from, to) => store.link(from, to).catch(rethrowForCard) : undefined}
+          onDrop={store ? (id, why) => store.drop(id, why).catch(rethrowForCard) : undefined}
         />
       )}
       {demo && (

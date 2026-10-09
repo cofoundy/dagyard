@@ -1,12 +1,16 @@
 // El DAG que dibuja la vista (#75 «una sola vista», modelo de #90): cada tarea con cuándo nació, de qué nació (y por
 // qué), qué necesita, qué la necesita, cómo se cerró y si quedó suelta. Puro: snapshot → modelo, sin DOM ni reloj.
 //
-// Con un servidor que ya habla #90 se leen `kind`, `bornAt`, `origins` y `closedAs` tal cual. Con uno anterior se
+// Con un servidor con #90 (docs/api.md §El modelo del DAG) se leen `kind`, `bornAt`, `origins` y `closedAs` tal cual. Con uno anterior se
 // deriva lo mínimo (regla 5 de design/arbol/shared/lineage.js): una tarea nació de su dependencia más antigua nacida
 // antes que ella, y nada más. Esa derivación no se dibuja como «nació de» (repetiría la dependencia): solo ordena filas
 // y arma «cómo llegamos aquí». El resto de lineage.js lee cuerpos de issues de GitHub y es un backfill del servidor
 // (`dagyard backfill-dag`), no lógica de la UI.
 
+import { purposeless } from '@dagyard/model';
+
+/** #90: sin camino por «nació de» a una meta (del modelo, compartido con el servidor). */
+export { purposeless };
 import type { CloseAs, NodeKind, NodeStatus, Snapshot } from './types';
 
 export interface DagOrigin {
@@ -160,35 +164,6 @@ export function buildDag(s: Snapshot, now = Date.now()): DagModel {
   return { tasks, byId, edges, now: Math.max(now, latest), derived, hasGoals };
 }
 
-/**
- * #90 `purposeless` (packages/model de sprint/modelo), copiada mientras no entre a main: los ids de los nodos que no son
- * `goal` y no tienen camino por «nació de» (de `to` hacia `from`) hasta un `goal`. En el orden de `nodes`.
- */
-export function purposeless(nodes: readonly { id: string; kind?: NodeKind }[], origins: readonly { from: string; to: string }[]): string[] {
-  const parents = new Map<string, string[]>();
-  for (const o of origins) (parents.get(o.to) ?? parents.set(o.to, []).get(o.to)!).push(o.from);
-  const kind = new Map(nodes.map((n) => [n.id, n.kind ?? 'task']));
-  const memo = new Map<string, boolean>();
-  const reaches = (start: string): boolean => {
-    const seen = new Set<string>([start]);
-    const q = [start];
-    while (q.length) {
-      const u = q.shift()!;
-      if (kind.get(u) === 'goal' || memo.get(u) === true) return true;
-      for (const p of parents.get(u) ?? []) if (!seen.has(p)) (seen.add(p), q.push(p));
-    }
-    return false;
-  };
-  const out: string[] = [];
-  for (const n of nodes) {
-    if ((n.kind ?? 'task') === 'goal') continue;
-    const ok = reaches(n.id);
-    memo.set(n.id, ok);
-    if (!ok) out.push(n.id);
-  }
-  return out;
-}
-
 function chainOf(byId: Map<string, DagTask>, id: string): DagTask[] {
   const out: DagTask[] = [];
   const seen = new Set<string>();
@@ -236,13 +211,19 @@ export interface DagCounts {
   loose: number;
 }
 
+/**
+ * Lo que el resumen cuenta. «Tareas» son solo `kind: task` (#101): un objetivo, un pedido o un trabajo continuo nacen
+ * `working` y no son trabajo en curso. Lo que te espera y lo suelto sí se cuenta en cualquier tipo.
+ */
 export function dagCounts(m: DagModel): DagCounts {
-  const c = { total: m.tasks.length, working: 0, pending: 0, waiting: 0, loose: 0 };
+  const c = { total: 0, working: 0, pending: 0, waiting: 0, loose: 0 };
   for (const t of m.tasks) {
+    if (t.status === 'blocked') c.waiting++;
+    if (t.loose) c.loose++;
+    if (t.kind !== 'task') continue;
+    c.total++;
     if (t.status === 'working') c.working++;
     else if (t.status === 'pending') c.pending++;
-    else if (t.status === 'blocked') c.waiting++;
-    if (t.loose) c.loose++;
   }
   return c;
 }

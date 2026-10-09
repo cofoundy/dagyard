@@ -8,6 +8,7 @@ import type {
   DagNode as WireNode,
   Edge as WireEdge,
   Message as WireMessage,
+  Origin as WireOrigin,
   ProjectSnapshot as WireSnapshot,
   ProjectSummary as WireProjectSummary,
   ResolveInput as WireResolveInput,
@@ -15,9 +16,8 @@ import type {
   Stage as WireStage,
 } from '@dagyard/model';
 import { REVIEW_OPTIONS } from '@dagyard/model';
-import type { Blocker, DagEvent, DagNode, Edge, Message, ProjectSummary, Resolution, Snapshot, Stage } from './types';
+import type { Blocker, DagEvent, DagNode, Edge, Message, Origin, ProjectSummary, Resolution, Snapshot, Stage } from './types';
 import { t } from '../i18n';
-import { readD12Event, readD12Node, readOrigins } from './d12';
 
 export type {
   WireBlocker,
@@ -25,6 +25,7 @@ export type {
   WireEvent,
   WireMessage,
   WireNode,
+  WireOrigin,
   WireProjectSummary,
   WireResolveInput,
   WireServerFrame,
@@ -51,9 +52,21 @@ export function toNode(n: WireNode): DagNode {
     goal: opt(n.goal),
     reportUrl: opt(n.reportUrl),
     link: opt(n.link),
-    // #90 (kind, bornAt, cita, cierre con motivo) si el servidor lo manda; si no, al menos cuándo nació
-    ...readD12Node(n),
+    // #90: tipo, nacimiento, cita y cierre con motivo. Un servidor anterior no los manda: es una tarea nacida al crearse
+    kind: n.kind ?? 'task',
+    bornAt: n.bornAt ?? n.createdAt,
+    quote: opt(n.quote),
+    quoteBy: opt(n.quoteBy),
+    closedAs: opt(n.closedAs),
+    closedReason: opt(n.closedReason),
+    replacedBy: opt(n.replacedBy),
+    closedAt: opt(n.closedAt),
   };
+}
+
+/** «Nació de» (#90), con su porqué tal como lo escribieron. */
+export function toOrigin(o: Pick<WireOrigin, 'from' | 'to'> & { why?: string | null }): Origin {
+  return o.why ? { from: o.from, to: o.to, why: o.why } : { from: o.from, to: o.to };
 }
 
 export function toEdge(e: WireEdge): Edge {
@@ -121,7 +134,8 @@ export function toSnapshot(w: WireSnapshot): Snapshot {
     stages: w.project.stages.map(toStage),
     nodes: w.nodes.map(toNode),
     edges: w.edges.map(toEdge),
-    origins: readOrigins(w),
+    // sin el campo (servidor anterior a #90) la vista los deduce de las dependencias
+    origins: w.origins?.map(toOrigin),
     blockers: w.blockers.map(toBlocker),
     messages: w.messages.map(toMessage),
     seq: w.seq,
@@ -137,9 +151,6 @@ export function toProjectSummary(p: WireProjectSummary): ProjectSummary {
  * snapshot (`project.replaced`, `project.updated`: cambian etapas o nombre).
  */
 export function toEvent(e: WireEvent): DagEvent | null {
-  // «nació de» (#90): el cable de esta rama todavía no lo tipa
-  const d12 = readD12Event(e as { type: string; seq: number; payload?: unknown });
-  if (d12 !== undefined) return d12;
   switch (e.type) {
     case 'node.added':
       return { seq: e.seq, type: 'node.added', node: toNode(e.payload.node) };
@@ -160,9 +171,11 @@ export function toEvent(e: WireEvent): DagEvent | null {
     case 'project.replaced':
     case 'project.updated':
     case 'team.updated': // #75: hasta que la UI tenga equipos, recarga el snapshot
-    case 'origin.added': // #90: «nació de» todavía no se dibuja
-    case 'origin.removed':
       return null;
+    case 'origin.added':
+      return { seq: e.seq, type: 'origin.added', origin: toOrigin(e.payload.origin) };
+    case 'origin.removed':
+      return { seq: e.seq, type: 'origin.removed', origin: { from: e.payload.origin.from, to: e.payload.origin.to } };
   }
 }
 

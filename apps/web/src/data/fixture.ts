@@ -324,6 +324,22 @@ export class FixtureApi implements AppApi {
     return structuredClone(b);
   }
 
+  async linkOrigin(projectId: string, from: string, to: string, why?: string): Promise<void> {
+    await this.wait();
+    this.requireSession();
+    const p = this.state(projectId);
+    this.node(p, from);
+    this.node(p, to);
+    if (p.snap.origins?.some((o) => o.from === from && o.to === to)) throw new ApiError(409, 'conflict', 'Ya existe.');
+    this.emit(p, { type: 'origin.added', origin: { from, to, ...(why ? { why } : {}) } });
+  }
+
+  async dropNode(projectId: string, nodeId: string, why?: string): Promise<void> {
+    await this.wait();
+    this.requireSession();
+    this.close(projectId, nodeId, 'dropped', why);
+  }
+
   subscribe(projectId: string, sinceSeq: number, handlers: Handlers): () => void {
     const p = this.state(projectId);
     let open = true;

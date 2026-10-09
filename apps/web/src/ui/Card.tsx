@@ -38,6 +38,47 @@ export interface CardProps {
   onClose: () => void;
   onFocus: (nodeId: string) => void;
   onResolve: (blocker: Blocker, resolution: Resolution) => Promise<void>;
+  /** «Enlazarlo» (#90): la tarea suelta nació de esta meta. */
+  onLink?: (from: string, to: string) => Promise<void>;
+  /** «Dejarla ir» (#90): se cierra como descartada y queda en la historia. */
+  onDrop?: (nodeId: string, why: string) => Promise<void>;
+}
+
+/** Lo que se hace con una tarea suelta: atarla a una meta o dejarla ir. El cambio vuelve por el tiempo real. */
+function LooseActions({ task, goals, offline, onLink, onDrop }: { task: DagTask; goals: DagTask[]; offline?: boolean; onLink?: CardProps['onLink']; onDrop?: CardProps['onDrop'] }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setBusy(false);
+    setError(null);
+  }, [task.id]);
+  if (!onLink && !onDrop) return null;
+  const run = (p: Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    p.catch((e: unknown) => setError(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
+  };
+  const locked = busy || !!offline;
+  return (
+    <div className="loose-actions">
+      {onLink && goals.length > 0 && (
+        <div className="kids">
+          <span className="fine">{COPY.linkTo} </span>
+          {goals.map((g) => (
+            <button key={g.id} type="button" disabled={locked} title={g.title} onClick={() => run(onLink(g.id, task.id))}>
+              <span>{g.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {onDrop && (
+        <button type="button" className="ghost" disabled={locked} onClick={() => run(onDrop(task.id, COPY.letGoWhy))}>
+          {busy ? COPY.loosePending : COPY.letGo}
+        </button>
+      )}
+      {error && <p className="err" role="alert">{error}</p>}
+    </div>
+  );
 }
 
 export function Card(props: CardProps) {
@@ -78,7 +119,7 @@ function Sec({ title, children, className }: { title: string; children: ReactNod
   );
 }
 
-function CardBody({ snapshot, node, model: given, offline, onClose, onFocus, onResolve }: CardProps & { node: DagNode }) {
+function CardBody({ snapshot, node, model: given, offline, onClose, onFocus, onResolve, onLink, onDrop }: CardProps & { node: DagNode }) {
   const model = useMemo(() => given ?? buildDag(snapshot), [given, snapshot]);
   const [chainOpen, setChainOpen] = useState(false);
   useEffect(() => setChainOpen(false), [node.id]);
@@ -126,8 +167,22 @@ function CardBody({ snapshot, node, model: given, offline, onClose, onFocus, onR
         )}
       </>
     );
-  else if (task.loose) purpose = <p className="loose-why">{model.hasGoals ? COPY.forLoose : COPY.forLooseLegacy}</p>;
-  else purpose = <p className="fine">{COPY.forUnset}</p>;
+  else if (task.loose)
+    purpose = (
+      <>
+        <p className="loose-why">{model.hasGoals ? COPY.forLoose : COPY.forLooseLegacy}</p>
+        {!task.closedAs && (
+          <LooseActions
+            task={task}
+            goals={model.hasGoals ? model.tasks.filter((t) => t.kind === 'goal' && !t.closedAs) : []}
+            offline={offline}
+            onLink={onLink}
+            onDrop={onDrop}
+          />
+        )}
+      </>
+    );
+  else purpose = <p className="fine">{task.closedAs ? COPY.forClosed : COPY.forUnset}</p>;
 
   // por qué existe: la cita de quien la pidió y de qué nació (con el porqué que dejaron)
   const origins = task.origins.map((o) => ({ ...o, t: get(o.from) })).filter((o) => o.t);
@@ -162,7 +217,8 @@ function CardBody({ snapshot, node, model: given, offline, onClose, onFocus, onR
   return (
     <>
       <div className="top">
-        <span className={`chip ${cls}`}>{STATUS_TEXT[node.status]}</span>
+        {/* una rama que murió (descartada, reemplazada, «aprendimos») nunca se ve como lista (#102) */}
+        <span className={`chip ${ended ? 'ended' : cls}`}>{ended ? CLOSE_TEXT[task.closedAs!] : STATUS_TEXT[node.status]}</span>
         {kindLabel && <span className="chip kind">{kindLabel}</span>}
         <span className="born">{bornLine(task.born, model.now)}</span>
         <button className="x" type="button" aria-label={COPY.close} onClick={onClose}>

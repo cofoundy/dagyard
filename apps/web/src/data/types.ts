@@ -123,6 +123,10 @@ export interface DagyardApi {
   listProjects(): Promise<ProjectSummary[]>;
   getSnapshot(projectId: string): Promise<Snapshot>;
   resolveBlocker(blockerId: string, resolution: Resolution): Promise<Blocker>;
+  /** «Enlazarlo» (#90): `to` nació de `from`, con su porqué. El cambio llega por el tiempo real (`origin.added`). */
+  linkOrigin(projectId: string, from: string, to: string, why?: string): Promise<void>;
+  /** «Dejarlo ir» (#90): descartar; se cierra como `dropped` y queda en la historia. Solo el dueño. */
+  dropNode(projectId: string, nodeId: string, why?: string): Promise<void>;
   /** Devuelve la función para cerrar la suscripción. */
   subscribe(
     projectId: string,

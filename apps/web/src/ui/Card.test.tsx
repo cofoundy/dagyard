@@ -105,3 +105,43 @@ describe('ficha: rótulo del informe según dónde vive', () => {
     }
   });
 });
+
+describe('ficha: una tarea suelta (#90)', () => {
+  const meta: DagNode = { id: 'meta', stageId: 'construccion', title: 'Dagyard v1', status: 'working', progress: 0, kind: 'goal' };
+  const suelta = node({ id: 'suelta', title: 'Algo sin dueño', status: 'pending', progress: 0 });
+  const conMeta: Snapshot = { ...snapshot(suelta), nodes: [meta, suelta], origins: [] };
+
+  it('ofrece atarla a una meta o dejarla ir, y manda lo elegido', async () => {
+    const calls: string[] = [];
+    act(() =>
+      root.render(
+        <Card
+          snapshot={conMeta}
+          node={suelta}
+          onClose={() => {}}
+          onFocus={() => {}}
+          onResolve={async () => {}}
+          onLink={async (from, to) => void calls.push(`link ${from}→${to}`)}
+          onDrop={async (id, why) => void calls.push(`drop ${id}: ${why}`)}
+        />,
+      ),
+    );
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('.loose-actions button')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['Dagyard v1', 'Dejarla ir']);
+    await act(async () => buttons[0]!.click());
+    await act(async () => buttons[1]!.click());
+    expect(calls).toEqual(['link meta→suelta', 'drop suelta: Nadie la necesitaba']);
+  });
+
+  it('una tarea cerrada como descartada no ofrece nada', () => {
+    const cerrada = { ...suelta, status: 'done' as const, closedAs: 'dropped' as const, closedReason: 'no entra' };
+    act(() =>
+      root.render(
+        <Card snapshot={{ ...conMeta, nodes: [meta, cerrada] }} node={cerrada} onClose={() => {}} onFocus={() => {}} onResolve={async () => {}} onLink={async () => {}} onDrop={async () => {}} />,
+      ),
+    );
+    expect(host.querySelector('.loose-actions')).toBeNull();
+    expect(host.textContent).not.toMatch(/Lista/);
+    expect(host.textContent).toMatch(/no entra/);
+  });
+});
