@@ -21,6 +21,8 @@ export interface LayoutTask {
   status: NodeStatus;
   /** Su etiqueta se pinta siempre: se le reserva lugar en la fila. */
   labelled?: boolean;
+  /** Su tallo llega hasta «ahora» (#107: solo lo que se nombra ahí). Sin el campo, lo que está en curso o te espera. */
+  toNow?: boolean;
 }
 
 export interface DagLayoutOptions {
@@ -182,7 +184,7 @@ export function layoutDag(tasks: readonly LayoutTask[], o: DagLayoutOptions): Da
   const stemEnd = new Map<string, number>();
   for (const n of list) {
     let end = Math.max(X.get(n.id)!, ...n.children.filter((c) => X.has(c)).map((c) => X.get(c)!));
-    if (alive(n.status)) end = Math.max(end, nowX);
+    if (n.toNow ?? alive(n.status)) end = Math.max(end, nowX);
     stemEnd.set(n.id, end);
   }
 

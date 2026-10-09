@@ -20,6 +20,22 @@ const CSS = `
   letter-spacing: .06em; text-transform: uppercase; color: #6b7a93; opacity: 0; will-change: transform, opacity; }
 .sky-now { color: #9fd3ff; font-weight: 500; letter-spacing: .1em; }
 .sky-fold { letter-spacing: .12em; transform-origin: 0 0; }
+.sky-more { position: absolute; left: 0; top: 0; white-space: nowrap; font: 400 11px/1 "Geist Mono", ui-monospace, monospace;
+  letter-spacing: .08em; text-transform: uppercase; color: #8fb6d8; background: rgba(9,14,22,.72); border: 1px solid rgba(159,211,255,.22);
+  border-radius: 999px; padding: 6px 10px; cursor: pointer; pointer-events: auto; opacity: 0; will-change: transform, opacity; z-index: 2; }
+.sky-more:hover, .sky-more[aria-expanded="true"] { color: #9fd3ff; border-color: rgba(159,211,255,.5); }
+.sky-more:focus-visible, .sky-more-item:focus-visible { outline: 1px solid #9fd3ff; outline-offset: 2px; }
+.sky-more-list { position: absolute; left: 0; top: 0; width: min(280px, calc(100vw - 24px)); max-height: min(52vh, 420px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 1px; padding: 8px; pointer-events: auto; background: rgba(6,10,16,.96); z-index: 2;
+  border: 1px solid rgba(159,211,255,.16); border-radius: 12px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.sky-more-list[hidden] { display: none; }
+.sky-more-hint { margin: 2px 6px 8px; font: 400 11px/1.4 "Geist", ui-sans-serif, system-ui, sans-serif; color: #6b7a93; }
+.sky-more-item { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 8px; border-radius: 8px;
+  font: 400 12px/1.3 "Geist", ui-sans-serif, system-ui, sans-serif; color: #9fd3ff; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sky-more-item:hover { background: rgba(159,211,255,.08); }
+.sky-more-item.blocked { color: #ffb547; }
+.sky-more-item .pre { color: #6b7a93; }
+@media (pointer: coarse) { .sky-more { padding: 10px 14px; } .sky-more-item { padding: 11px 10px; } }
 .sky-hit { position: absolute; left: 0; top: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; border: 0;
   background: transparent; padding: 0; cursor: pointer; pointer-events: auto; display: none; }
 .sky-hit:focus-visible { outline: 1px solid #9fd3ff; outline-offset: 2px; }

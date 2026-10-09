@@ -9,7 +9,7 @@ import { ApiError, type AppApi } from '../data/session';
 import { ProjectStore, type StoreChange, type StoreState } from '../data/store';
 import { UnauthorizedError, type Blocker, type ProjectSummary, type Resolution } from '../data/types';
 import { buildDag, dagCounts } from '../data/dag';
-import { activityOf, nodeById, openBlockers, toSceneGraph } from '../data/view';
+import { activityOf, nodeById, openBlockers, toSceneGraph, touchedOf } from '../data/view';
 import { lang, type Lang } from '../i18n';
 import {
   isLooking,
@@ -219,7 +219,7 @@ export function Workspace({ api, sky, handlers, demo, onUnauthorized, onLogout }
   }, []);
   // el DAG se recalcula con cada evento; «ahora» es el reloj, salvo que el último nacimiento sea más nuevo
   const model = useMemo(() => (snapshot ? buildDag(snapshot, Math.max(tick, Date.now())) : null), [snapshot, tick]);
-  const graph = useMemo(() => (model && snapshot ? toSceneGraph(model, activityOf(snapshot)) : null), [model, snapshot]);
+  const graph = useMemo(() => (model && snapshot ? toSceneGraph(model, activityOf(snapshot), touchedOf(snapshot)) : null), [model, snapshot]);
   const counts = useMemo(() => (model ? dagCounts(model) : null), [model]);
   const shownProject = useRef<string | null>(null);
   useEffect(() => {
