@@ -1,0 +1,3 @@
+# Salidas de build que la fábrica puede borrar al cerrar un sitio (slots.py reap).
+# Un path o glob por línea, relativo a la raíz del repo.
+apps/worker/public
