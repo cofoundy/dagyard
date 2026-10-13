@@ -26,7 +26,7 @@ export interface LedgerTeam {
   outcome: string | null;
 }
 
-/** El archivo como JSONL (el ledger real) o como un array JSON (una copia ya filtrada, p. ej. `design/tiempo/data/sites.json`). */
+/** El archivo como JSONL (el ledger real) o como un array JSON (una copia ya filtrada, p. ej. `dagyard-design/design/tiempo/data/sites.json`). */
 export function parseLedger(text: string): { rows: LedgerRow[]; invalid: number } {
   const trimmed = text.trim();
   let raw: unknown[];

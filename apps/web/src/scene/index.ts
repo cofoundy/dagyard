@@ -2,7 +2,7 @@
 // celeste, halo, picos de difracción, bloom, niebla, ondas, partículas). El grafo vive en un plano: x = cuándo nació
 // cada tarea (scene/dag-layout.ts), y = su rama. La cámara es de verdad: travelling de grúa al entrar mientras el grafo
 // crece de izquierda a derecha, vuelo a la tarea que abres y regreso, y una órbita lenta en reposo.
-// Concepto aprobado: design/arbol/arbol.html + handoff.md; nota de André: «el artifact no tiene todo eso de las cámaras
+// Concepto aprobado: dagyard-design/design/arbol/arbol.html + handoff.md; nota de André: «el artifact no tiene todo eso de las cámaras
 // y los efectos especiales. está bien en concepto».
 
 import {

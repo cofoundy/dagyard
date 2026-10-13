@@ -155,8 +155,7 @@ Entra con `OWNER_TOKEN` y siembra el ejemplo con `node apps/worker/scripts/seed.
 | `packages/cli` | `dagyard`: el CLI con el que los agentes mueven sus tareas, abren bloqueantes y esperan respuesta |
 | `packages/channel` | Server MCP que Claude Code carga como *channel*: le lleva tus respuestas a la sesión del agente (plugin `dagyard-channel` en `plugin/`) |
 | `packages/mod` | Plugin de Claude Code `dagyard`: la banda sobre el prompt, el menú `/dagyard` y el CLI en `bin/` |
-| `docs/` | Contrato de la API (`docs/api.md`), spec de v0, evidencia de QA, las imágenes del README (`docs/media/`) |
-| `design/` | Referencia visual (`preview-constelacion.html`) y anti-referencias |
+| `docs/` | Contrato de la API (`docs/api.md`), spec de v0 y las imágenes del README (`docs/media/`, la única carpeta con imágenes) |
 
 </details>
 

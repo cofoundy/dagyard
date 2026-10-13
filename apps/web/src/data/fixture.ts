@@ -1,6 +1,6 @@
 // Proyecto de ejemplo en memoria, solo para tests y `pnpm dev:fixture` (el build usa ./http).
 // Es la demo del servidor en el idioma del PM (#83): `demoProject` de @dagyard/model, «Booking marketplace» o
-// «Marketplace de reservas», el grafo del preview (design/preview-constelacion.html): 20 tareas, 5 etapas y
+// «Marketplace de reservas», el grafo del preview (dagyard-design/design/preview-constelacion.html): 20 tareas, 5 etapas y
 // 3 pedidos abiertos (una decisión, una revisión y un acceso). Se le suman informes de ejemplo.
 // `FixtureApi` se porta como el servidor de docs/api.md: emite eventos con `seq`, persiste lo que resuelves
 // durante la sesión del navegador y deja simular comandos del CLI (`dagyard msg|start|done|block|node add|close`).

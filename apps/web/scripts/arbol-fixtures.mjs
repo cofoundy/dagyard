@@ -1,10 +1,11 @@
 // Genera los fixtures de la vista DAG (#75) a partir de datos reales, para `pnpm dev:fixture` y los tests:
-//   src/data/fixtures/dagyard-oct4.json — el proyecto «dagyard» del 4 oct (design/arbol/data/bundle.js) con la forma que
+//   src/data/fixtures/dagyard-oct4.json — el proyecto «dagyard» del 4 oct (design/arbol/data/bundle.js de cofoundy/dagyard-design) con la forma que
 //     tendrá después de #90: la meta, los pedidos de André con su cita y un «nació de» con su porqué para cada tarea,
 //     tal como los escribe la migración (apps/worker/scripts/migrate-d12.data.json de sprint/modelo).
-//   src/data/fixtures/estres.json — los datos hostiles del prototipo (design/arbol/shared/hostile.js): 3 días, títulos de
+//   src/data/fixtures/estres.json — los datos hostiles del prototipo (design/arbol/shared/hostile.js de cofoundy/dagyard-design): 3 días, títulos de
 //     90 caracteres, emoji, RTL, markup, varias esperas y cabos sueltos.
 // Uso (desde la raíz del repo): node apps/web/scripts/arbol-fixtures.mjs <ruta a migrate-d12.data.json>
+//   El diseño vive en cofoundy/dagyard-design (#127): clónalo al lado del repo (../dagyard-design) o pasa DAGYARD_DESIGN=<ruta>.
 //   p. ej. git show origin/sprint/modelo:apps/worker/scripts/migrate-d12.data.json > /tmp/d12.json
 // Determinista: misma entrada, mismos archivos.
 
@@ -15,6 +16,7 @@ import vm from 'node:vm';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..', '..');
+const designRepo = process.env.DAGYARD_DESIGN ?? join(repo, '..', 'dagyard-design');
 const out = join(here, '..', 'src', 'data', 'fixtures');
 const d12Path = process.argv[2];
 if (!d12Path) {
@@ -26,7 +28,7 @@ if (!d12Path) {
 const sandbox = {};
 sandbox.window = sandbox;
 for (const f of ['design/arbol/data/bundle.js', 'design/arbol/shared/lineage.js', 'design/arbol/shared/hostile.js'])
-  vm.runInNewContext(readFileSync(join(repo, f), 'utf8'), sandbox, { filename: f });
+  vm.runInNewContext(readFileSync(join(designRepo, f), 'utf8'), sandbox, { filename: f });
 const { DAGYARD_RAW: RAW, DagyardLineage: lineage, DagyardHostile: hostile } = sandbox;
 const d12 = JSON.parse(readFileSync(d12Path, 'utf8'));
 

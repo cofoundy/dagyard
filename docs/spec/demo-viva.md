@@ -58,6 +58,6 @@ define #75 con prototipos.
 ## Verifica
 
 - `en-US` sin proyecto elegido → abre `booking-marketplace`; `es-PE` → `marketplace-reservas`.
-- 60 s con la demo abierta sin tocar nada: ≥3 cambios en vivo (filmstrip en `docs/qa/demo-viva/`).
+- 60 s con la demo abierta sin tocar nada: ≥3 cambios en vivo (filmstrip en `dagyard-design/docs/qa/demo-viva/`).
 - Tras 10 min de pulso, las 3 cosas siguen abiertas (test con alarmas).
 - Un proyecto que no es demo con un navegador conectado: cero alarmas, cero escrituras (test).

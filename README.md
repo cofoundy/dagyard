@@ -151,8 +151,7 @@ Sign in with `OWNER_TOKEN` and seed the example with `node apps/worker/scripts/s
 | `packages/cli` | `dagyard`: the CLI agents use to move their tasks, open blockers and wait for answers |
 | `packages/channel` | MCP server that Claude Code loads as a *channel*: pushes your answers into the agent's session (plugin `dagyard-channel` in `plugin/`) |
 | `packages/mod` | Claude Code plugin `dagyard`: the band over the prompt, the `/dagyard` menu and the CLI in `bin/` |
-| `docs/` | API contract (`docs/api.md`), v0 spec, QA evidence, README media (`docs/media/`) |
-| `design/` | Visual reference (`preview-constelacion.html`) and anti-references |
+| `docs/` | API contract (`docs/api.md`), v0 spec and the README media (`docs/media/`, the only folder with images) |
 
 </details>
 

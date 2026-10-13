@@ -1,4 +1,4 @@
-// Disposición del DAG (portada de design/arbol/shared/tree-layout.js, concepto aprobado). Pura: tareas → px.
+// Disposición del DAG (portada de dagyard-design/design/arbol/shared/tree-layout.js, concepto aprobado). Pura: tareas → px.
 //
 // x = cuándo nació la tarea. Escala lineal por tramos: lo nacido en los últimos ~40 min gana aire (recentBoost), un
 //     silencio > foldAfter se pliega a foldW px con su rótulo, y los nacimientos a < sameMs comparten momento.
