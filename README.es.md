@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/hero.webp" width="880" alt="El proyecto de ejemplo «Booking marketplace»: el cielo se mueve solo mientras los equipos trabajan, abres la estrella ámbar «Commission model», eliges una respuesta y la estrella se vuelve azul mientras el equipo retoma la tarea">
+  <img src="docs/media/hero.avif" width="880" alt="El proyecto de ejemplo «Booking marketplace»: el cielo se mueve solo mientras los equipos trabajan, abres la estrella ámbar «Commission model», eliges una respuesta y la estrella se vuelve azul mientras el equipo retoma la tarea">
 </p>
 
 Dagyard es para quien lleva un equipo de agentes que programan, casi siempre un PM y no un dev. Las tareas
@@ -27,14 +27,14 @@ español.
 
 ### Todo el plan, de un vistazo
 
-<img src="docs/media/sky.jpg" width="880" alt="La vista general de «Booking marketplace»: cinco etapas de Discovery a Launch, las tareas listas en blanco, las que están en progreso en azul y tres tareas ámbar que te esperan">
+<img src="docs/media/sky.avif" width="880" alt="La vista general de «Booking marketplace»: cinco etapas de Discovery a Launch, las tareas listas en blanco, las que están en progreso en azul y tres tareas ámbar que te esperan">
 
 Las estrellas blancas están listas, las azules están en progreso y las ámbar te esperan. El carril de abajo
 dice cuánto lleva cada etapa, y el encabezado, en qué etapa va el proyecto.
 
 ### Responde desde la ficha
 
-<img src="docs/media/decision.jpg" width="880" alt="La ficha de «Commission model» abierta junto a su estrella: el equipo de Diseño pregunta quién paga la comisión, con dos opciones para elegir">
+<img src="docs/media/decision.avif" width="880" alt="La ficha de «Commission model» abierta junto a su estrella: el equipo de Diseño pregunta quién paga la comisión, con dos opciones para elegir">
 
 Haz clic en una estrella y se abre su ficha: quién la lleva, qué dijo, qué necesita y qué destraba. Si el
 equipo te preguntó algo, la pregunta y sus opciones están ahí mismo. Una decisión es un clic, una revisión es
@@ -42,7 +42,7 @@ aprobar o pedir cambios, y un acceso se pega una sola vez y se guarda cifrado.
 
 ### Se mueve mientras miras
 
-<img src="docs/media/realtime.webp" width="880" alt="Un agente corre «dagyard block» en su terminal y al instante la estrella «Mobile speed check» se vuelve ámbar y el contador pasa de 3 a 4 cosas que te esperan">
+<img src="docs/media/realtime.avif" width="880" alt="Un agente corre «dagyard block» en su terminal y al instante la estrella «Mobile speed check» se vuelve ámbar y el contador pasa de 3 a 4 cosas que te esperan">
 
 Los agentes mueven sus propias tareas con el CLI `dagyard`: arrancar, avanzar, mensajes cortos, una pregunta
 para ti, terminar. Cada cambio aparece en el cielo al instante, para todos los que lo están mirando.
@@ -58,7 +58,7 @@ desde la terminal y el cielo se actualiza. Un acceso nunca se escribe ahí: se d
 
 ### La pestaña te avisa
 
-<img src="docs/media/tab-notice.png" width="880" alt="Una pestaña del navegador con el título «(3) Dagyard» y un punto ámbar en su ícono, junto a otra pestaña">
+<img src="docs/media/tab-notice.avif" width="880" alt="Una pestaña del navegador con el título «(3) Dagyard» y un punto ámbar en su ícono, junto a otra pestaña">
 
 La pestaña del navegador cuenta lo que te espera y su ícono se enciende, así que puedes dejar Dagyard abierto
 y hacer otra cosa. «Avisarme» además deja que el navegador te avise cuando algo nuevo te espera, aunque estés

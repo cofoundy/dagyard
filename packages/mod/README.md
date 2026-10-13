@@ -16,10 +16,10 @@ porque escribe en la misma API.
 - **Menú** (`/dagyard` o «Ver todo»): todo lo anterior a la vez.
 - **Aviso**: cuando se abre algo nuevo que te espera, un toast en ≤20 s.
 
-![La banda sobre el prompt](docs/band.png)
-![Elegir una opción pide confirmarla; el foco empieza en «Cancelar»](docs/confirm.png)
-![El menú abierto con /dagyard en una terminal de 120 columnas](docs/menu.png)
-![El aviso de un bloqueante nuevo, arriba a la derecha](docs/toast.png)
+![La banda sobre el prompt](../../docs/media/mod/band.png)
+![Elegir una opción pide confirmarla; el foco empieza en «Cancelar»](../../docs/media/mod/confirm.png)
+![El menú abierto con /dagyard en una terminal de 120 columnas](../../docs/media/mod/menu.png)
+![El aviso de un bloqueante nuevo, arriba a la derecha](../../docs/media/mod/toast.png)
 
 ## Instalación (un paso)
 
