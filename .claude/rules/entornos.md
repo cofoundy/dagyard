@@ -11,7 +11,7 @@ El account id de Cloudflare de arriba no es un secreto (Cloudflare lo trata como
 
 Secrets del Worker (`wrangler secret bulk`): `OWNER_TOKEN`, `AGENT_KEY`, `VAULT_KEY`; sus valores viven en
 `~/.config/dagyard/{owner-token,agent-key,vault-key}` (chmod 600). Nunca en un commit, issue ni en Basalt.
-El token de Cloudflare del entorno no tiene permiso de D1: el estado vive en Durable Objects con SQLite (#9).
+El token de Cloudflare del entorno no tiene permiso de D1: el estado vive en Durable Objects con SQLite, y así se queda (decidido en #9, ver `docs/spec/v0.md` §Arquitectura).
 
 Verifica: `curl -s <url>/api/health` → 200 con `version` = el sha de `main`; `curl -s -o /dev/null -w '%{http_code}' <url>/api/projects` → 401.
 

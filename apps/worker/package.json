@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "API de Dagyard: Cloudflare Worker + D1 + un Durable Object por proyecto (tiempo real).",
+  "description": "API de Dagyard: Cloudflare Worker + un Durable Object con SQLite para los datos y uno por proyecto para el tiempo real.",
   "scripts": {
     "build": "node scripts/build.mjs && wrangler deploy --dry-run --outdir dist",
     "dev": "node scripts/build.mjs && wrangler dev",
