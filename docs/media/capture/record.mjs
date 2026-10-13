@@ -1,6 +1,6 @@
 // Re-records the README media from the deployed demo. Usage (from the repo root):
 //   node docs/media/capture/record.mjs [sky|decision|tab|hero|realtime|all]
-// Writes docs/media/{sky.jpg, decision.jpg, tab-notice.png, hero.webp, realtime.webp}. The takes that answer or
+// Writes docs/media/{sky.avif, decision.avif, tab-notice.avif, hero.avif, realtime.avif}. The takes that answer or
 // open a blocker re-seed the demo first and again at the end (apps/worker/scripts/seed.mjs).
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -11,14 +11,27 @@ const seed = () => execFileSync('node', [join(ROOT, 'apps/worker/scripts/seed.mj
 const ffmpeg = (...args) => execFileSync('ffmpeg', ['-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
 const glide = (page, x, y) => page.mouse.move(x, y, { steps: 30 });
 
-/** ffconcat list → animated WebP (GitHub renders it inline; a GIF of this sky weighs 4× more and bands). */
-function webp(list, out, vf = '', quality = 80) {
+// AVIF (AV1) for everything that is not a terminal: the README media has a budget of 1 MB in total (#127).
+// `-crf` is the knob: higher is lighter; the text stays sharp up to ~38 at these sizes.
+const AV1 = ['-c:v', 'libaom-av1', '-b:v', '0', '-cpu-used', '3', '-row-mt', '1'];
+
+/** ffconcat list → animated AVIF that loops (GitHub serves it as image/avif and renders it inline). AV1 predicts
+ *  between frames, so this always-moving sky weighs ~10× less than as an animated WebP (which only encodes each
+ *  frame on its own: 4.4 MB for the hero) and ~15× less than as a GIF. */
+function avif(list, out, vf = '', crf = 38) {
   const mp4 = list.replace(/list\.txt$/, 'src.mp4');
   ffmpeg('-f', 'concat', '-safe', '0', '-i', list, '-vf', 'fps=30', '-c:v', 'libx264', '-crf', '14', '-pix_fmt', 'yuv420p', mp4);
-  ffmpeg('-i', mp4, '-vf', `${vf}fps=15,scale=1040:-1:flags=lanczos`, '-c:v', 'libwebp_anim', '-quality', String(quality), '-compression_level', '4', '-loop', '0', '-an', out);
+  ffmpeg('-i', mp4, '-vf', `${vf}fps=15,scale=1040:-1:flags=lanczos`, ...AV1, '-crf', String(crf), '-g', '300', '-pix_fmt', 'yuv420p', '-an', out);
 }
 
-const jpg = (png, out) => ffmpeg('-i', png, '-vf', 'scale=1920:-1:flags=lanczos', '-q:v', '3', out);
+/** A screenshot → still AVIF, 1760 px wide (2× the 880 px the README shows). */
+const still = (png, out) =>
+  ffmpeg('-i', png, '-vf', 'scale=1760:-1:flags=lanczos', ...AV1, '-still-picture', '1', '-crf', '28', '-pix_fmt', 'yuv420p', out);
+
+/** A screenshot with transparency → still AVIF that keeps it (the alpha goes as its own plane). */
+const stillAlpha = (png, out) =>
+  ffmpeg('-i', png, '-filter_complex', '[0]format=yuva444p,split[c][a];[a]alphaextract[al]', '-map', '[c]', '-map', '[al]',
+    ...AV1, '-still-picture', '1', '-crf', '26', '-pix_fmt:0', 'yuv420p', '-pix_fmt:1', 'gray', out);
 
 const takes = {
   /** The overview and the tab title + favicon, read from the live page. */
@@ -30,7 +43,7 @@ const takes = {
     const tab = await s.page.evaluate(() => ({ title: document.title, icon: document.querySelector('link[rel~="icon"]')?.href }));
     writeFileSync(join(OUT, 'tab.json'), JSON.stringify(tab));
     await s.close();
-    jpg(join(OUT, 'sky.png'), join(MEDIA, 'sky.jpg'));
+    still(join(OUT, 'sky.png'), join(MEDIA, 'sky.avif'));
   },
 
   /** The card of «Commission model» with its open decision, the pointer on the first option. */
@@ -46,7 +59,7 @@ const takes = {
     if (!(await calm(s.page))) throw new Error('decision: the toasts never cleared');
     await s.page.screenshot({ path: join(OUT, 'decision.png') });
     await s.close();
-    jpg(join(OUT, 'decision.png'), join(MEDIA, 'decision.jpg'));
+    still(join(OUT, 'decision.png'), join(MEDIA, 'decision.avif'));
   },
 
   /** The browser tab: title and favicon are the real ones (tab.json, from `sky`); the tab strip is drawn. */
@@ -59,8 +72,9 @@ const takes = {
       .replace('{{SHOT}}', shot);
     const s = await open({ width: 1200, height: 500, scale: 2 });
     await s.page.setContent(html);
-    await s.page.locator('.win').screenshot({ path: join(MEDIA, 'tab-notice.png'), omitBackground: true });
+    await s.page.locator('.win').screenshot({ path: join(OUT, 'tab-notice.png'), omitBackground: true });
     await s.close();
+    stillAlpha(join(OUT, 'tab-notice.png'), join(MEDIA, 'tab-notice.avif'));
   },
 
   /** The hero: the sky alive → fly into «Commission model» → answer the decision → back to the overview. */
@@ -93,7 +107,7 @@ const takes = {
     const list = await rec.stop();
     await s.close();
     seed();
-    webp(list, join(MEDIA, 'hero.webp'), 'trim=start=2,setpts=(PTS-STARTPTS)/1.3,', 88); // 88: lower shows blocks while the camera flies
+    avif(list, join(MEDIA, 'hero.avif'), 'trim=start=2,setpts=(PTS-STARTPTS)/1.3,', 36); // 36: ~370 KB; 38 loses the faintest stars
   },
 
   /** Real time: a REAL `dagyard block` (as an agent would run it) and the sky reacting. The terminal window is
@@ -132,7 +146,7 @@ const takes = {
     const list = await rec.stop();
     await s.close();
     seed();
-    webp(list, join(MEDIA, 'realtime.webp'));
+    avif(list, join(MEDIA, 'realtime.avif'));
   },
 };
 

@@ -318,7 +318,7 @@ describe('project.replaced conserva el createdAt de los bloqueantes del cuerpo (
 
 /* ------------------------------------------------------------------ import-ledger */
 
-describe('import-ledger sobre una copia de design/tiempo/data/sites.json (#75)', () => {
+describe('import-ledger sobre una copia de dagyard-design/design/tiempo/data/sites.json (#75)', () => {
   /** Lo que hace `dagyard import-ledger`: lee el snapshot, calcula el parche de cada equipo y manda solo los que cambian. */
   async function importLedger(pid: string): Promise<number> {
     const { rows } = parseLedger(JSON.stringify(sitesCopy));

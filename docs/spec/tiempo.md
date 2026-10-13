@@ -2,12 +2,12 @@
 
 > Intención: §1 Mensaje 9 (2026-10-04 14:05): «q esta plataforma reemplace el reporte de factory para q
 > tenga seecuencia temporal, q podamos ver cuando abrieron cada agente y q los nuevos se vayan
-> desplegando, also no se xq siempre lo pones como matriz». Diseño: `design/tiempo/handoff.md`
+> desplegando, also no se xq siempre lo pones como matriz». Diseño: `dagyard-design/design/tiempo/handoff.md`
 > (prototipos A, B y C; la elección de André queda en el bloqueante de `gh-75`).
 
 > **Estado (2026-10-04 18:30 -05).** Entra a `main` solo la base: equipos, tiempos por tarea e
 > `import-ledger`. La vista «Timeline» de abajo **quedó descartada**: André rechazó los prototipos A, B y C
-> (`design/tiempo/`) y pidió una sola vista, el DAG que crece en el tiempo (intención §1 Mensajes 10 y 11,
+> (`dagyard-design/design/tiempo/`) y pidió una sola vista, el DAG que crece en el tiempo (intención §1 Mensajes 10 y 11,
 > D12). Su modelo lo define `docs/spec/modelo.md` (#90) y la vista sigue en #75 sobre esa base.
 
 ## Qué ve el PM (descartado, se conserva como registro)
@@ -53,7 +53,7 @@ Dagyard (`/?p=<proyecto>&v=timeline`), ya no `harvest.py` → Basalt.
 
 ## Web (descartado: lo reemplaza la vista del DAG)
 
-La variante elegida en `gh-75` (por defecto A, «Team lanes»), portada desde `design/tiempo/` según su
+La variante elegida en `gh-75` (por defecto A, «Team lanes»), portada desde `dagyard-design/design/tiempo/` según su
 `handoff.md`: el modelo puro `apps/web/src/data/timeline.ts` (desde `shared/timeline.js`), la escena de
 la vista en el tiempo, el transporte (play, scrub, velocidad, Now) y el switch Plan · Timeline. Con
 `teams` del servidor cuando existen; con la inferencia del prototipo (issue → sitio, nombre del team)
@@ -64,4 +64,4 @@ para los datos viejos. Textos por el catálogo i18n (`timeline.*`). El link dire
 - `pnpm typecheck && pnpm test && pnpm build` con exit 0.
 - `dagyard import-ledger` sobre el ledger real dos veces: la segunda, 0 eventos.
 - En la preview, `/?p=dagyard&v=timeline` muestra los 24 equipos de hoy en orden de llegada y la
-  reproducción corre de 00:35 a ahora (filmstrip en `docs/qa/tiempo/`).
+  reproducción corre de 00:35 a ahora (filmstrip en `dagyard-design/docs/qa/tiempo/`).

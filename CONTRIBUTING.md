@@ -17,9 +17,11 @@ Gracias por ayudar. Issues y pull requests son bienvenidos en español o en ingl
 
 - **The UI speaks to PMs, in Peruvian Spanish.** Use accents and opening marks (¿ ¡), *tuteo*, never
   *voseo* («puedes», not «podés»). No technical jargon on screen: no ids, file names or branch names.
-- **Visual bar:** `design/preview-constelacion.html` is the reference; changes to the sky should look as
-  polished or better. `design/2026-10-03-anti-ref-*.png` show what Dagyard is not (KPI dashboards,
-  sidebars, kanban).
+- **Visual bar:** the sky as it is today is the reference; changes should look as polished or better.
+  Dagyard is not a KPI dashboard, a sidebar app or a kanban board.
+- **Code only.** Images live in `docs/media/` (the README) and nowhere else; QA screenshots go to the
+  issue or the pull request, never to the repo. CI fails if the tree grows past 8 MB or an image lands
+  outside `docs/media/`, so a clone stays fast.
 - **Never commit secrets.** Tokens live in `apps/worker/.dev.vars` (ignored) or `~/.config/dagyard/`.
   Tests use obviously fake values.
 

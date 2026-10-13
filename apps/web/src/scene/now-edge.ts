@@ -2,7 +2,7 @@
 //
 // Un hilo con nombre por cada tarea abierta, con 13+ abiertas, vuelve a leerse como carriles (lo que André rechazó,
 // intención §1 Mensaje 10). Se nombra solo lo que te espera y lo que cambió en la última hora, hasta `max`; el resto
-// abierto queda en un grupo «+N más en curso» que se despliega (design/arbol/handoff.md, abierto 1).
+// abierto queda en un grupo «+N más en curso» que se despliega (dagyard-design/design/arbol/handoff.md, abierto 1).
 
 import type { SceneNode } from './contract';
 

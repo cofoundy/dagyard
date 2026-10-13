@@ -2,7 +2,7 @@
 // qué), qué necesita, qué la necesita, cómo se cerró y si quedó suelta. Puro: snapshot → modelo, sin DOM ni reloj.
 //
 // Con un servidor con #90 (docs/api.md §El modelo del DAG) se leen `kind`, `bornAt`, `origins` y `closedAs` tal cual. Con uno anterior se
-// deriva lo mínimo (regla 5 de design/arbol/shared/lineage.js): una tarea nació de su dependencia más antigua nacida
+// deriva lo mínimo (regla 5 de dagyard-design/design/arbol/shared/lineage.js): una tarea nació de su dependencia más antigua nacida
 // antes que ella, y nada más. Esa derivación no se dibuja como «nació de» (repetiría la dependencia): solo ordena filas
 // y arma «cómo llegamos aquí». El resto de lineage.js lee cuerpos de issues de GitHub y es un backfill del servidor
 // (`dagyard backfill-dag`), no lógica de la UI.

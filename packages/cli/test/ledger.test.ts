@@ -202,12 +202,12 @@ describe('dagyard import-ledger', () => {
       file,
       [
         { site: 'tiempo', event: 'started', ts: '2026-10-04T19:07:42Z', repo: 'dagyard' },
-        { site: 'wsp', event: 'started', ts: '2026-10-04T19:07:42Z', repo: 'pets-marketplace' },
+        { site: 'wsp', event: 'started', ts: '2026-10-04T19:07:42Z', repo: 'otro-repo' },
       ]
         .map((r) => JSON.stringify(r))
         .join('\n'),
     );
-    await cli(['import-ledger', file, '--repo', 'pets-marketplace']);
+    await cli(['import-ledger', file, '--repo', 'otro-repo']);
     expect([...teams.keys()]).toEqual(['wsp']);
 
     const repo = mkdtempSync(join(tmpdir(), 'repo-'));

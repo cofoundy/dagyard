@@ -1,5 +1,5 @@
 // Cámara y coreografía de la vista DAG: matemática pura (sin WebGL), la escena la usa cuadro a cuadro y los tests la
-// fijan. El lenguaje es el de la constelación (#74, docs/qa/demo-viva/DISENO.md en demo/escena): travelling de grúa en
+// fijan. El lenguaje es el de la constelación (#74, dagyard-design/docs/qa/demo-viva/DISENO.md en demo/escena): travelling de grúa en
 // la entrada, vuelo a una tarea al abrir su ficha y regreso, órbita lenta en reposo y luz que viaja por las líneas.
 
 import type { PerspectiveCamera } from 'three';

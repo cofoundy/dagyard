@@ -1,7 +1,7 @@
 // HUD en los bordes: marca + proyecto (abre el selector) arriba a la izquierda, con la brújula debajo (Brief.tsx, #109:
 // lo que te espera con su «Responder», lo que está en curso y lo que sigue); arriba a la derecha «Avísame»; abajo la
 // instrucción con la leyenda de las líneas, «Busca una tarea» y «Repetir»; avisos arriba al centro. Todo lo demás se
-// hace tocando estrellas (design/arbol/handoff.md, design/orientacion/handoff.md).
+// hace tocando estrellas (dagyard-design/design/arbol/handoff.md, dagyard-design/design/orientacion/handoff.md).
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import type { DagModel, DagTask } from '../data/dag';

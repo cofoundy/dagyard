@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/hero.webp" width="880" alt="The example project «Booking marketplace»: the sky moves on its own as the teams work, you open the amber star «Commission model», pick an answer, and the star turns blue while the team picks the task back up">
+  <img src="docs/media/hero.avif" width="880" alt="The example project «Booking marketplace»: the sky moves on its own as the teams work, you open the amber star «Commission model», pick an answer, and the star turns blue while the team picks the task back up">
 </p>
 
 Dagyard is for the person who runs a team of coding agents, usually a PM and not a developer. Tasks are
@@ -24,14 +24,14 @@ answer reaches the agent the moment you give it.
 
 ### The whole plan, in one look
 
-<img src="docs/media/sky.jpg" width="880" alt="The overview of «Booking marketplace»: five stages from Discovery to Launch, finished tasks in white, tasks in progress in blue and three amber tasks waiting for you">
+<img src="docs/media/sky.avif" width="880" alt="The overview of «Booking marketplace»: five stages from Discovery to Launch, finished tasks in white, tasks in progress in blue and three amber tasks waiting for you">
 
 White stars are done, blue ones are being worked on, amber ones are waiting for you. The rail at the bottom
 says how far each stage is, and the header says where the project is now.
 
 ### Answer from the card
 
-<img src="docs/media/decision.jpg" width="880" alt="The card of «Commission model» open next to its star: the Design team asks who should pay the commission, with two options to pick from">
+<img src="docs/media/decision.avif" width="880" alt="The card of «Commission model» open next to its star: the Design team asks who should pay the commission, with two options to pick from">
 
 Click a star and its card opens: who is on it, what they said, what it needs and what it unlocks. When the
 team asked you something, the question and its options are right there. A decision is one click, a review is
@@ -39,7 +39,7 @@ approve or ask for changes, and an access is pasted once and stored encrypted.
 
 ### It moves while you watch
 
-<img src="docs/media/realtime.webp" width="880" alt="An agent runs «dagyard block» from its terminal and right away the star «Mobile speed check» turns amber and the counter goes from 3 to 4 waiting for you">
+<img src="docs/media/realtime.avif" width="880" alt="An agent runs «dagyard block» from its terminal and right away the star «Mobile speed check» turns amber and the counter goes from 3 to 4 waiting for you">
 
 Agents move their own tasks with the `dagyard` CLI: start, progress, short messages, a question for you,
 done. Every change shows up in the sky right away, for everyone looking at it.
@@ -55,7 +55,7 @@ answer from the terminal and the sky updates. Access values are never typed here
 
 ### The tab tells you
 
-<img src="docs/media/tab-notice.png" width="880" alt="A browser tab titled «(3) Dagyard» with an amber dot on its icon, next to another tab">
+<img src="docs/media/tab-notice.avif" width="880" alt="A browser tab titled «(3) Dagyard» with an amber dot on its icon, next to another tab">
 
 The browser tab counts what waits for you and its icon lights up, so you can leave Dagyard open and do
 something else. «Notify me» also lets the browser alert you when something new needs you, even from another tab.
@@ -151,8 +151,7 @@ Sign in with `OWNER_TOKEN` and seed the example with `node apps/worker/scripts/s
 | `packages/cli` | `dagyard`: the CLI agents use to move their tasks, open blockers and wait for answers |
 | `packages/channel` | MCP server that Claude Code loads as a *channel*: pushes your answers into the agent's session (plugin `dagyard-channel` in `plugin/`) |
 | `packages/mod` | Claude Code plugin `dagyard`: the band over the prompt, the `/dagyard` menu and the CLI in `bin/` |
-| `docs/` | API contract (`docs/api.md`), v0 spec, QA evidence, README media (`docs/media/`) |
-| `design/` | Visual reference (`preview-constelacion.html`) and anti-references |
+| `docs/` | API contract (`docs/api.md`), v0 spec and the README media (`docs/media/`, the only folder with images) |
 
 </details>
 

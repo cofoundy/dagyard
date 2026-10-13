@@ -1,6 +1,6 @@
 /**
  * La demo, en dos idiomas (#74): «Booking marketplace» (en) y «Marketplace de reservas» (es). Los 20 nodos
- * de design/preview-constelacion.html con sus 3 bloqueantes; el mismo grafo en los dos, solo cambia el texto.
+ * de dagyard-design/design/preview-constelacion.html con sus 3 bloqueantes; el mismo grafo en los dos, solo cambia el texto.
  * La siembra el Worker (`PUT /api/projects/<id>`) y la UI puede usarla como fixture local. Sin nada de un
  * cliente real (NDA). Lo que la mueve sola mientras alguien la mira está en demo-pulse.ts.
  */
