@@ -20,6 +20,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      # solo código (#127): el árbol ≤8 MB y ninguna imagen fuera de docs/media/, para que el plugin se instale en segundos
+      - run: node scripts/repo-weight.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
