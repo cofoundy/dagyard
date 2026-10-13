@@ -20,6 +20,11 @@ stars, dependencies are the lines between them, and stages are the constellation
 stage the project is in, you only get what is yours to answer (a decision, a review, an access) and the
 answer reaches the agent the moment you give it.
 
+Under the hood it is a **real-time DAG** (a task graph) for **AI coding agents**: agents running in
+**Claude Code** or any terminal report tasks, progress and questions through a small CLI, the plan updates live
+over WebSocket, and the human-in-the-loop answer travels back to the agent. It ships as a **Claude Code
+plugin** (a status band, a `/dagyard` menu and an optional MCP channel) and self-hosts on Cloudflare Workers.
+
 ## What you get
 
 ### The whole plan, in one look

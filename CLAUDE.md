@@ -7,4 +7,5 @@
 - Stack: Cloudflare Worker + Durable Objects con SQLite (sin D1, #9), Vite + React + three.js, pnpm. Receta de deploy: `~/cofoundy/products/basalt`.
 - Gates por exit code: `pnpm typecheck`, `pnpm test`, `pnpm build`. Nunca commitees tokens; el token de dueño vive en `~/.config/dagyard/owner-token`.
 - `main` se toca vía PR (products/* = Tier B).
+- Repos (#127): este es el público `cofoundy/dagyard`; la historia anterior al 2026-10-13 vive en `cofoundy/dagyard-dev` (archivado; remoto `dev`) y el diseño en `cofoundy/dagyard-design`. Los commits van con el correo noreply de GitHub (`git config user.email`); una rama basada en la historia vieja no se empuja: rebásala sobre `origin/main` (el `pre-push` local lo frena).
 - Dogfooding: este repo es el proyecto «dagyard» en Dagyard (`.dagyard.json`); un sitio sigue `docs/dogfooding.md` (start, msg, block, done sobre su nodo `gh-<issue>`).
