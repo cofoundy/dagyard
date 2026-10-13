@@ -20,6 +20,11 @@ son estrellas, las dependencias son las líneas entre ellas y las etapas son las
 vistazo en qué etapa va el proyecto, recibes solo lo que te toca responder (una decisión, una revisión, un
 acceso) y la respuesta le llega al agente en el momento en que la das.
 
+Por dentro es un **DAG en tiempo real** (un grafo de tareas) para **agentes de IA que programan**: los agentes
+que corren en **Claude Code** o en cualquier terminal reportan tareas, avance y preguntas con un CLI pequeño,
+el plan se actualiza en vivo por WebSocket y tu respuesta vuelve al agente. Viene como **plugin de Claude
+Code** (una banda de estado, el menú `/dagyard` y un canal MCP opcional) y se autoaloja en Cloudflare Workers.
+
 Las capturas son de la demo en inglés; con el sistema en español, la interfaz, el CLI y el mod hablan
 español.
 
