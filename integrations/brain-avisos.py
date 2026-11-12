@@ -148,6 +148,22 @@ def handle(raw: str, project: str, para: str, sent: "Sent") -> None:
         resolved(line)
 
 
+def backfill(cli: str, project: str, para: str, sent: "Sent") -> None:
+    """Reenvía el aviso de cada pregunta abierta que aún no lo tiene (un DM que falló, un servicio que estuvo caído).
+
+    `watch --once` sin cursor lista lo que ya espera; la tarea de brain no se duplica porque va por su clave.
+    """
+    r = subprocess.run([cli, "watch", "--json", "--once", "--project", project], capture_output=True, text=True,
+                       env={**os.environ, "LANG": "es_PE.UTF-8"}, timeout=60)
+    for raw in r.stdout.splitlines():
+        try:
+            line = json.loads(raw)
+        except ValueError:
+            continue
+        if line.get("type") == "blocker.opened" and line["blocker"] not in sent:
+            opened(line, project, para, sent)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--project", required=True)
@@ -158,7 +174,10 @@ def main() -> int:
     cursor = Path.home() / f".config/dagyard/watch/avisos-{a.project}.cursor"
     cursor.parent.mkdir(parents=True, exist_ok=True)
     sent = Sent(cursor.with_suffix(".sent"))
+    if not os.environ.get("BUZZ_CC_PRIVATE_KEY"):
+        print("brain-avisos: falta $BUZZ_CC_PRIVATE_KEY; los avisos al teléfono no saldrán (ver integrations/README.md)", flush=True)
     while True:
+        backfill(cli, a.project, a.para, sent)
         argv = [cli, "watch", "--json", "--cursor", str(cursor), "--project", a.project]
         if a.once:
             argv.append("--once")
