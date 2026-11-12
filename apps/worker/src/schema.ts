@@ -174,6 +174,16 @@ export const MIGRATIONS: string[][] = [
 ];
 
 /**
+ * La versión de esquema que este código conoce. El Worker se la manda al `Store` en cada llamada: tras un deploy, el
+ * `Store` puede seguir unos minutos con el código anterior (sin la migración) y, si sabe que es más viejo, responde
+ * «actualizándose» (503) en vez de fallar con `no such column` o descartar campos nuevos (#134).
+ */
+export const SCHEMA_VERSION = MIGRATIONS.length;
+
+/** Lo que devuelve el `batch` de un `Store` más viejo que quien lo llama. */
+export const STORE_STALE = 'dagyard: store-stale' as const;
+
+/**
  * Lleva el SQL a la versión `upTo` (por defecto, la última). Cada versión corre una sola vez, en orden; el llamador
  * la envuelve en una transacción. Los tests la usan para preparar una base vieja y migrarla.
  */

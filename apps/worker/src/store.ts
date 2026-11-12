@@ -2,6 +2,7 @@
 import { MESSAGES_IN_SNAPSHOT, type DagEvent, type DagNode, type Edge, type Project, type ProjectSnapshot } from '@dagyard/model';
 import type { Db, Row } from './db.js';
 import type { Env } from './env.js';
+import { SCHEMA_VERSION } from './schema.js';
 import { ApiFailure, notFound } from './http.js';
 import { BLOCKER_COLS, TEAMS_ORDER, toBlocker, toEdge, toEvent, toMessage, toNode, toOrigin, toProject, toTeam } from './rows.js';
 import type { Idem, WriteOp, WriteValues } from './writes.js';
@@ -130,7 +131,7 @@ export async function write<K extends WriteOp['kind']>(
     let res;
     try {
       // un stub nuevo por intento: tras una excepción el anterior puede quedar roto
-      res = await env.STORE.get(env.STORE.idFromName('db')).write(op, idem);
+      res = await env.STORE.get(env.STORE.idFromName('db')).write(op, idem, SCHEMA_VERSION);
     } catch (err) {
       const failure = unavailableFailure(err);
       if (!failure || failure.code === 'overloaded') throw failure ?? err;

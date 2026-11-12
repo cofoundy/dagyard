@@ -7,7 +7,7 @@ import { DurableObject } from 'cloudflare:workers';
 import type { DagEvent } from '@dagyard/model';
 import type { Env } from './env.js';
 import { ApiFailure } from './http.js';
-import { migrate } from './schema.js';
+import { migrate, SCHEMA_VERSION, STORE_STALE } from './schema.js';
 import { publish } from './store.js';
 import { runWrite, type Idem, type WriteOp, type WriteResult } from './writes.js';
 
@@ -65,10 +65,15 @@ class StoreDb implements Db {
   }
   async batch<T = Row>(stmts: Stmt[]): Promise<Array<{ results: T[] }>> {
     if (!stmts.length) return [];
-    const rows = (await this.ns.get(this.ns.idFromName('db')).batch(stmts.map((s) => s.query))) as T[][];
+    const out = await this.ns.get(this.ns.idFromName('db')).batch(stmts.map((s) => s.query), SCHEMA_VERSION);
+    // #134: el Store sigue con el código anterior al deploy; en unos segundos carga el nuevo
+    if (out === STORE_STALE) throw new ApiFailure('unavailable', UPDATING);
+    const rows = out as T[][];
     return rows.map((results) => ({ results }));
   }
 }
+
+const UPDATING = 'El servidor se está actualizando. Inténtalo de nuevo en unos segundos.';
 
 const cache = new WeakMap<object, Db>();
 
@@ -99,7 +104,9 @@ export class Store extends DurableObject<Env> {
   }
 
   /** Una escritura completa (leer, validar, escribir, eventos y su clave de idempotencia) en una transacción. Ver writes.ts. */
-  async write(op: WriteOp, idem?: Idem): Promise<WriteResult> {
+  async write(op: WriteOp, idem?: Idem, want = 0): Promise<WriteResult> {
+    // #134: un Worker más nuevo que este Store espera columnas que aquí no existen; nada se escribe
+    if (want > SCHEMA_VERSION) return { ok: false, error: { code: 'unavailable', message: UPDATING } };
     try {
       const now = this.tick();
       const { value, events, incarnation } = this.ctx.storage.transactionSync(() => runWrite(this.ctx.storage.sql, op, idem, now));
@@ -133,7 +140,7 @@ export class Store extends DurableObject<Env> {
       )
       .toArray();
     for (const b of due) {
-      const res = await this.write({ kind: 'expireBlocker', pid: b.project_id, bid: b.id });
+      const res = await this.write({ kind: 'expireBlocker', pid: b.project_id, bid: b.id }, undefined, SCHEMA_VERSION);
       if (!res.ok) {
         console.error(JSON.stringify({ msg: 'no pude aplicar el default', pid: b.project_id, bid: b.id, error: res.error }));
         continue;
@@ -148,7 +155,9 @@ export class Store extends DurableObject<Env> {
     await this.armDue();
   }
 
-  batch(queries: Query[]): Row[][] {
+  /** Con `want` mayor que el esquema de este código, no corre nada y devuelve la marca `STORE_STALE` (#134). */
+  batch(queries: Query[], want = 0): Row[][] | typeof STORE_STALE {
+    if (want > SCHEMA_VERSION) return STORE_STALE;
     const sql = this.ctx.storage.sql;
     return this.ctx.storage.transactionSync(() => queries.map((q) => sql.exec(q.sql, ...q.params).toArray() as Row[]));
   }

@@ -12,6 +12,7 @@ import { isDemoProject, type DagEvent, type PulseStep, type ServerFrame } from '
 import { sessionAlive } from './auth.js';
 import { db } from './db.js';
 import type { Env } from './env.js';
+import { SCHEMA_VERSION } from './schema.js';
 import { liveState } from './store.js';
 import type { WriteOp } from './writes.js';
 
@@ -181,7 +182,7 @@ export class ProjectRoom extends DurableObject<Env> {
    * como dueño). El broadcast va FUERA de `serial()`: broadcast entra solo a la fila, y anidarlo la traba.
    */
   private async pulseWrite(pid: string, op: Extract<WriteOp, { kind: 'demoBeat' | 'demoReseed' }>): Promise<unknown> {
-    const res = await this.env.STORE.get(this.env.STORE.idFromName('db')).write(op);
+    const res = await this.env.STORE.get(this.env.STORE.idFromName('db')).write(op, undefined, SCHEMA_VERSION);
     if (!res.ok) {
       console.error(JSON.stringify({ msg: 'el pulso no pudo escribir', pid, op: op.kind, error: res.error }));
       return undefined;
