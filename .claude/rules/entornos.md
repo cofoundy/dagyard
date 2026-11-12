@@ -16,3 +16,5 @@ El token de Cloudflare del entorno no tiene permiso de D1: el estado vive en Dur
 Verifica: `curl -s <url>/api/health` → 200 con `version` = el sha de `main`; `curl -s -o /dev/null -w '%{http_code}' <url>/api/projects` → 401.
 
 `/api/health` no pasa por el Durable Object `Store`: tras un deploy da el sha nuevo enseguida, pero el `Store` puede seguir con el código viejo ~2 min (medido el 2026-10-09 en #110: deploy 17:57:35Z, el 409 con `reason` apareció a las 17:59:48Z). Si el cambio toca el `Store` (`writes.ts`, `db.ts`), sondea el efecto (la respuesta de la escritura) hasta verlo, no el `health`.
+
+Un deploy que agrega una migración deja al `Store` viejo hasta ~5 min (medido el 2026-11-11 en #134: 22:40:55 → 22:45:49 -05). Desde #134 el Worker le manda al `Store` la versión de esquema que espera y un `Store` más viejo responde `503 unavailable` («se está actualizando») sin leer ni escribir; antes daba `500 no such column` y descartaba campos nuevos. Tras un deploy con migración, sondea un `GET /api/projects/<p>` hasta el 200 antes de dar por desplegado.
