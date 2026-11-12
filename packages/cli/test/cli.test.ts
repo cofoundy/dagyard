@@ -545,6 +545,13 @@ describe('block + wait', () => {
     expect((await cli(['block', 'pagos', '--kind', 'access', '--q', 'clave', '--label', 'x', '--default', 'a', '--due', '1h'])).code).toBe(EXIT.usage);
   });
 
+  it('#131: --deadline es alias de --due', async () => {
+    const b = await cli(['block', 'pagos', '--kind', 'decision', '--q', '¿?', '--opt', 'A', '--opt', 'B', '--default', 'A', '--deadline', '2h']);
+    expect(b.code).toBe(0);
+    expect(blockers.get(b.stdout.trim())!.defaultChoice).toBe('A');
+    expect((await cli(['block', 'pagos', '--kind', 'decision', '--q', '¿?', '--opt', 'A', '--default', 'A', '--due', '1h', '--deadline', '2h'])).code).toBe(EXIT.usage);
+  });
+
   it('#131: parseDue acepta duraciones e ISO con zona', () => {
     expect(parseDue('2d', 0)).toBe(new Date(2 * 86400e3).toISOString());
     expect(parseDue('90s', 0)).toBe(new Date(90e3).toISOString());

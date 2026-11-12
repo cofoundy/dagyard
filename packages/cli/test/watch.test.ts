@@ -128,6 +128,20 @@ describe('dagyard watch (#121)', () => {
     expect(f.calls).toEqual(['/api/projects/demo', '/api/projects/demo/events?since=5']);
   });
 
+  it('#131: una pregunta con plazo dice qué rige; un default aplicado no dice «respondieron»', async () => {
+    const due = blocker('b_9', 'base', { kind: 'decision', question: '¿Local?', options: ['Local', 'Nube'], defaultChoice: 'Local', dueAt: '2026-11-12T13:00:00.000Z' });
+    const done: Blocker = { ...due, status: 'resolved', resolution: { choice: 'Local', note: null, hasValue: false, byDefault: true }, resolvedBy: 'owner', resolvedAt: AT };
+    const events = [ev(1, 'blocker.opened', { blocker: due }), ev(2, 'blocker.resolved', { blocker: done })];
+    const r = await cli(['watch', '--since', '0', '--once'], fake({ events }));
+    expect(r.lines).toEqual([
+      '#1 base pregunta (decision): «¿Local?» [Local | Nube] · si nadie responde antes de 2026-11-12T13:00:00.000Z: «Local» · b_9',
+      '#2 base rigió el default en «¿Local?»: Local · b_9',
+    ]);
+    const j = (await cli(['watch', '--since', '0', '--once', '--json'], fake({ events }))).lines.map((l) => JSON.parse(l));
+    expect(j[0]).toMatchObject({ defaultChoice: 'Local', dueAt: '2026-11-12T13:00:00.000Z' });
+    expect(j[1]).toMatchObject({ byDefault: true, choice: 'Local' });
+  });
+
   it('en inglés con LANG=en', async () => {
     const r = await cli(['watch', '--since', '3', '--once'], fake({ events: log }), 'en_US.UTF-8');
     expect(r.lines[0]).toBe('#4 gh-121 answered «¿Te sirve así?»: Aprobar — note: Así está bien · b_1');

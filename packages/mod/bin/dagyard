@@ -1902,6 +1902,11 @@ function blockerLine(type, seq, b, at, snapshot = false) {
     line.choice = b.resolution?.choice ?? null;
     line.note = b.resolution?.note ?? null;
     line.by = b.resolvedBy;
+    if (b.resolution?.byDefault) line.byDefault = true;
+  }
+  if (b.dueAt && b.defaultChoice) {
+    line.defaultChoice = b.defaultChoice;
+    line.dueAt = b.dueAt;
   }
   if (snapshot) line.snapshot = true;
   return line;
@@ -1916,12 +1921,14 @@ function formatLine(l) {
   const q = `\xAB${oneLine(l.question, 500)}\xBB`;
   if (l.type === "blocker.opened") {
     const opts = l.options.length ? ` [${l.options.join(" | ")}]` : "";
-    const verb = l.snapshot ? t("still waiting", "sigue esperando") : t("asks", "pregunta");
-    return `#${l.seq} ${l.node} ${verb} (${l.kind}): ${q}${opts} \xB7 ${l.blocker}`;
+    const verb2 = l.snapshot ? t("still waiting", "sigue esperando") : t("asks", "pregunta");
+    const due = l.dueAt && l.defaultChoice ? t(` \xB7 if nobody answers by ${l.dueAt}: \xAB${l.defaultChoice}\xBB`, ` \xB7 si nadie responde antes de ${l.dueAt}: \xAB${l.defaultChoice}\xBB`) : "";
+    return `#${l.seq} ${l.node} ${verb2} (${l.kind}): ${q}${opts}${due} \xB7 ${l.blocker}`;
   }
   const answer = l.kind === "access" ? t(`access saved (read it with \xABdagyard wait ${l.node} --blocker ${l.blocker}\xBB)`, `acceso guardado (l\xE9elo con \xABdagyard wait ${l.node} --blocker ${l.blocker}\xBB)`) : l.choice ?? t("(no option)", "(sin opci\xF3n)");
   const note = l.note ? ` \u2014 ${t("note", "nota")}: ${oneLine(l.note, 2e3)}` : "";
-  return `#${l.seq} ${l.node} ${t("answered", "respondieron")} ${q}: ${answer}${note} \xB7 ${l.blocker}`;
+  const verb = l.byDefault ? t("the default applied to", "rigi\xF3 el default en") : t("answered", "respondieron");
+  return `#${l.seq} ${l.node} ${verb} ${q}: ${answer}${note} \xB7 ${l.blocker}`;
 }
 
 // src/cli.ts
@@ -2199,8 +2206,8 @@ imprime \xAB<de> \u2192 <a> exists\xBB, no escribe nada y sale 0. Cualquier otro
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due <30m|4h|2d|ISO>] [--json]',
-      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due <30m|4h|2d|ISO>] [--json]'
+      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due|--deadline <30m|4h|2d|ISO>] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due|--deadline <30m|4h|2d|ISO>] [--json]'
     ],
     summary: ["asks a person for a decision, a review or an access", "le pide al humano una decisi\xF3n, una revisi\xF3n o un acceso"],
     help: [
@@ -2219,7 +2226,7 @@ el servidor elige --default (una de las opciones) y lo deja escrito. Plata, mens
 producci\xF3n no llevan default. Un acceso nunca.
 Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`
     ],
-    flags: ["kind", "q", "opt", "label", "default", "due", ...GLOBAL_FLAGS],
+    flags: ["kind", "q", "opt", "label", "default", "due", "deadline", ...GLOBAL_FLAGS],
     bools: ["json"],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
@@ -2242,7 +2249,9 @@ Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`
         if (opts.length) input.options = opts;
       }
       const def = flag(args, "default")?.trim();
-      const due = flag(args, "due");
+      if (flag(args, "due") !== void 0 && flag(args, "deadline") !== void 0)
+        throw new UsageError(t("--due and --deadline are the same flag; pass one", "--due y --deadline son la misma flag; pasa una"));
+      const due = flag(args, "due") ?? flag(args, "deadline");
       if (def === void 0 !== (due === void 0))
         throw new UsageError(t("--default and --due go together", "--default y --due van juntos"));
       if (def !== void 0 && due !== void 0) {
