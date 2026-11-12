@@ -218,6 +218,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .block input[aria-invalid="true"]::placeholder { color: var(--amber); }
 .block .opts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .block .fine { margin-top: 2px; }
+.block p.due { font-size: 12px; line-height: 1.45; color: var(--mute); }
+.go .tag { margin-left: 8px; padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor; font-size: 10px; letter-spacing: .06em; opacity: .8; }
 .go { font: 500 12px/1.25 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink); background: var(--amber); border: 0; border-radius: 8px; padding: 12px; cursor: pointer; transition: filter .2s, opacity .2s; min-width: 0; overflow-wrap: anywhere; }
 .go:hover { filter: brightness(1.08); }
 .go.ghost { background: none; color: var(--amber); border: 1px solid rgba(255,181,71,.45); }

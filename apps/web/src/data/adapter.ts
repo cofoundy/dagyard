@@ -123,6 +123,9 @@ export function toBlocker(b: WireBlocker): Blocker {
     resolution: resolved ? resolutionSummary(b) : undefined,
     resolvedBy: resolved ? (b.resolvedBy === 'agent' ? RESOLVED_BY_AGENT : RESOLVED_BY_YOU) : undefined,
     resolvedAt: resolved ? opt(b.resolvedAt) ?? new Date(0).toISOString() : undefined,
+    defaultChoice: opt(b.defaultChoice),
+    dueAt: opt(b.dueAt),
+    byDefault: resolved && b.resolution?.byDefault === true ? true : undefined,
   };
 }
 

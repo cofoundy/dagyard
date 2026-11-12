@@ -338,21 +338,27 @@ imprime «<de> → <a> exists», no escribe nada y sale 0. Cualquier otro confli
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--json]',
-      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--json]',
+      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due <30m|4h|2d|ISO>] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due <30m|4h|2d|ISO>] [--json]',
     ],
     summary: ['asks a person for a decision, a review or an access', 'le pide al humano una decisión, una revisión o un acceso'],
     help: [
       `decision: --opt at least once (at most ${LIMITS.options}).
 review: without --opt it offers «Approve» and «Request changes» (in a Spanish project, «Aprobar» and «Pedir cambios»).
 access: --label names the access (e.g. «Payment gateway key»).
+--default and --due go together: if nobody answers before --due (30m, 4h, 2d or an ISO date, at most 30 days),
+the server picks --default (one of the options) and leaves it in writing. Money, client messages, brand and
+production take no default. An access never does.
 Prints the blocker id, to pass to dagyard wait --blocker.`,
       `decision: --opt al menos una vez (máximo ${LIMITS.options}).
 review: sin --opt ofrece «Approve» y «Request changes» (en un proyecto en español, «Aprobar» y «Pedir cambios»).
 access: --label nombra el acceso (p. ej. «Clave de la pasarela de pagos»).
+--default y --due van juntos: si nadie responde antes de --due (30m, 4h, 2d o una fecha ISO, a lo más 30 días),
+el servidor elige --default (una de las opciones) y lo deja escrito. Plata, mensajes al cliente, marca y
+producción no llevan default. Un acceso nunca.
 Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`,
     ],
-    flags: ['kind', 'q', 'opt', 'label', ...GLOBAL_FLAGS],
+    flags: ['kind', 'q', 'opt', 'label', 'default', 'due', ...GLOBAL_FLAGS],
     bools: ['json'],
     async run({ io, args }) {
       const [id] = need(args, [['node', 'nodo']]);
@@ -374,6 +380,18 @@ Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`,
         if (!opts.length && kind !== 'review') throw new UsageError(t('decision needs at least one --opt', 'decision necesita al menos un --opt'));
         // una revisión sin --opt no manda opciones: el Worker pone las del idioma del proyecto (#77)
         if (opts.length) input.options = opts;
+      }
+      // #131: default con plazo; el servidor valida que el default sea una opción y que el plazo sea futuro
+      const def = flag(args, 'default')?.trim();
+      const due = flag(args, 'due');
+      if ((def === undefined) !== (due === undefined))
+        throw new UsageError(t('--default and --due go together', '--default y --due van juntos'));
+      if (def !== undefined && due !== undefined) {
+        if (kind === 'access') throw new UsageError(t('an access takes no --default', 'un acceso no lleva --default'));
+        if (opts.length && !opts.includes(def))
+          throw new UsageError(t(`--default must be one of the --opt (${opts.join(' | ')})`, `--default tiene que ser uno de los --opt (${opts.join(' | ')})`));
+        input.defaultChoice = def;
+        input.dueAt = parseDue(due, Date.now());
       }
       const blocker = await client(io, args).openBlocker(project(io, args), nodeId(id), input);
       io.stdout(args.bools.has('json') ? `${JSON.stringify(blocker)}\n` : `${blocker.id}\n`);
@@ -425,6 +443,8 @@ Sin --timeout espera para siempre. Exit 2 si vence.`,
         }
         if (result) {
           io.stdout(args.bools.has('json') ? `${JSON.stringify(result)}\n` : formatResolution(result));
+          if (result.blocker.resolution?.byDefault && !args.bools.has('json'))
+            io.stderr(t('dagyard: nobody answered before the deadline; the default applies\n', 'dagyard: nadie respondió antes del plazo; rige el default\n'));
           return EXIT.ok;
         }
       }
@@ -1286,4 +1306,23 @@ function groupHelp(group: string): string {
 function commandHelp(c: Command): string {
   const summary = tx(c.summary);
   return `${t('Usage', 'Uso')}: ${tx(c.usage)}\n\n${summary.charAt(0).toUpperCase()}${summary.slice(1)}.\n${tx(c.help)}\n\n${tx(HELP_GLOBAL)}\n`;
+}
+
+/**
+ * #131: `--due` como duración (`90s`, `30m`, `4h`, `2d`) o fecha ISO con zona. Devuelve la ISO del plazo; el
+ * servidor decide si es futuro y razonable (a lo más 30 días).
+ */
+export function parseDue(raw: string, now: number): string {
+  const v = raw.trim();
+  const m = /^(\d+)\s*([smhd])$/i.exec(v);
+  if (m) {
+    const unit = { s: 1e3, m: 60e3, h: 3600e3, d: 86400e3 }[m[2]!.toLowerCase() as 's' | 'm' | 'h' | 'd'];
+    const ms = Number(m[1]) * unit;
+    if (ms <= 0) throw new UsageError(t('--due must be in the future', '--due tiene que ser en el futuro'));
+    return new Date(now + ms).toISOString();
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(v) && /(Z|[+-]\d{2}:?\d{2})$/.test(v) && !Number.isNaN(Date.parse(v))) return new Date(Date.parse(v)).toISOString();
+  throw new UsageError(
+    t('--due is a duration (30m, 4h, 2d) or an ISO date with its zone (2026-11-12T08:00-05:00)', '--due es una duración (30m, 4h, 2d) o una fecha ISO con su zona (2026-11-12T08:00-05:00)'),
+  );
 }

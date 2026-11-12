@@ -295,3 +295,41 @@ describe('ficha: el foco (#116)', () => {
     elsewhere.remove();
   });
 });
+
+describe('ficha: decisión con plazo (#131)', () => {
+  const at = (h: number) => {
+    const d = new Date();
+    d.setHours(h, 0, 0, 0);
+    return d;
+  };
+
+  it('dice hasta cuándo y qué rige, y marca el botón por defecto', () => {
+    const due = new Date(Date.now() + 2 * 86_400_000);
+    due.setHours(8, 0, 0, 0);
+    const s = plan(
+      [node({ id: 'f', title: 'Base de pruebas', status: 'blocked' })],
+      [],
+      [{ id: 'b1', nodeId: 'f', kind: 'decision', question: '¿Local o nube?', options: ['Local', 'Nube'], defaultChoice: 'Local', dueAt: due.toISOString() }],
+    );
+    renderIn(s, 'f');
+    const line = host.querySelector('.block p.due')?.textContent ?? '';
+    expect(line).toMatch(/^Si no respondes antes de .+, sigue con «Local»\.$/);
+    expect(line).toContain('8:00');
+    expect([...host.querySelectorAll('.block .opts button')].map((b) => b.textContent)).toEqual(['Localpor defecto', 'Nube']);
+  });
+
+  it('hoy y mañana se nombran así; vencido, dice que ya rige', async () => {
+    const { dueLine } = await import('./copy');
+    const now = at(22).getTime();
+    expect(dueLine(new Date(now + 3600_000).toISOString(), 'Local', now)).toMatch(/antes de hoy, 11:00/);
+    expect(dueLine(new Date(now + 10 * 3600_000).toISOString(), 'Local', now)).toMatch(/antes de mañana, 8:00/);
+    expect(dueLine(new Date(now - 1000).toISOString(), 'Local', now)).toBe('Sin respuesta a tiempo: en un momento rige «Local».');
+  });
+
+  it('sin plazo no hay línea ni marca', () => {
+    const s = plan([node({ id: 'f', title: 'Base', status: 'blocked' })], [], [{ id: 'b1', nodeId: 'f', kind: 'decision', question: '¿?', options: ['Sí'] }]);
+    renderIn(s, 'f');
+    expect(host.querySelector('.block p.due')).toBeNull();
+    expect(host.querySelector('.go .tag')).toBeNull();
+  });
+});

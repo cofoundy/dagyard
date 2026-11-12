@@ -165,6 +165,12 @@ export const MIGRATIONS: string[][] = [
        FOREIGN KEY (project_id, to_id) REFERENCES nodes(project_id, id) ON DELETE CASCADE
      )`,
   ],
+  // v9: decisión con plazo (#131). Al vencer `due_at` con el bloqueante abierto, el Store aplica `default_choice`
+  [
+    `ALTER TABLE blockers ADD COLUMN default_choice TEXT`,
+    `ALTER TABLE blockers ADD COLUMN due_at TEXT`,
+    `CREATE INDEX blockers_due ON blockers(due_at) WHERE status = 'open' AND due_at IS NOT NULL`,
+  ],
 ];
 
 /**

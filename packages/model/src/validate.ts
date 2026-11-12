@@ -399,6 +399,18 @@ function blockerInput(o: Record<string, unknown>, at: string): BlockerInput {
     else if (kind !== 'review') fail(`${at}options: una decisión necesita al menos una opción`);
     b.accessLabel = null;
   }
+  // #131: default con plazo. Van juntos; un acceso no tiene default (nadie puede inventar una clave)
+  const def = nullableStr(o.defaultChoice, `${at}defaultChoice`, LIMITS.option);
+  const due = isoDate(o.dueAt, `${at}dueAt`);
+  if (def || due) {
+    if (kind === 'access') fail(`${at}defaultChoice: un acceso no lleva default ni plazo`);
+    if (!def) fail(`${at}defaultChoice: un plazo (dueAt) necesita la opción que rige al vencer`);
+    if (!due) fail(`${at}dueAt: un default necesita su plazo (ISO 8601)`);
+    // una revisión sin opciones las recibe del servidor: ahí se valida contra las del idioma del proyecto
+    if (b.options?.length && !b.options.includes(def!)) fail(`${at}defaultChoice: tiene que ser una de las opciones (${b.options.join(' | ')})`);
+    b.defaultChoice = def!;
+    b.dueAt = due!;
+  }
   return b;
 }
 

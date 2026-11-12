@@ -284,6 +284,14 @@ Al resolver: el bloqueante queda `status: "resolved"` con `resolution = {choice,
 sistema en el idioma del proyecto («Thanks. Picking up where I left off.» / «Gracias. Sigo desde donde me
 quedé.») solo si el nodo no tiene otro bloqueante abierto.
 
+**Plazo con default (#131).** Una `decision` o `review` puede traer `defaultChoice` (texto exacto de una opción) y
+`dueAt` (ISO 8601 con zona), siempre juntos: el plazo es futuro y a lo más a 30 días; un `access` no lleva (`400`).
+Si al vencer el bloqueante sigue abierto, la alarma del `Store` lo resuelve con el default: `resolution = {choice:
+<default>, note: null, hasValue: false, byDefault: true}`, `resolvedBy: "owner"`, emite `blocker.resolved` + `node.updated`
+y agrega siempre el mensaje del sistema «Nadie respondió antes del plazo: sigo con «X», la opción por defecto.» (en inglés,
+«No answer before the deadline: going with «X», the default.»). Una respuesta del dueño posterior da `409`. Plata, mensajes al
+cliente, marca y producción no llevan default: lo decide quien pregunta.
+
 `wait` responde apenas el bloqueante se resuelve, o al vencer el `timeout` con el bloqueante todavía
 `open` (el CLI vuelve a llamar). `BlockerWaitResult = {blocker, value}`; `value` es el secreto
 descifrado **solo** si `kind = access`, está resuelto y el rol es `agent`. Para el `owner` siempre `null`.

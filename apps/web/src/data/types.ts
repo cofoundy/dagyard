@@ -82,6 +82,11 @@ export interface Blocker {
   resolution?: string;
   resolvedBy?: string;
   resolvedAt?: string;
+  /** #131: la opción que rige si nadie responde antes de `dueAt` */
+  defaultChoice?: string;
+  dueAt?: string;
+  /** #131: se resolvió sola al vencer el plazo */
+  byDefault?: boolean;
 }
 
 export interface Message {
