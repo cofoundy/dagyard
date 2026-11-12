@@ -53,6 +53,7 @@ are not nodes.
 | Start working | `dagyard start <node> [--team '<site or session name>'] [--site <site>]` |
 | Each milestone (PR opened, merged, deployed) | `dagyard msg <node> '<≤280 chars for a PM>' --report <url>` and `dagyard progress <node> <0..1>` |
 | Something only a person can decide | `dagyard block <node> --kind decision --q '<question>' --opt '<A>' --opt '<B>'` |
+| The same, and it can go on by itself if nobody answers in time | add `--default '<A>' --due 4h` (30m, 4h, 2d or an ISO date): when the deadline passes the server picks `<A>` and writes it down; `wait` prints `<A>`. **Never** a default for money, messages to the client, brand or production: those wait for the person's yes |
 | Cannot go on without that answer | `dagyard wait <node>` (exit 2 on timeout: call it again) |
 | Work splits into lanes other sessions own | `dagyard node add <lane> --title '…' --from <node> --why '…'` per lane |
 | A lane must finish before another starts | `dagyard edge add <from> <to>` (`<to>` needs `<from>` closed) |
