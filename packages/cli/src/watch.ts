@@ -27,6 +27,11 @@ export type WatchLine =
       choice?: string | null;
       note?: string | null;
       by?: string | null;
+      /** #131: la opción que rige si nadie responde antes de `dueAt` (solo si la pregunta tiene plazo) */
+      defaultChoice?: string;
+      dueAt?: string;
+      /** #131: la respuesta fue el default al vencer el plazo */
+      byDefault?: true;
       at: string;
       snapshot?: true;
     }
@@ -138,6 +143,11 @@ function blockerLine(type: 'blocker.opened' | 'blocker.resolved', seq: number, b
     line.choice = b.resolution?.choice ?? null;
     line.note = b.resolution?.note ?? null;
     line.by = b.resolvedBy;
+    if (b.resolution?.byDefault) line.byDefault = true;
+  }
+  if (b.dueAt && b.defaultChoice) {
+    line.defaultChoice = b.defaultChoice;
+    line.dueAt = b.dueAt;
   }
   if (snapshot) line.snapshot = true;
   return line;
@@ -155,12 +165,14 @@ export function formatLine(l: WatchLine): string {
   if (l.type === 'blocker.opened') {
     const opts = l.options.length ? ` [${l.options.join(' | ')}]` : '';
     const verb = l.snapshot ? t('still waiting', 'sigue esperando') : t('asks', 'pregunta');
-    return `#${l.seq} ${l.node} ${verb} (${l.kind}): ${q}${opts} · ${l.blocker}`;
+    const due = l.dueAt && l.defaultChoice ? t(` · if nobody answers by ${l.dueAt}: «${l.defaultChoice}»`, ` · si nadie responde antes de ${l.dueAt}: «${l.defaultChoice}»`) : '';
+    return `#${l.seq} ${l.node} ${verb} (${l.kind}): ${q}${opts}${due} · ${l.blocker}`;
   }
   const answer =
     l.kind === 'access'
       ? t(`access saved (read it with «dagyard wait ${l.node} --blocker ${l.blocker}»)`, `acceso guardado (léelo con «dagyard wait ${l.node} --blocker ${l.blocker}»)`)
       : (l.choice ?? t('(no option)', '(sin opción)'));
   const note = l.note ? ` — ${t('note', 'nota')}: ${oneLine(l.note, 2000)}` : '';
-  return `#${l.seq} ${l.node} ${t('answered', 'respondieron')} ${q}: ${answer}${note} · ${l.blocker}`;
+  const verb = l.byDefault ? t('the default applied to', 'rigió el default en') : t('answered', 'respondieron');
+  return `#${l.seq} ${l.node} ${verb} ${q}: ${answer}${note} · ${l.blocker}`;
 }
