@@ -6,6 +6,8 @@ After=network-online.target
 [Service]
 Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin
 Environment=LANG=es_PE.UTF-8
+# la llave de Buzz (por persona) no vive en el repo: ver integrations/README.md
+EnvironmentFile=-%h/.config/dagyard/avisos.env
 ExecStart=/usr/bin/python3 %h/cofoundy/products/dagyard/integrations/brain-avisos.py --project %i
 Restart=always
 RestartSec=30

@@ -12,6 +12,11 @@ servicio se reinicie.
 Necesita: `dagyard` en el PATH con su llave en `~/.config/dagyard/agent-key`, `uv`, y el plugin
 `cofoundy-toolkit` (sus `brain.py` y `buzz_cli.py`).
 
+systemd no hereda el entorno de Claude Code: la llave de Buzz de esta caja (`BUZZ_CC_PRIVATE_KEY`, por persona)
+va en `~/.config/dagyard/avisos.env` (`BUZZ_CC_PRIVATE_KEY=…`, chmod 600), nunca en el repo. Sin ella el servicio
+lo dice al arrancar y solo crea las tareas. Al arrancar (y tras cada corte) reenvía el aviso de toda pregunta
+abierta que aún no lo tenga.
+
 ```bash
 python3 integrations/brain-avisos.py --project el-deily --once          # una pasada, para probar
 mkdir -p ~/.config/systemd/user && cp integrations/dagyard-avisos@.service ~/.config/systemd/user/
