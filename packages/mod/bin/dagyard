@@ -734,6 +734,20 @@ function blockerInput(o, at) {
       fail(`${at}options: una decisi\xF3n necesita al menos una opci\xF3n`);
     b.accessLabel = null;
   }
+  const def = nullableStr(o.defaultChoice, `${at}defaultChoice`, LIMITS.option);
+  const due = isoDate(o.dueAt, `${at}dueAt`);
+  if (def || due) {
+    if (kind2 === "access")
+      fail(`${at}defaultChoice: un acceso no lleva default ni plazo`);
+    if (!def)
+      fail(`${at}defaultChoice: un plazo (dueAt) necesita la opci\xF3n que rige al vencer`);
+    if (!due)
+      fail(`${at}dueAt: un default necesita su plazo (ISO 8601)`);
+    if (b.options?.length && !b.options.includes(def))
+      fail(`${at}defaultChoice: tiene que ser una de las opciones (${b.options.join(" | ")})`);
+    b.defaultChoice = def;
+    b.dueAt = due;
+  }
   return b;
 }
 function messageInput(o, at) {
@@ -2185,21 +2199,27 @@ imprime \xAB<de> \u2192 <a> exists\xBB, no escribe nada y sale 0. Cualquier otro
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--json]',
-      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--json]'
+      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due <30m|4h|2d|ISO>] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due <30m|4h|2d|ISO>] [--json]'
     ],
     summary: ["asks a person for a decision, a review or an access", "le pide al humano una decisi\xF3n, una revisi\xF3n o un acceso"],
     help: [
       `decision: --opt at least once (at most ${LIMITS.options}).
 review: without --opt it offers \xABApprove\xBB and \xABRequest changes\xBB (in a Spanish project, \xABAprobar\xBB and \xABPedir cambios\xBB).
 access: --label names the access (e.g. \xABPayment gateway key\xBB).
+--default and --due go together: if nobody answers before --due (30m, 4h, 2d or an ISO date, at most 30 days),
+the server picks --default (one of the options) and leaves it in writing. Money, client messages, brand and
+production take no default. An access never does.
 Prints the blocker id, to pass to dagyard wait --blocker.`,
       `decision: --opt al menos una vez (m\xE1ximo ${LIMITS.options}).
 review: sin --opt ofrece \xABApprove\xBB y \xABRequest changes\xBB (en un proyecto en espa\xF1ol, \xABAprobar\xBB y \xABPedir cambios\xBB).
 access: --label nombra el acceso (p. ej. \xABClave de la pasarela de pagos\xBB).
+--default y --due van juntos: si nadie responde antes de --due (30m, 4h, 2d o una fecha ISO, a lo m\xE1s 30 d\xEDas),
+el servidor elige --default (una de las opciones) y lo deja escrito. Plata, mensajes al cliente, marca y
+producci\xF3n no llevan default. Un acceso nunca.
 Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`
     ],
-    flags: ["kind", "q", "opt", "label", ...GLOBAL_FLAGS],
+    flags: ["kind", "q", "opt", "label", "default", "due", ...GLOBAL_FLAGS],
     bools: ["json"],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
@@ -2220,6 +2240,17 @@ Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`
         if (flag(args, "label") !== void 0) throw new UsageError(t("--label is only for access", "--label es solo para access"));
         if (!opts.length && kind2 !== "review") throw new UsageError(t("decision needs at least one --opt", "decision necesita al menos un --opt"));
         if (opts.length) input.options = opts;
+      }
+      const def = flag(args, "default")?.trim();
+      const due = flag(args, "due");
+      if (def === void 0 !== (due === void 0))
+        throw new UsageError(t("--default and --due go together", "--default y --due van juntos"));
+      if (def !== void 0 && due !== void 0) {
+        if (kind2 === "access") throw new UsageError(t("an access takes no --default", "un acceso no lleva --default"));
+        if (opts.length && !opts.includes(def))
+          throw new UsageError(t(`--default must be one of the --opt (${opts.join(" | ")})`, `--default tiene que ser uno de los --opt (${opts.join(" | ")})`));
+        input.defaultChoice = def;
+        input.dueAt = parseDue(due, Date.now());
       }
       const blocker = await client(io, args).openBlocker(project(io, args), nodeId(id), input);
       io.stdout(args.bools.has("json") ? `${JSON.stringify(blocker)}
@@ -2275,6 +2306,8 @@ Sin --timeout espera para siempre. Exit 2 si vence.`
         if (result) {
           io.stdout(args.bools.has("json") ? `${JSON.stringify(result)}
 ` : formatResolution(result));
+          if (result.blocker.resolution?.byDefault && !args.bools.has("json"))
+            io.stderr(t("dagyard: nobody answered before the deadline; the default applies\n", "dagyard: nadie respondi\xF3 antes del plazo; rige el default\n"));
           return EXIT.ok;
         }
       }
@@ -3084,6 +3117,20 @@ ${tx(c.help)}
 
 ${tx(HELP_GLOBAL)}
 `;
+}
+function parseDue(raw, now) {
+  const v = raw.trim();
+  const m = /^(\d+)\s*([smhd])$/i.exec(v);
+  if (m) {
+    const unit = { s: 1e3, m: 6e4, h: 36e5, d: 864e5 }[m[2].toLowerCase()];
+    const ms = Number(m[1]) * unit;
+    if (ms <= 0) throw new UsageError(t("--due must be in the future", "--due tiene que ser en el futuro"));
+    return new Date(now + ms).toISOString();
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(v) && /(Z|[+-]\d{2}:?\d{2})$/.test(v) && !Number.isNaN(Date.parse(v))) return new Date(Date.parse(v)).toISOString();
+  throw new UsageError(
+    t("--due is a duration (30m, 4h, 2d) or an ISO date with its zone (2026-11-12T08:00-05:00)", "--due es una duraci\xF3n (30m, 4h, 2d) o una fecha ISO con su zona (2026-11-12T08:00-05:00)")
+  );
 }
 
 // src/main.ts
