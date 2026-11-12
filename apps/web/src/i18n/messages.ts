@@ -85,6 +85,12 @@ export const en = {
 
   // tus respuestas
   'answer.decision': 'You decided',
+  'answer.byDefault': 'The default applied',
+  'block.due': 'If you don’t answer by {when}, it goes with “{choice}”.',
+  'block.dueNow': 'No answer in time: “{choice}” applies in a moment.',
+  'block.defaultTag': 'default',
+  'due.today': 'today, {time}',
+  'due.tomorrow': 'tomorrow, {time}',
   'answer.review': 'You reviewed',
   'answer.access': 'You provided an access',
   'answer.by': '{who} answered',
@@ -269,6 +275,12 @@ export const es: Catalog = {
   'card.notFound': 'No encuentro ese pedido. Recarga la página.',
 
   'answer.decision': 'Decidiste',
+  'answer.byDefault': 'Rigió la opción por defecto',
+  'block.due': 'Si no respondes antes de {when}, sigue con «{choice}».',
+  'block.dueNow': 'Sin respuesta a tiempo: en un momento rige «{choice}».',
+  'block.defaultTag': 'por defecto',
+  'due.today': 'hoy, {time}',
+  'due.tomorrow': 'mañana, {time}',
   'answer.review': 'Revisaste',
   'answer.access': 'Entregaste un acceso',
   'answer.by': '{who} respondió',

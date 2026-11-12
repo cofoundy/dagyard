@@ -26,6 +26,7 @@ import {
   wouldCreateCycle,
   type Blocker,
   type BlockerInput,
+  type BlockerResolution,
   type CloseAs,
   type CloseInput,
   type DagEvent,
@@ -86,6 +87,8 @@ export type WriteOp =
       /** valor del acceso ya cifrado (AES-GCM, AAD = pid/bid) o null */
       sealed: string | null;
     }
+  /** #131: aplica el default de un bloqueante vencido (lo pide la alarma del Store). Si ya no está abierto o no venció, null */
+  | { kind: 'expireBlocker'; pid: string; bid: string }
   | { kind: 'postMessage'; pid: string; nid: string; input: MessageInput; actor: Role }
   /** upsert parcial de un equipo de la fábrica (#75): sin cambios, ni escribe ni emite */
   | { kind: 'putTeam'; pid: string; tid: string; patch: TeamPatch; actor: Role }
@@ -109,6 +112,7 @@ export interface WriteValues {
   removeEdge: null;
   openBlocker: Blocker;
   resolveBlocker: Blocker;
+  expireBlocker: Blocker | null;
   postMessage: Message;
   putTeam: Team;
   demoBeat: PulseStep;
@@ -214,14 +218,14 @@ class Tx {
   }
   insertBlocker(b: Blocker): void {
     this.all(
-      `INSERT INTO blockers (id, project_id, node_id, kind, question, options, access_label, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
-      b.id, b.projectId, b.nodeId, b.kind, b.question, JSON.stringify(b.options), b.accessLabel, b.createdAt,
+      `INSERT INTO blockers (id, project_id, node_id, kind, question, options, access_label, status, default_choice, due_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
+      b.id, b.projectId, b.nodeId, b.kind, b.question, JSON.stringify(b.options), b.accessLabel, b.defaultChoice ?? null, b.dueAt ?? null, b.createdAt,
     );
   }
   /** Reinserta un bloqueante tal cual estaba: id, respuesta y valor cifrado incluidos. */
   restoreBlocker(r: Row): void {
-    const cols = ['id', 'project_id', 'node_id', 'kind', 'question', 'options', 'access_label', 'status', 'resolution', 'resolved_by', 'resolved_at', 'access_value', 'created_at'];
+    const cols = ['id', 'project_id', 'node_id', 'kind', 'question', 'options', 'access_label', 'status', 'resolution', 'resolved_by', 'resolved_at', 'access_value', 'default_choice', 'due_at', 'created_at'];
     this.all(`INSERT INTO blockers (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, ...cols.map((c) => r[c] as V));
   }
   /** Reinserta un mensaje tal cual estaba: id, firma y fecha incluidos. */
@@ -384,9 +388,34 @@ function newBlocker(pid: string, nodeId: string, input: BlockerInput & { created
     resolution: null,
     resolvedBy: null,
     resolvedAt: null,
+    defaultChoice: input.defaultChoice ?? null,
+    dueAt: input.dueAt ?? null,
     createdAt: input.createdAt !== undefined && input.createdAt < now ? input.createdAt : now,
   };
 }
+
+/** #131: el plazo más largo que acepta una decisión con default. */
+export const MAX_DUE_MS = 30 * 24 * 3600_000;
+
+/** #131: el plazo es futuro y razonable, y el default es una de las opciones ya completas (las de una revisión las pone el servidor). */
+function checkDue(b: BlockerInput, now: string): void {
+  if (!b.dueAt) return;
+  checkDefault(b);
+  if (b.dueAt <= now) fail('invalid', `dueAt: el plazo ya pasó (${b.dueAt}); ponlo en el futuro`);
+  if (Date.parse(b.dueAt) - Date.parse(now) > MAX_DUE_MS) fail('invalid', 'dueAt: a lo más 30 días');
+}
+
+/** El default es una de las opciones ya completas. Un PUT acepta plazos vencidos: la alarma los aplica enseguida. */
+function checkDefault(b: BlockerInput): void {
+  if (b.dueAt && !b.options?.includes(b.defaultChoice!))
+    fail('invalid', `defaultChoice: tiene que ser una de las opciones (${(b.options ?? []).join(' | ')})`);
+}
+
+/** #131: lo que el servidor escribe al aplicar un default vencido, en el idioma del proyecto. */
+const DEFAULT_TEXT: Record<Lang, (choice: string) => string> = {
+  en: (c) => `No answer before the deadline: going with «${c}», the default.`,
+  es: (c) => `Nadie respondió antes del plazo: sigo con «${c}», la opción por defecto.`,
+};
 
 const BLOCKED_BY_HAND = 'status: «blocked» lo pone un bloqueante, no se pone a mano';
 const pending = (n: number) => (n === 1 ? 'una pregunta abierta' : `${n} preguntas abiertas`);
@@ -401,6 +430,41 @@ const blockerKey = (nodeId: unknown, kind: unknown, question: unknown, options: 
   JSON.stringify([nodeId, kind, question, options, accessLabel ?? null]);
 /** Clave de un mensaje para no duplicarlo al re-importar: misma tarea, texto e informe (la firma se compara aparte). */
 const messageKey = (nodeId: unknown, text: unknown, reportUrl: unknown) => JSON.stringify([nodeId, text, reportUrl ?? null]);
+
+/**
+ * Después de resolver (el dueño o el default vencido, #131): el nodo vuelve a trabajar si ya no espera nada, y el
+ * servidor lo deja escrito. Un default siempre deja su mensaje; una respuesta del dueño, solo si destraba la tarea.
+ */
+function settle(tx: Tx, pid: string, blocker: Blocker): Blocker {
+  const unblocked = tx.openBlockers(pid, blocker.nodeId) === 0;
+  const node = tx.updateNode(pid, blocker.nodeId, unblocked ? { status: 'working' } : {})!;
+  // contesta en el idioma del proyecto (#77); la demo inglesa firma como sus equipos (#74)
+  const { lang } = tx.project(pid);
+  const en = lang === 'en';
+  const byDefault = blocker.resolution?.byDefault === true;
+  const text = byDefault ? DEFAULT_TEXT[lang](blocker.resolution!.choice ?? '') : en ? RESUME_TEXT_EN : RESUME_TEXT;
+  const message: Message | null =
+    unblocked || byDefault
+      ? {
+          id: randomId('m_'),
+          projectId: pid,
+          nodeId: node.id,
+          from: en && demoLang(pid) === 'en' ? demoSignature('en', node.team) : signature(node, lang),
+          text,
+          reportUrl: null,
+          createdAt: tx.now,
+        }
+      : null;
+  if (message) tx.insertMessage(message);
+  tx.emit(
+    pid,
+    'owner',
+    { type: 'blocker.resolved', payload: { blocker } },
+    { type: 'node.updated', payload: { node } },
+    ...(message ? [{ type: 'message.posted' as const, payload: { message } }] : []),
+  );
+  return blocker;
+}
 
 const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>) => WriteValues[K] } = {
   createProject(tx, { pid, name, lang = DEFAULT_LANG, stages }) {
@@ -422,6 +486,7 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     const lang = langCol ?? prev!.lang;
     const stages = g.stages ? toStages(g.stages, lang) : (prev?.stages ?? toStages(undefined, lang));
     const graphBlockers = (g.blockers ?? []).map((b) => withDefaultOptions(b, lang));
+    graphBlockers.forEach(checkDefault);
     // el PUT de un agente sobre un proyecto existente conserva lo que no le toca reescribir; el dueño recrea todo
     const keep = prev !== null && actor !== 'owner';
     // #90: en un proyecto existente que no es demo, ningún nodo desaparece. Uno que el cuerpo no trae queda con sus
@@ -797,7 +862,9 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     // una pregunta no reabre en silencio un nodo cerrado (#90): primero se reabre, con su porqué en el log
     const target = tx.node(pid, nid);
     if (target.status === 'done') fail('conflict', `La tarea «${target.title}» está cerrada (${target.closedAs ?? 'done'}); reábrela antes de preguntar`);
-    const blocker = newBlocker(pid, nid, withDefaultOptions(input, lang), tx.now);
+    const full = withDefaultOptions(input, lang);
+    checkDue(full, tx.now);
+    const blocker = newBlocker(pid, nid, full, tx.now);
     tx.insertBlocker(blocker);
     // solo la columna de estado: el resto del nodo queda como esté
     const node = tx.updateNode(pid, nid, { status: 'blocked' })!;
@@ -818,33 +885,23 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
       JSON.stringify(resolution), tx.now, sealed, pid, bid,
     );
     if (!updated) fail('conflict', 'Ese bloqueante ya está resuelto');
-    const blocker: Blocker = { ...prev, status: 'resolved', resolution, resolvedBy: 'owner', resolvedAt: tx.now };
-    const unblocked = tx.openBlockers(pid, prev.nodeId) === 0;
-    const node = tx.updateNode(pid, prev.nodeId, unblocked ? { status: 'working' } : {})!;
-    // el mensaje del sistema solo cuando la tarea de verdad se destraba
-    // contesta en el idioma del proyecto (#77); la demo inglesa firma como sus equipos (#74)
-    const { lang } = tx.project(pid);
-    const en = lang === 'en';
-    const message: Message | null = unblocked
-      ? {
-          id: randomId('m_'),
-          projectId: pid,
-          nodeId: node.id,
-          from: en && demoLang(pid) === 'en' ? demoSignature('en', node.team) : signature(node, lang),
-          text: en ? RESUME_TEXT_EN : RESUME_TEXT,
-          reportUrl: null,
-          createdAt: tx.now,
-        }
-      : null;
-    if (message) tx.insertMessage(message);
-    tx.emit(
-      pid,
-      'owner',
-      { type: 'blocker.resolved', payload: { blocker } },
-      { type: 'node.updated', payload: { node } },
-      ...(message ? [{ type: 'message.posted' as const, payload: { message } }] : []),
+    return settle(tx, pid, { ...prev, status: 'resolved', resolution, resolvedBy: 'owner', resolvedAt: tx.now });
+  },
+
+  expireBlocker(tx, { pid, bid }) {
+    const row = tx.one(
+      `SELECT * FROM blockers WHERE project_id = ? AND id = ? AND status = 'open' AND due_at IS NOT NULL AND due_at <= ?`,
+      pid, bid, tx.now,
     );
-    return blocker;
+    if (!row) return null;
+    const prev = toBlocker(row);
+    const resolution: BlockerResolution = { choice: prev.defaultChoice ?? null, note: null, hasValue: false, byDefault: true };
+    // firmado como dueño: el default es lo que el dueño aceptó de antemano al no responder (#131)
+    tx.all(
+      `UPDATE blockers SET status = 'resolved', resolution = ?, resolved_by = 'owner', resolved_at = ? WHERE project_id = ? AND id = ?`,
+      JSON.stringify(resolution), tx.now, pid, bid,
+    );
+    return settle(tx, pid, { ...prev, status: 'resolved', resolution, resolvedBy: 'owner', resolvedAt: tx.now });
   },
 
   postMessage(tx, { pid, nid, input, actor }) {

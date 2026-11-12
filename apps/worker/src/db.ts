@@ -4,9 +4,11 @@
  * transacción (`transactionSync`), así que es atómico como en D1.
  */
 import { DurableObject } from 'cloudflare:workers';
+import type { DagEvent } from '@dagyard/model';
 import type { Env } from './env.js';
 import { ApiFailure } from './http.js';
 import { migrate } from './schema.js';
+import { publish } from './store.js';
 import { runWrite, type Idem, type WriteOp, type WriteResult } from './writes.js';
 
 export type SqlValue = string | number | null;
@@ -97,16 +99,53 @@ export class Store extends DurableObject<Env> {
   }
 
   /** Una escritura completa (leer, validar, escribir, eventos y su clave de idempotencia) en una transacción. Ver writes.ts. */
-  write(op: WriteOp, idem?: Idem): WriteResult {
+  async write(op: WriteOp, idem?: Idem): Promise<WriteResult> {
     try {
       const now = this.tick();
       const { value, events, incarnation } = this.ctx.storage.transactionSync(() => runWrite(this.ctx.storage.sql, op, idem, now));
+      // #131: un plazo nuevo (o recreado por un PUT) puede ser el más cercano
+      if (op.kind === 'openBlocker' || op.kind === 'replaceGraph') await this.armDue();
       return { ok: true, value, events, incarnation };
     } catch (err) {
       // ApiFailure revierte la transacción y viaja como dato (las clases no cruzan la RPC)
       if (err instanceof ApiFailure) return { ok: false, error: { code: err.code, message: err.message, ...(err.reason ? { reason: err.reason } : {}) } };
       throw err;
     }
+  }
+
+  /* -------------------------------------------- decisiones con plazo (#131) */
+
+  /** La alarma a la hora del plazo abierto más cercano; sin plazos, ninguna. */
+  async armDue(): Promise<void> {
+    const row = this.ctx.storage.sql
+      .exec<{ due: string | null }>(`SELECT MIN(due_at) AS due FROM blockers WHERE status = 'open' AND due_at IS NOT NULL`)
+      .one();
+    if (row.due) await this.ctx.storage.setAlarm(Math.max(Date.parse(row.due), Date.now()));
+    else await this.ctx.storage.deleteAlarm();
+  }
+
+  /** Aplica el default de cada bloqueante vencido, reparte sus eventos como cualquier escritura y re-arma. */
+  async alarm(): Promise<void> {
+    const due = this.ctx.storage.sql
+      .exec<{ project_id: string; id: string }>(
+        `SELECT project_id, id FROM blockers WHERE status = 'open' AND due_at IS NOT NULL AND due_at <= ? ORDER BY due_at`,
+        new Date().toISOString(),
+      )
+      .toArray();
+    for (const b of due) {
+      const res = await this.write({ kind: 'expireBlocker', pid: b.project_id, bid: b.id });
+      if (!res.ok) {
+        console.error(JSON.stringify({ msg: 'no pude aplicar el default', pid: b.project_id, bid: b.id, error: res.error }));
+        continue;
+      }
+      try {
+        await publish(this.env, b.project_id, res.events as DagEvent[], res.incarnation);
+      } catch (err) {
+        // los eventos ya están en el log: una página que reconecte los recupera
+        console.error(JSON.stringify({ msg: 'no pude repartir el default', pid: b.project_id, err: String(err) }));
+      }
+    }
+    await this.armDue();
   }
 
   batch(queries: Query[]): Row[][] {

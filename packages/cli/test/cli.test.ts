@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { EXIT, goalLine, progressArg, run, skyLink, type Io } from '../src/cli.js';
+import { EXIT, goalLine, parseDue, progressArg, run, skyLink, type Io } from '../src/cli.js';
 import { nextStartable, REVIEW_OPTIONS, type Blocker, type DagNode, type Edge, type Stage } from '@dagyard/model';
 
 const KEY = 'clave-secreta-123';
@@ -105,7 +105,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return reply(res, 201, { id: 'm_1' });
   }
   if (req.method === 'POST' && sub === 'blockers') {
-    const input = body as Pick<Blocker, 'kind' | 'question' | 'options' | 'accessLabel'>;
+    const input = body as Pick<Blocker, 'kind' | 'question' | 'options' | 'accessLabel' | 'defaultChoice' | 'dueAt'>;
     const id = `b_${blockers.size + 1}`;
     const b: Blocker = {
       id,
@@ -120,6 +120,8 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       resolution: null,
       resolvedBy: null,
       resolvedAt: null,
+      defaultChoice: input.defaultChoice ?? null,
+      dueAt: input.dueAt ?? null,
       createdAt: new Date().toISOString(),
     };
     blockers.set(id, b);
@@ -524,6 +526,33 @@ describe('open', () => {
 });
 
 describe('block + wait', () => {
+  it('#131: --default y --due mandan defaultChoice y la hora del plazo; van juntos y el default es una opción', async () => {
+    const before = Date.now();
+    const b = await cli(['block', 'pagos', '--kind', 'decision', '--q', '¿Local o nube?', '--opt', 'Local', '--opt', 'Nube', '--default', 'Local', '--due', '30m']);
+    expect(b.code).toBe(0);
+    const sent = blockers.get(b.stdout.trim())!;
+    expect(sent.defaultChoice).toBe('Local');
+    const due = Date.parse(sent.dueAt!) - before;
+    expect(due).toBeGreaterThanOrEqual(30 * 60_000 - 50);
+    expect(due).toBeLessThan(31 * 60_000);
+    for (const bad of [
+      ['--default', 'Local'],
+      ['--due', '30m'],
+      ['--default', 'Otra', '--due', '30m'],
+      ['--default', 'Local', '--due', 'mañana'],
+    ])
+      expect((await cli(['block', 'pagos', '--kind', 'decision', '--q', '¿?', '--opt', 'Local', ...bad])).code).toBe(EXIT.usage);
+    expect((await cli(['block', 'pagos', '--kind', 'access', '--q', 'clave', '--label', 'x', '--default', 'a', '--due', '1h'])).code).toBe(EXIT.usage);
+  });
+
+  it('#131: parseDue acepta duraciones e ISO con zona', () => {
+    expect(parseDue('2d', 0)).toBe(new Date(2 * 86400e3).toISOString());
+    expect(parseDue('90s', 0)).toBe(new Date(90e3).toISOString());
+    expect(parseDue('2026-11-12T08:00-05:00', 0)).toBe('2026-11-12T13:00:00.000Z');
+    expect(() => parseDue('2026-11-12T08:00', 0)).toThrow();
+    expect(() => parseDue('0m', 0)).toThrow();
+  });
+
   it('decision: block imprime el id y wait devuelve la elección cuando se resuelve por la API', async () => {
     const b = await cli(['block', 'pagos', '--kind', 'decision', '--q', '¿Qué pasarela?', '--opt', 'Culqi', '--opt', 'Niubiz']);
     expect(b.code).toBe(0);

@@ -62,6 +62,24 @@ export function clock(ms: number, now = Date.now()): string {
   return fmtTime(ms, sameDay ? { hour: 'numeric', minute: '2-digit' } : { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
+/**
+ * #131: el plazo de una decisión en hora absoluta y local: «hoy, 08:00», «mañana, 08:00» o «jue 13 nov, 08:00».
+ * Sin cuenta regresiva: la ficha no se repinta cada minuto y una hora fija no miente si la miras tarde.
+ */
+export function dueWhen(ms: number, now = Date.now()): string {
+  const time = fmtTime(ms, { hour: 'numeric', minute: '2-digit' });
+  const day = (d: number) => new Date(d).toDateString();
+  if (day(ms) === day(now)) return t('due.today', { time });
+  if (day(ms) === day(now + 86_400_000)) return t('due.tomorrow', { time });
+  return fmtTime(ms, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
+/** La línea del plazo bajo la pregunta; vencido (la alarma tarda segundos), dice que ya rige. */
+export function dueLine(dueAt: string, choice: string, now = Date.now()): string {
+  const ms = Date.parse(dueAt);
+  return ms <= now ? t('block.dueNow', { choice }) : t('block.due', { when: dueWhen(ms, now), choice });
+}
+
 /** «Nació 10:18 PM · hace 5 min». */
 export function bornLine(ms: number, now = Date.now()): string {
   return t('card.born', { when: clock(ms, now), ago: fmtRelative(ms, now) });

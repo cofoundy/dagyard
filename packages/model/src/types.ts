@@ -166,6 +166,8 @@ export interface BlockerResolution {
   note: string | null;
   /** access: true si se guardó un valor. El valor NUNCA viaja en snapshots ni eventos. */
   hasValue: boolean;
+  /** true si nadie respondió antes de `dueAt` y el servidor aplicó `defaultChoice` (#131). Ausente en las viejas */
+  byDefault?: boolean;
 }
 
 export interface Blocker {
@@ -184,6 +186,10 @@ export interface Blocker {
   resolution: BlockerResolution | null;
   resolvedBy: Role | null;
   resolvedAt: IsoDate | null;
+  /** #131: la opción que rige si nadie responde antes de `dueAt`. Van juntos o ninguno; un acceso nunca lleva */
+  defaultChoice?: string | null;
+  /** #131: el plazo; al vencer, el servidor resuelve con `defaultChoice` y lo deja escrito */
+  dueAt?: IsoDate | null;
   createdAt: IsoDate;
 }
 
@@ -348,6 +354,10 @@ export interface BlockerInput {
   /** decision: ≥1. review: si falta, el servidor pone REVIEW_OPTIONS en el idioma del proyecto. access: [] */
   options?: string[];
   accessLabel?: string | null;
+  /** #131: una de `options` (texto exacto); exige `dueAt`. Las de plata, cliente, marca o producción no llevan */
+  defaultChoice?: string | null;
+  /** #131: ISO, en el futuro y a lo más a 30 días; exige `defaultChoice` */
+  dueAt?: IsoDate | null;
 }
 
 export interface ResolveInput {

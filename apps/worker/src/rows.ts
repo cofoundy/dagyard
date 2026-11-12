@@ -75,6 +75,8 @@ export const toBlocker = (r: Row): Blocker => ({
   resolution: r.resolution ? (JSON.parse(s(r.resolution)) as BlockerResolution) : null,
   resolvedBy: ns(r.resolved_by) as Role | null,
   resolvedAt: ns(r.resolved_at),
+  defaultChoice: ns(r.default_choice),
+  dueAt: ns(r.due_at),
   createdAt: s(r.created_at),
 });
 
@@ -88,7 +90,7 @@ export const toMessage = (r: Row): Message => ({
   createdAt: s(r.created_at),
 });
 
-export const BLOCKER_COLS = 'id, project_id, node_id, kind, question, options, access_label, status, resolution, resolved_by, resolved_at, created_at';
+export const BLOCKER_COLS = 'id, project_id, node_id, kind, question, options, access_label, status, resolution, resolved_by, resolved_at, default_choice, due_at, created_at';
 
 export const toEvent = (r: Row): DagEvent =>
   ({

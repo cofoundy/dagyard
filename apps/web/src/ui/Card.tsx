@@ -21,6 +21,7 @@ import {
   clock,
   CLOSE_TEXT,
   COPY,
+  dueLine,
   KIND_TEXT,
   reportLabel,
   reviewLabels,
@@ -404,7 +405,7 @@ function Answer({ blocker }: { blocker: Blocker }) {
   return (
     <div className="answer">
       <span className="lab">
-        {who ? answeredBy(who) : ANSWER_VERB[blocker.kind]}
+        {blocker.byDefault ? t('answer.byDefault') : who ? answeredBy(who) : ANSWER_VERB[blocker.kind]}
         {blocker.resolvedAt ? ` · ${ago(blocker.resolvedAt)}` : ''}
       </span>
       <p className="q">{blocker.kind === 'access' && blocker.label ? blocker.label : blocker.question}</p>
@@ -466,6 +467,7 @@ function BlockerPanel({ blocker, offline, onResolve }: { blocker: Blocker; offli
     <div className="block">
       <label className="kind">{BLOCK_TEXT[blocker.kind]}</label>
       <p>{blocker.question}</p>
+      {blocker.dueAt && blocker.defaultChoice && <p className="due">{dueLine(blocker.dueAt, blocker.defaultChoice)}</p>}
 
       {blocker.kind === 'decision' && (
         <div className="opts">
@@ -478,6 +480,7 @@ function BlockerPanel({ blocker, offline, onResolve }: { blocker: Blocker; offli
               onClick={() => void send({ kind: 'decision', option: o }, o)}
             >
               {sending && phase.what === o ? COPY.sending : o}
+              {o === blocker.defaultChoice && !(sending && phase.what === o) && <span className="tag">{t('block.defaultTag')}</span>}
             </button>
           ))}
         </div>
