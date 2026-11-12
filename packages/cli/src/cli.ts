@@ -338,8 +338,8 @@ imprime «<de> → <a> exists», no escribe nada y sale 0. Cualquier otro confli
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due <30m|4h|2d|ISO>] [--json]',
-      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due <30m|4h|2d|ISO>] [--json]',
+      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due|--deadline <30m|4h|2d|ISO>] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due|--deadline <30m|4h|2d|ISO>] [--json]',
     ],
     summary: ['asks a person for a decision, a review or an access', 'le pide al humano una decisión, una revisión o un acceso'],
     help: [
@@ -358,7 +358,7 @@ el servidor elige --default (una de las opciones) y lo deja escrito. Plata, mens
 producción no llevan default. Un acceso nunca.
 Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`,
     ],
-    flags: ['kind', 'q', 'opt', 'label', 'default', 'due', ...GLOBAL_FLAGS],
+    flags: ['kind', 'q', 'opt', 'label', 'default', 'due', 'deadline', ...GLOBAL_FLAGS],
     bools: ['json'],
     async run({ io, args }) {
       const [id] = need(args, [['node', 'nodo']]);
@@ -383,7 +383,10 @@ Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`,
       }
       // #131: default con plazo; el servidor valida que el default sea una opción y que el plazo sea futuro
       const def = flag(args, 'default')?.trim();
-      const due = flag(args, 'due');
+      // `--deadline` es un alias de `--due` (lo usa la fábrica, orch#202)
+      if (flag(args, 'due') !== undefined && flag(args, 'deadline') !== undefined)
+        throw new UsageError(t('--due and --deadline are the same flag; pass one', '--due y --deadline son la misma flag; pasa una'));
+      const due = flag(args, 'due') ?? flag(args, 'deadline');
       if ((def === undefined) !== (due === undefined))
         throw new UsageError(t('--default and --due go together', '--default y --due van juntos'));
       if (def !== undefined && due !== undefined) {

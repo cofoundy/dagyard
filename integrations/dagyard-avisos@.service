@@ -1,0 +1,14 @@
+# Avisos de Dagyard al dueño (Buzz + brain) para el proyecto %i. Ver integrations/README.md.
+[Unit]
+Description=Dagyard: avisos al dueño del proyecto %i
+After=network-online.target
+
+[Service]
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin
+Environment=LANG=es_PE.UTF-8
+ExecStart=/usr/bin/python3 %h/cofoundy/products/dagyard/integrations/brain-avisos.py --project %i
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
