@@ -333,3 +333,43 @@ describe('ficha: decisión con plazo (#131)', () => {
     expect(host.querySelector('.go .tag')).toBeNull();
   });
 });
+
+describe('ficha: decisión asumida (#144)', () => {
+  it('dice con qué siguió el equipo y marca esa opción, aunque la tarea ya esté lista', () => {
+    const s = plan(
+      [node({ id: 'm', title: 'Marca', status: 'done' })],
+      [],
+      [{ id: 'b1', nodeId: 'm', kind: 'decision', question: '¿Sobria o cálida?', options: ['Sobria', 'Cálida'], assumed: 'Sobria' }],
+    );
+    renderIn(s, 'm');
+    expect(host.querySelector('.block p.due')?.textContent).toBe(
+      'Mientras decides, el equipo siguió con «Sobria». Lo que sale al cliente o a producción espera tu respuesta.',
+    );
+    expect([...host.querySelectorAll('.block .opts button')].map((b) => b.textContent)).toEqual(['Sobriaen uso', 'Cálida']);
+  });
+
+  it('ya respondida, dice si confirmaste o elegiste otra', () => {
+    const answered = (overrode: boolean) =>
+      plan(
+        [node({ id: 'm', title: 'Marca', status: 'done' })],
+        [],
+        [
+          {
+            id: 'b1',
+            nodeId: 'm',
+            kind: 'decision',
+            question: '¿Sobria o cálida?',
+            options: ['Sobria', 'Cálida'],
+            assumed: 'Sobria',
+            resolution: overrode ? 'Cálida' : 'Sobria',
+            resolvedAt: new Date().toISOString(),
+            overrode: overrode || undefined,
+          },
+        ],
+      );
+    renderIn(answered(false), 'm');
+    expect(host.querySelector('.answer .lab')?.textContent).toMatch(/^Confirmaste con lo que siguió el equipo/);
+    renderIn(answered(true), 'm');
+    expect(host.querySelector('.answer .lab')?.textContent).toMatch(/^Elegiste otra: el equipo revisa lo que construyó/);
+  });
+});

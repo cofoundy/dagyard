@@ -32,6 +32,10 @@ export type WatchLine =
       dueAt?: string;
       /** #131: la respuesta fue el default al vencer el plazo */
       byDefault?: true;
+      /** #144: la opción con la que el sitio ya siguió mientras el dueño decide */
+      assumed?: string;
+      /** #144: el dueño eligió otra que la asumida */
+      overrode?: true;
       at: string;
       snapshot?: true;
     }
@@ -144,7 +148,9 @@ function blockerLine(type: 'blocker.opened' | 'blocker.resolved', seq: number, b
     line.note = b.resolution?.note ?? null;
     line.by = b.resolvedBy;
     if (b.resolution?.byDefault) line.byDefault = true;
+    if (b.resolution?.overrode) line.overrode = true;
   }
+  if (b.assumed) line.assumed = b.assumed;
   if (b.dueAt && b.defaultChoice) {
     line.defaultChoice = b.defaultChoice;
     line.dueAt = b.dueAt;
@@ -166,7 +172,8 @@ export function formatLine(l: WatchLine): string {
     const opts = l.options.length ? ` [${l.options.join(' | ')}]` : '';
     const verb = l.snapshot ? t('still waiting', 'sigue esperando') : t('asks', 'pregunta');
     const due = l.dueAt && l.defaultChoice ? t(` · if nobody answers by ${l.dueAt}: «${l.defaultChoice}»`, ` · si nadie responde antes de ${l.dueAt}: «${l.defaultChoice}»`) : '';
-    return `#${l.seq} ${l.node} ${verb} (${l.kind}): ${q}${opts}${due} · ${l.blocker}`;
+    const went = l.assumed ? t(` · went ahead with «${l.assumed}»`, ` · ya siguió con «${l.assumed}»`) : '';
+    return `#${l.seq} ${l.node} ${verb} (${l.kind}): ${q}${opts}${due}${went} · ${l.blocker}`;
   }
   const answer =
     l.kind === 'access'
@@ -174,5 +181,6 @@ export function formatLine(l: WatchLine): string {
       : (l.choice ?? t('(no option)', '(sin opción)'));
   const note = l.note ? ` — ${t('note', 'nota')}: ${oneLine(l.note, 2000)}` : '';
   const verb = l.byDefault ? t('the default applied to', 'rigió el default en') : t('answered', 'respondieron');
-  return `#${l.seq} ${l.node} ${verb} ${q}: ${answer}${note} · ${l.blocker}`;
+  const over = l.overrode ? t(` (not «${l.assumed}», the assumed one)`, ` (no «${l.assumed}», la asumida)`) : '';
+  return `#${l.seq} ${l.node} ${verb} ${q}: ${answer}${over}${note} · ${l.blocker}`;
 }

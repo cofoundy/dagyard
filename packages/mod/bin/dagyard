@@ -372,6 +372,7 @@ function fromConfigDir(env, name) {
 // ../model/dist/types.js
 var NODE_STATUSES = ["pending", "working", "blocked", "done"];
 var BLOCKER_KINDS = ["decision", "review", "access"];
+var NODE_GATES = ["client", "production"];
 var NODE_KINDS = ["goal", "request", "task", "stream"];
 var CLOSE_AS = ["done", "replaced", "dropped", "learned"];
 var LANGS = ["en", "es"];
@@ -593,6 +594,13 @@ function isoDate(v, field) {
     return null;
   return normalizeIso(v) ?? fail(`${field}: una fecha ISO 8601 con hora y zona, p. ej. 2026-10-04T05:35:20Z`);
 }
+function gate(v, field) {
+  if (v === void 0 || v === null)
+    return v;
+  if (!NODE_GATES.includes(v))
+    fail(`${field}: uno de ${NODE_GATES.join(", ")} (o null)`);
+  return v;
+}
 function kind(v, field) {
   if (v === void 0)
     return void 0;
@@ -705,6 +713,9 @@ function nodeInput(o, at) {
   const l = url(o.link, `${at}link`);
   if (l !== void 0)
     n.link = l;
+  const g = gate(o.gate, `${at}gate`);
+  if (g !== void 0)
+    n.gate = g;
   if (o.deps !== void 0) {
     if (!Array.isArray(o.deps))
       fail(`${at}deps: se esperaba una lista`);
@@ -747,6 +758,16 @@ function blockerInput(o, at) {
       fail(`${at}defaultChoice: tiene que ser una de las opciones (${b.options.join(" | ")})`);
     b.defaultChoice = def;
     b.dueAt = due;
+  }
+  const assumed = nullableStr(o.assumed, `${at}assumed`, LIMITS.option);
+  if (assumed) {
+    if (kind2 === "access")
+      fail(`${at}assumed: un acceso no se puede asumir (nadie puede inventar una clave)`);
+    if (def)
+      fail(`${at}assumed: una decisi\xF3n asumida no lleva default ni plazo (ya se sigui\xF3 con esa opci\xF3n)`);
+    if (b.options?.length && !b.options.includes(assumed))
+      fail(`${at}assumed: tiene que ser una de las opciones (${b.options.join(" | ")})`);
+    b.assumed = assumed;
   }
   return b;
 }
@@ -1903,7 +1924,9 @@ function blockerLine(type, seq, b, at, snapshot = false) {
     line.note = b.resolution?.note ?? null;
     line.by = b.resolvedBy;
     if (b.resolution?.byDefault) line.byDefault = true;
+    if (b.resolution?.overrode) line.overrode = true;
   }
+  if (b.assumed) line.assumed = b.assumed;
   if (b.dueAt && b.defaultChoice) {
     line.defaultChoice = b.defaultChoice;
     line.dueAt = b.dueAt;
@@ -1923,12 +1946,14 @@ function formatLine(l) {
     const opts = l.options.length ? ` [${l.options.join(" | ")}]` : "";
     const verb2 = l.snapshot ? t("still waiting", "sigue esperando") : t("asks", "pregunta");
     const due = l.dueAt && l.defaultChoice ? t(` \xB7 if nobody answers by ${l.dueAt}: \xAB${l.defaultChoice}\xBB`, ` \xB7 si nadie responde antes de ${l.dueAt}: \xAB${l.defaultChoice}\xBB`) : "";
-    return `#${l.seq} ${l.node} ${verb2} (${l.kind}): ${q}${opts}${due} \xB7 ${l.blocker}`;
+    const went = l.assumed ? t(` \xB7 went ahead with \xAB${l.assumed}\xBB`, ` \xB7 ya sigui\xF3 con \xAB${l.assumed}\xBB`) : "";
+    return `#${l.seq} ${l.node} ${verb2} (${l.kind}): ${q}${opts}${due}${went} \xB7 ${l.blocker}`;
   }
   const answer = l.kind === "access" ? t(`access saved (read it with \xABdagyard wait ${l.node} --blocker ${l.blocker}\xBB)`, `acceso guardado (l\xE9elo con \xABdagyard wait ${l.node} --blocker ${l.blocker}\xBB)`) : l.choice ?? t("(no option)", "(sin opci\xF3n)");
   const note = l.note ? ` \u2014 ${t("note", "nota")}: ${oneLine(l.note, 2e3)}` : "";
   const verb = l.byDefault ? t("the default applied to", "rigi\xF3 el default en") : t("answered", "respondieron");
-  return `#${l.seq} ${l.node} ${verb} ${q}: ${answer}${note} \xB7 ${l.blocker}`;
+  const over = l.overrode ? t(` (not \xAB${l.assumed}\xBB, the assumed one)`, ` (no \xAB${l.assumed}\xBB, la asumida)`) : "";
+  return `#${l.seq} ${l.node} ${verb} ${q}: ${answer}${over}${note} \xB7 ${l.blocker}`;
 }
 
 // src/cli.ts
@@ -1978,8 +2003,8 @@ function addNodeCommand(fixed) {
   const cmd = fixed ? `${fixed} add` : "node add";
   return {
     usage: [
-      `dagyard ${cmd} <node> --title "\u2026"${opts} [--from <node> [--why "\u2026"]]\u2026 [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--report <url>] [--link <url>] [--if-absent]`,
-      `dagyard ${cmd} <nodo> --title "\u2026"${opts} [--from <nodo> [--why "\u2026"]]\u2026 [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--report <url>] [--link <url>] [--if-absent]`
+      `dagyard ${cmd} <node> --title "\u2026"${opts} [--from <node> [--why "\u2026"]]\u2026 [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--dep <node>]\u2026 [--status <status>] [--report <url>] [--link <url>] [--gate client|production] [--if-absent]`,
+      `dagyard ${cmd} <nodo> --title "\u2026"${opts} [--from <nodo> [--why "\u2026"]]\u2026 [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--dep <nodo>]\u2026 [--status <estado>] [--report <url>] [--link <url>] [--gate client|production] [--if-absent]`
     ],
     summary: fixed === "goal" ? ["adds a goal: a living outcome, the root of the whys", "agrega un objetivo: un resultado vivo, ra\xEDz de los porqu\xE9s"] : fixed === "request" ? ["adds a person's request or decision, with their exact words", "agrega el pedido o la decisi\xF3n de una persona, con su cita"] : ["adds a node to the plan (a task by default)", "agrega un nodo al plan (una tarea por defecto)"],
     help: [
@@ -1991,7 +2016,8 @@ it), stream (ongoing work that spawns tasks). ${fixed ? `This is node add --kind
 a dependency: it never blocks. --dep is a dependency: this node needs <dep> closed.
 Without --stage it goes to the project's first stage. Statuses: pending, working, done (blocked is set by dagyard
 block). --report attaches its report (Basalt or the PR); --link is the technical detail (the issue or PR URL).
-Prints only the id. ${IF_ABSENT_HELP[0]}`,
+--gate client|production: it goes out to the client or to production; it does not start while a task down its chain
+has an assumed decision (dagyard block --assumed) without the yes. Prints only the id. ${IF_ABSENT_HELP[0]}`,
       `<nodo> es un id corto (T-314-A se guarda como t-314-a). --dep se repite o va separado por comas.
 Tipos: task (un due\xF1o, una sesi\xF3n, un /goal; la \xFAnica que arranca), goal (un resultado vivo; nace En progreso y nunca
 se cierra como lista), request (el pedido de una persona: --quote es su cita literal, --author qui\xE9n lo dijo), stream
@@ -1999,10 +2025,11 @@ se cierra como lista), request (el pedido de una persona: --quote es su cita lit
 --from <nodo> dice de qu\xE9 nodo naci\xF3 este (se repite); el --why que va justo despu\xE9s dice por qu\xE9. Nacer de no es
 depender: nunca bloquea. --dep s\xED es una dependencia: este nodo necesita <dep> cerrado.
 Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done (blocked lo pone dagyard block).
---report cuelga su informe (Basalt o el PR); --link es el detalle t\xE9cnico (URL del issue o del PR). Imprime
-solo el id. ${IF_ABSENT_HELP[1]}`
+--report cuelga su informe (Basalt o el PR); --link es el detalle t\xE9cnico (URL del issue o del PR).
+--gate client|production: sale al cliente o a producci\xF3n; no arranca mientras una tarea de su cadena tenga una
+decisi\xF3n asumida (dagyard block --assumed) sin el s\xED. Imprime solo el id. ${IF_ABSENT_HELP[1]}`
     ],
-    flags: ["title", "stage", "goal", "team", "dep", "status", "report", "link", "from", "why", ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
+    flags: ["title", "stage", "goal", "team", "dep", "status", "report", "link", "gate", "from", "why", ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
     bools: ["if-absent"],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
@@ -2033,6 +2060,8 @@ solo el id. ${IF_ABSENT_HELP[1]}`
       if (report !== void 0) input.reportUrl = report;
       const link = linkArg(args);
       if (link !== void 0) input.link = link;
+      const gate2 = gateArg(args);
+      if (gate2 !== void 0) input.gate = gate2;
       const node = await ifAbsent(args, () => client(io, args).addNode(project(io, args), input));
       io.stdout(node === EXISTS ? `${input.id} exists
 ` : `${node?.id ?? input.id}
@@ -2047,15 +2076,15 @@ var COMMANDS = {
   "request add": addNodeCommand("request"),
   "node update": {
     usage: [
-      'dagyard node update <node> [--title "\u2026"] [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--status <status>] [--progress <p>] [--report <url>] [--link <url>]',
-      'dagyard node update <nodo> [--title "\u2026"] [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--status <estado>] [--progress <p>] [--report <url>] [--link <url>]'
+      'dagyard node update <node> [--title "\u2026"] [--stage <stage>] [--goal "\u2026"] [--team "\u2026"] [--status <status>] [--progress <p>] [--report <url>] [--link <url>] [--gate client|production|none]',
+      'dagyard node update <nodo> [--title "\u2026"] [--stage <etapa>] [--goal "\u2026"] [--team "\u2026"] [--status <estado>] [--progress <p>] [--report <url>] [--link <url>] [--gate client|production|none]'
     ],
     summary: ["changes fields of a task", "cambia campos de una tarea"],
     help: [
-      "--progress takes 0..1 or a percentage (40%). --link: the issue or PR URL (the technical-detail link).",
-      "--progress acepta 0..1 o un porcentaje (40%). --link: URL del issue o del PR (\xABDetalle t\xE9cnico \u2197\xBB)."
+      "--progress takes 0..1 or a percentage (40%). --link: the issue or PR URL (the technical-detail link). --gate none removes it.",
+      "--progress acepta 0..1 o un porcentaje (40%). --link: URL del issue o del PR (\xABDetalle t\xE9cnico \u2197\xBB). --gate none lo quita."
     ],
-    flags: ["title", "stage", "goal", "team", "status", "progress", "report", "link", ...GLOBAL_FLAGS],
+    flags: ["title", "stage", "goal", "team", "status", "progress", "report", "link", "gate", ...GLOBAL_FLAGS],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
       const patch = {};
@@ -2075,6 +2104,8 @@ var COMMANDS = {
       if (report !== void 0) patch.reportUrl = report;
       const link = linkArg(args);
       if (link !== void 0) patch.link = link;
+      const gate2 = gateArg(args, true);
+      if (gate2 !== void 0) patch.gate = gate2;
       if (Object.keys(patch).length === 0) throw new UsageError(t("nothing to change", "no hay nada que cambiar"));
       await client(io, args).updateNode(project(io, args), nodeId(id), patch);
       io.stdout(`${nodeId(id)}
@@ -2206,8 +2237,8 @@ imprime \xAB<de> \u2192 <a> exists\xBB, no escribe nada y sale 0. Cualquier otro
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due|--deadline <30m|4h|2d|ISO>] [--json]',
-      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due|--deadline <30m|4h|2d|ISO>] [--json]'
+      'dagyard block <node> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due|--deadline <30m|4h|2d|ISO> | --assumed "\u2026"] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "\u2026" [--opt "\u2026"]\u2026 [--label "\u2026"] [--default "\u2026" --due|--deadline <30m|4h|2d|ISO> | --assumed "\u2026"] [--json]'
     ],
     summary: ["asks a person for a decision, a review or an access", "le pide al humano una decisi\xF3n, una revisi\xF3n o un acceso"],
     help: [
@@ -2217,6 +2248,9 @@ access: --label names the access (e.g. \xABPayment gateway key\xBB).
 --default and --due go together: if nobody answers before --due (30m, 4h, 2d or an ISO date, at most 30 days),
 the server picks --default (one of the options) and leaves it in writing. Money, client messages, brand and
 production take no default. An access never does.
+--assumed "<option>": you already went ahead with that option (your recommendation) while the person decides. The
+task is not held: it can close and what needs it starts; a task with --gate client|production down its chain waits
+for the yes. If the person picks another option, the server writes it on the task. Never with --default.
 Prints the blocker id, to pass to dagyard wait --blocker.`,
       `decision: --opt al menos una vez (m\xE1ximo ${LIMITS.options}).
 review: sin --opt ofrece \xABApprove\xBB y \xABRequest changes\xBB (en un proyecto en espa\xF1ol, \xABAprobar\xBB y \xABPedir cambios\xBB).
@@ -2224,9 +2258,12 @@ access: --label nombra el acceso (p. ej. \xABClave de la pasarela de pagos\xBB).
 --default y --due van juntos: si nadie responde antes de --due (30m, 4h, 2d o una fecha ISO, a lo m\xE1s 30 d\xEDas),
 el servidor elige --default (una de las opciones) y lo deja escrito. Plata, mensajes al cliente, marca y
 producci\xF3n no llevan default. Un acceso nunca.
+--assumed "<opci\xF3n>": ya seguiste con esa opci\xF3n (tu recomendaci\xF3n) mientras la persona decide. La tarea no se
+frena: puede cerrarse y lo que la necesita arranca; una tarea con --gate client|production m\xE1s abajo en su cadena
+espera el s\xED. Si la persona elige otra, el servidor lo escribe en la tarea. Nunca junto a --default.
 Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`
     ],
-    flags: ["kind", "q", "opt", "label", "default", "due", "deadline", ...GLOBAL_FLAGS],
+    flags: ["kind", "q", "opt", "label", "default", "due", "deadline", "assumed", ...GLOBAL_FLAGS],
     bools: ["json"],
     async run({ io, args }) {
       const [id] = need(args, [["node", "nodo"]]);
@@ -2260,6 +2297,14 @@ Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`
           throw new UsageError(t(`--default must be one of the --opt (${opts.join(" | ")})`, `--default tiene que ser uno de los --opt (${opts.join(" | ")})`));
         input.defaultChoice = def;
         input.dueAt = parseDue(due, Date.now());
+      }
+      const assumed = flag(args, "assumed")?.trim();
+      if (assumed !== void 0) {
+        if (kind2 === "access") throw new UsageError(t("an access takes no --assumed", "un acceso no lleva --assumed"));
+        if (def !== void 0) throw new UsageError(t("--assumed and --default do not go together", "--assumed y --default no van juntos"));
+        if (opts.length && !opts.includes(assumed))
+          throw new UsageError(t(`--assumed must be one of the --opt (${opts.join(" | ")})`, `--assumed tiene que ser uno de los --opt (${opts.join(" | ")})`));
+        input.assumed = assumed;
       }
       const blocker = await client(io, args).openBlocker(project(io, args), nodeId(id), input);
       io.stdout(args.bools.has("json") ? `${JSON.stringify(blocker)}
@@ -2981,6 +3026,16 @@ function optional(args, key, max) {
     throw new UsageError(t(`--${key} is at most ${max} characters`, `--${key} va hasta ${max} caracteres`));
   }
   return v;
+}
+function gateArg(args, clearable = false) {
+  const g = flag(args, "gate")?.trim();
+  if (g === void 0) return void 0;
+  if (clearable && g === "none") return null;
+  if (!NODE_GATES.includes(g)) {
+    const all = [...NODE_GATES, ...clearable ? ["none"] : []].join("|");
+    throw new UsageError(t(`--gate must be ${all}`, `--gate debe ser ${all}`));
+  }
+  return g;
 }
 function linkArg(args) {
   const link = optional(args, "link", LIMITS.url);

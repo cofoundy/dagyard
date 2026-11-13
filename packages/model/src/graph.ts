@@ -1,5 +1,5 @@
 /** Reglas puras del grafo. Las usan el Worker (`next`, ciclos) y la UI/CLI (conteos). */
-import { DEFAULT_KIND, type DagNode, type Edge, type NextResult, type NodeKind, type Origin, type ProjectCounts, type Stage } from './types.js';
+import { DEFAULT_KIND, type Blocker, type DagNode, type Edge, type NextResult, type NodeKind, type Origin, type ProjectCounts, type Stage } from './types.js';
 
 type E = Pick<Edge, 'from' | 'to'>;
 
@@ -100,11 +100,37 @@ export function depSatisfied(byId: ReadonlyMap<string, Closable>, id: string, de
  * Un nodo es arrancable si es una `task` `pending` y todas sus dependencias («necesita», solo `edges`) están
  * satisfechas (`depSatisfied`). «Nació de» nunca entra.
  */
-export function startable(nodes: readonly DagNode[], edges: readonly E[]): DagNode[] {
+export function startable(nodes: readonly DagNode[], edges: readonly E[], assumed: ReadonlySet<string> = new Set()): DagNode[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   return nodes.filter(
-    (n) => nodeKind(n) === 'task' && n.status === 'pending' && depsOf(n.id, edges).every((d) => depSatisfied(byId, d, n.id)),
+    (n) =>
+      nodeKind(n) === 'task' &&
+      n.status === 'pending' &&
+      depsOf(n.id, edges).every((d) => depSatisfied(byId, d, n.id)) &&
+      !(n.gate && waitsOnAssumption(n.id, edges, assumed)),
   );
+}
+
+/**
+ * #144: ¿alguna tarea de la cadena de `id` (sus dependencias «necesita», transitivas) tiene una decisión asumida
+ * abierta? `assumed` = ids de esas tareas. Lo que sale al cliente o a producción espera el sí del dueño.
+ */
+export function waitsOnAssumption(id: string, edges: readonly E[], assumed: ReadonlySet<string>): boolean {
+  if (!assumed.size) return false;
+  const seen = new Set<string>([id]);
+  const q = [id];
+  while (q.length) {
+    for (const d of depsOf(q.shift()!, edges)) {
+      if (assumed.has(d)) return true;
+      if (!seen.has(d)) (seen.add(d), q.push(d));
+    }
+  }
+  return false;
+}
+
+/** #144: las tareas con una decisión asumida abierta (lo que el dueño todavía no confirmó). */
+export function assumedNodes(blockers: readonly Pick<Blocker, 'nodeId' | 'status' | 'assumed'>[]): Set<string> {
+  return new Set(blockers.filter((b) => b.status === 'open' && b.assumed).map((b) => b.nodeId));
 }
 
 /**
@@ -150,9 +176,10 @@ export function nextStartable(
   stages: readonly Stage[],
   nodes: readonly DagNode[],
   edges: readonly E[],
+  assumed: ReadonlySet<string> = new Set(),
 ): NextResult {
   const order = new Map(stages.map((s, i) => [s.id, i]));
-  const [node] = startable(nodes, edges).sort(
+  const [node] = startable(nodes, edges, assumed).sort(
     (a, b) =>
       (order.get(a.stage) ?? 99) - (order.get(b.stage) ?? 99) ||
       a.createdAt.localeCompare(b.createdAt) ||

@@ -6,6 +6,7 @@ import {
   BLOCKER_KINDS,
   CLOSE_AS,
   EDGE_KINDS,
+  NODE_GATES,
   NODE_KINDS,
   LANGS,
   LIMITS,
@@ -20,6 +21,7 @@ import {
   type Lang,
   type MessageInput,
   type NodeInput,
+  type NodeGate,
   type NodeKind,
   type NodePatch,
   type NodeStatus,
@@ -191,6 +193,12 @@ function isoDate(v: unknown, field: string): IsoDate | null | undefined {
   return normalizeIso(v) ?? fail(`${field}: una fecha ISO 8601 con hora y zona, p. ej. 2026-10-04T05:35:20Z`);
 }
 
+function gate(v: unknown, field: string): NodeGate | null | undefined {
+  if (v === undefined || v === null) return v as undefined | null;
+  if (!NODE_GATES.includes(v as NodeGate)) fail(`${field}: uno de ${NODE_GATES.join(', ')} (o null)`);
+  return v as NodeGate;
+}
+
 function kind(v: unknown, field: string): NodeKind | undefined {
   if (v === undefined) return undefined;
   if (!NODE_KINDS.includes(v as NodeKind)) fail(`${field}: uno de ${NODE_KINDS.join(', ')}`);
@@ -297,6 +305,8 @@ function nodeInput(o: Record<string, unknown>, at: string): NodeInput {
   if (r !== undefined) n.reportUrl = r;
   const l = url(o.link, `${at}link`);
   if (l !== undefined) n.link = l;
+  const g = gate(o.gate, `${at}gate`);
+  if (g !== undefined) n.gate = g;
   if (o.deps !== undefined) {
     if (!Array.isArray(o.deps)) fail(`${at}deps: se esperaba una lista`);
     n.deps = (o.deps as unknown[]).map((d, i) => slug(d, `${at}deps[${i}]`)!);
@@ -315,7 +325,7 @@ export function parseNodeInput(body: unknown): Parsed<NodeInput> {
 export function parseNodePatch(body: unknown): Parsed<NodePatchInput> {
   return wrap(() => {
     const o = obj(body, 'body');
-    const allowed = ['stage', 'title', 'status', 'progress', 'team', 'goal', 'reportUrl', 'link', 'teamId', 'kind', 'quote', 'quoteBy'];
+    const allowed = ['stage', 'title', 'status', 'progress', 'team', 'goal', 'reportUrl', 'link', 'teamId', 'kind', 'quote', 'quoteBy', 'gate'];
     const extra = Object.keys(o).filter((k) => !allowed.includes(k));
     if (extra.length) fail(`campos no editables: ${extra.join(', ')}${extra.includes('closedAs') ? ' (para cerrar con motivo, POST …/close)' : ''}`);
     const p: NodePatchInput = {};
@@ -340,6 +350,8 @@ export function parseNodePatch(body: unknown): Parsed<NodePatchInput> {
     if (r !== undefined) p.reportUrl = r;
     const l = url(o.link, 'link');
     if (l !== undefined) p.link = l;
+    const g = gate(o.gate, 'gate');
+    if (g !== undefined) p.gate = g;
     if (Object.keys(p).length === 0) fail('nada que actualizar');
     // con el `kind` guardado lo termina de validar el servidor
     kindRules(p, '', false);
@@ -410,6 +422,14 @@ function blockerInput(o: Record<string, unknown>, at: string): BlockerInput {
     if (b.options?.length && !b.options.includes(def!)) fail(`${at}defaultChoice: tiene que ser una de las opciones (${b.options.join(' | ')})`);
     b.defaultChoice = def!;
     b.dueAt = due!;
+  }
+  // #144: la opción con la que el sitio ya siguió. No convive con un default: o se espera el plazo, o ya se siguió
+  const assumed = nullableStr(o.assumed, `${at}assumed`, LIMITS.option);
+  if (assumed) {
+    if (kind === 'access') fail(`${at}assumed: un acceso no se puede asumir (nadie puede inventar una clave)`);
+    if (def) fail(`${at}assumed: una decisión asumida no lleva default ni plazo (ya se siguió con esa opción)`);
+    if (b.options?.length && !b.options.includes(assumed)) fail(`${at}assumed: tiene que ser una de las opciones (${b.options.join(' | ')})`);
+    b.assumed = assumed;
   }
   return b;
 }

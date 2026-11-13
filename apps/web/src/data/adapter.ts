@@ -126,6 +126,8 @@ export function toBlocker(b: WireBlocker): Blocker {
     defaultChoice: opt(b.defaultChoice),
     dueAt: opt(b.dueAt),
     byDefault: resolved && b.resolution?.byDefault === true ? true : undefined,
+    assumed: opt(b.assumed),
+    overrode: resolved && b.resolution?.overrode === true ? true : undefined,
   };
 }
 

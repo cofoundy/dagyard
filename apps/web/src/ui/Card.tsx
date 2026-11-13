@@ -405,7 +405,13 @@ function Answer({ blocker }: { blocker: Blocker }) {
   return (
     <div className="answer">
       <span className="lab">
-        {blocker.byDefault ? t('answer.byDefault') : who ? answeredBy(who) : ANSWER_VERB[blocker.kind]}
+        {blocker.byDefault
+          ? t('answer.byDefault')
+          : blocker.assumed && !who
+            ? t(blocker.overrode ? 'answer.overrode' : 'answer.confirmed')
+            : who
+              ? answeredBy(who)
+              : ANSWER_VERB[blocker.kind]}
         {blocker.resolvedAt ? ` · ${ago(blocker.resolvedAt)}` : ''}
       </span>
       <p className="q">{blocker.kind === 'access' && blocker.label ? blocker.label : blocker.question}</p>
@@ -468,6 +474,7 @@ function BlockerPanel({ blocker, offline, onResolve }: { blocker: Blocker; offli
       <label className="kind">{BLOCK_TEXT[blocker.kind]}</label>
       <p>{blocker.question}</p>
       {blocker.dueAt && blocker.defaultChoice && <p className="due">{dueLine(blocker.dueAt, blocker.defaultChoice)}</p>}
+      {blocker.assumed && <p className="due">{t('block.assumed', { choice: blocker.assumed })}</p>}
 
       {blocker.kind === 'decision' && (
         <div className="opts">
@@ -481,6 +488,7 @@ function BlockerPanel({ blocker, offline, onResolve }: { blocker: Blocker; offli
             >
               {sending && phase.what === o ? COPY.sending : o}
               {o === blocker.defaultChoice && !(sending && phase.what === o) && <span className="tag">{t('block.defaultTag')}</span>}
+              {o === blocker.assumed && !(sending && phase.what === o) && <span className="tag">{t('block.assumedTag')}</span>}
             </button>
           ))}
         </div>
