@@ -119,6 +119,9 @@ def opened(line: dict, project: str, para: str, sent: "Sent") -> int:
         detail.append(f"Si no respondes antes del {due:%d/%m %H:%M} (Lima), rige «{line['defaultChoice']}».")
         # pasado el plazo ya no hay nada que responder: la tarea no debe seguir viva
         caduca = due
+    if line.get("assumed"):
+        # #144: el equipo ya siguió; lo que sale al cliente o a producción espera la respuesta
+        detail.append(f"Mientras decides, el equipo siguió con «{line['assumed']}».")
     args = ["tarea", "add", title, "--para", para, "--cuando", f"{now:%Y-%m-%dT%H:%M}", "--caduca", f"{caduca:%Y-%m-%dT%H:%M}",
             "--clave", f"dagyard:{line['blocker']}", "--origen", "dagyard"]
     for d in detail:

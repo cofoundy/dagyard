@@ -87,6 +87,10 @@ export interface Blocker {
   dueAt?: string;
   /** #131: se resolvió sola al vencer el plazo */
   byDefault?: boolean;
+  /** #144: la opción con la que el equipo ya siguió mientras el dueño decide */
+  assumed?: string;
+  /** #144: el dueño eligió otra que la asumida */
+  overrode?: boolean;
 }
 
 export interface Message {

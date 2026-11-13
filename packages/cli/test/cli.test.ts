@@ -105,7 +105,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return reply(res, 201, { id: 'm_1' });
   }
   if (req.method === 'POST' && sub === 'blockers') {
-    const input = body as Pick<Blocker, 'kind' | 'question' | 'options' | 'accessLabel' | 'defaultChoice' | 'dueAt'>;
+    const input = body as Pick<Blocker, 'kind' | 'question' | 'options' | 'accessLabel' | 'defaultChoice' | 'dueAt' | 'assumed'>;
     const id = `b_${blockers.size + 1}`;
     const b: Blocker = {
       id,
@@ -122,6 +122,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       resolvedAt: null,
       defaultChoice: input.defaultChoice ?? null,
       dueAt: input.dueAt ?? null,
+      assumed: input.assumed ?? null,
       createdAt: new Date().toISOString(),
     };
     blockers.set(id, b);
@@ -543,6 +544,15 @@ describe('block + wait', () => {
     ])
       expect((await cli(['block', 'pagos', '--kind', 'decision', '--q', '¿?', '--opt', 'Local', ...bad])).code).toBe(EXIT.usage);
     expect((await cli(['block', 'pagos', '--kind', 'access', '--q', 'clave', '--label', 'x', '--default', 'a', '--due', '1h'])).code).toBe(EXIT.usage);
+  });
+
+  it('#144: --assumed manda la opción con la que ya se siguió; nunca con --default ni en un acceso', async () => {
+    const b = await cli(['block', 'pagos', '--kind', 'decision', '--q', '¿Sobria o cálida?', '--opt', 'Sobria', '--opt', 'Cálida', '--assumed', 'Sobria']);
+    expect(b.code).toBe(0);
+    expect(blockers.get(b.stdout.trim())!.assumed).toBe('Sobria');
+    for (const bad of [['--assumed', 'Otra'], ['--assumed', 'A', '--default', 'A', '--due', '1h']])
+      expect((await cli(['block', 'pagos', '--kind', 'decision', '--q', '¿?', '--opt', 'A', ...bad])).code).toBe(EXIT.usage);
+    expect((await cli(['block', 'pagos', '--kind', 'access', '--q', 'clave', '--label', 'x', '--assumed', 'a'])).code).toBe(EXIT.usage);
   });
 
   it('#131: --deadline es alias de --due', async () => {
@@ -1024,6 +1034,15 @@ describe('--link (#45)', () => {
     expect(last().body).toMatchObject({ id: 'gh-7', link: 'https://github.com/o/r/issues/7' });
     await cli(['node', 'update', 'gh-7', '--link', 'https://github.com/o/r/pull/9']);
     expect(last().body).toEqual({ link: 'https://github.com/o/r/pull/9' });
+  });
+
+  it('#144: --gate client|production; en node update, none lo quita', async () => {
+    await cli(['node', 'add', 'gh-8', '--title', 'Release', '--stage', 'construccion', '--gate', 'production']);
+    expect(last().body).toMatchObject({ id: 'gh-8', gate: 'production' });
+    await cli(['node', 'update', 'gh-8', '--gate', 'none']);
+    expect(last().body).toEqual({ gate: null });
+    expect((await cli(['node', 'update', 'gh-8', '--gate', 'marketing'])).code).toBe(EXIT.usage);
+    expect((await cli(['node', 'add', 'gh-9', '--title', 'X', '--gate', 'none'])).code).toBe(EXIT.usage);
   });
 
   it('un link que no es http(s) se rechaza sin llamar', async () => {

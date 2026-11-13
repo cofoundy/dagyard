@@ -39,6 +39,8 @@ export const toNode = (r: Row): DagNode => ({
   closedReason: ns(r.closed_reason),
   replacedBy: ns(r.replaced_by),
   closedAt: ns(r.closed_at),
+  // #144: siempre presente (null = interna)
+  gate: ns(r.gate) as DagNode['gate'],
   createdAt: s(r.created_at),
   updatedAt: s(r.updated_at),
 });
@@ -77,6 +79,7 @@ export const toBlocker = (r: Row): Blocker => ({
   resolvedAt: ns(r.resolved_at),
   defaultChoice: ns(r.default_choice),
   dueAt: ns(r.due_at),
+  assumed: ns(r.assumed),
   createdAt: s(r.created_at),
 });
 
@@ -90,7 +93,7 @@ export const toMessage = (r: Row): Message => ({
   createdAt: s(r.created_at),
 });
 
-export const BLOCKER_COLS = 'id, project_id, node_id, kind, question, options, access_label, status, resolution, resolved_by, resolved_at, default_choice, due_at, created_at';
+export const BLOCKER_COLS = 'id, project_id, node_id, kind, question, options, access_label, status, resolution, resolved_by, resolved_at, default_choice, due_at, assumed, created_at';
 
 export const toEvent = (r: Row): DagEvent =>
   ({

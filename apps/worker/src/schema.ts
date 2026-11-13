@@ -171,6 +171,8 @@ export const MIGRATIONS: string[][] = [
     `ALTER TABLE blockers ADD COLUMN due_at TEXT`,
     `CREATE INDEX blockers_due ON blockers(due_at) WHERE status = 'open' AND due_at IS NOT NULL`,
   ],
+  // v10: decisión asumida (#144). `assumed` = la opción con la que el sitio ya siguió; `gate` = sale al cliente o a prod
+  [`ALTER TABLE blockers ADD COLUMN assumed TEXT`, `ALTER TABLE nodes ADD COLUMN gate TEXT`],
 ];
 
 /**

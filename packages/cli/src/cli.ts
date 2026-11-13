@@ -6,8 +6,8 @@ import { ApiRequestError, DagyardClient } from './api.js';
 import { assertKnownFlags, flag, parseArgs, UsageError, type ParsedArgs } from './args.js';
 import { loadConfig, loadKey } from './config.js';
 import { langFromEnv, plural, t, withLang } from './i18n.js';
-import type { BlockerInput, BlockerKind, BlockerWaitResult, CloseAs, CloseInput, DagNode, Lang, NodeInput, NodeKind, NodePatch, NodePatchInput, NodeStatus, OriginInput, Team, TeamPatch } from '@dagyard/model';
-import { BLOCKER_KINDS, CLOSE_AS, DEFAULT_LANG, LANGS, LIMITS, NODE_KINDS, NODE_STATUSES, TEAM_LIMITS, isSlug, normalizeIso, parseProjectGraphInput, projectLang, slugify } from '@dagyard/model';
+import type { BlockerInput, BlockerKind, BlockerWaitResult, CloseAs, CloseInput, DagNode, Lang, NodeInput, NodeGate, NodeKind, NodePatch, NodePatchInput, NodeStatus, OriginInput, Team, TeamPatch } from '@dagyard/model';
+import { BLOCKER_KINDS, CLOSE_AS, DEFAULT_LANG, LANGS, LIMITS, NODE_GATES, NODE_KINDS, NODE_STATUSES, TEAM_LIMITS, isSlug, normalizeIso, parseProjectGraphInput, projectLang, slugify } from '@dagyard/model';
 import { parseLedger, teamPatchFromLedger, teamsFromLedger, type LedgerTeam } from './ledger.js';
 import { buildImport, importProjectId, projectNameFromDir, readTasksDir, readTitles, type ImportResult } from './tasks/import.js';
 import { oneLine } from './tasks/parse.js';
@@ -113,8 +113,8 @@ function addNodeCommand(fixed?: NodeKind): Command {
   const cmd = fixed ? `${fixed} add` : 'node add';
   return {
     usage: [
-      `dagyard ${cmd} <node> --title "…"${opts} [--from <node> [--why "…"]]… [--stage <stage>] [--goal "…"] [--team "…"] [--dep <node>]… [--status <status>] [--report <url>] [--link <url>] [--if-absent]`,
-      `dagyard ${cmd} <nodo> --title "…"${opts} [--from <nodo> [--why "…"]]… [--stage <etapa>] [--goal "…"] [--team "…"] [--dep <nodo>]… [--status <estado>] [--report <url>] [--link <url>] [--if-absent]`,
+      `dagyard ${cmd} <node> --title "…"${opts} [--from <node> [--why "…"]]… [--stage <stage>] [--goal "…"] [--team "…"] [--dep <node>]… [--status <status>] [--report <url>] [--link <url>] [--gate client|production] [--if-absent]`,
+      `dagyard ${cmd} <nodo> --title "…"${opts} [--from <nodo> [--why "…"]]… [--stage <etapa>] [--goal "…"] [--team "…"] [--dep <nodo>]… [--status <estado>] [--report <url>] [--link <url>] [--gate client|production] [--if-absent]`,
     ],
     summary:
       fixed === 'goal'
@@ -131,7 +131,8 @@ it), stream (ongoing work that spawns tasks). ${fixed ? `This is node add --kind
 a dependency: it never blocks. --dep is a dependency: this node needs <dep> closed.
 Without --stage it goes to the project's first stage. Statuses: pending, working, done (blocked is set by dagyard
 block). --report attaches its report (Basalt or the PR); --link is the technical detail (the issue or PR URL).
-Prints only the id. ${IF_ABSENT_HELP[0]}`,
+--gate client|production: it goes out to the client or to production; it does not start while a task down its chain
+has an assumed decision (dagyard block --assumed) without the yes. Prints only the id. ${IF_ABSENT_HELP[0]}`,
       `<nodo> es un id corto (T-314-A se guarda como t-314-a). --dep se repite o va separado por comas.
 Tipos: task (un dueño, una sesión, un /goal; la única que arranca), goal (un resultado vivo; nace En progreso y nunca
 se cierra como lista), request (el pedido de una persona: --quote es su cita literal, --author quién lo dijo), stream
@@ -139,10 +140,11 @@ se cierra como lista), request (el pedido de una persona: --quote es su cita lit
 --from <nodo> dice de qué nodo nació este (se repite); el --why que va justo después dice por qué. Nacer de no es
 depender: nunca bloquea. --dep sí es una dependencia: este nodo necesita <dep> cerrado.
 Sin --stage va a la primera etapa del proyecto. Estados: pending, working, done (blocked lo pone dagyard block).
---report cuelga su informe (Basalt o el PR); --link es el detalle técnico (URL del issue o del PR). Imprime
-solo el id. ${IF_ABSENT_HELP[1]}`,
+--report cuelga su informe (Basalt o el PR); --link es el detalle técnico (URL del issue o del PR).
+--gate client|production: sale al cliente o a producción; no arranca mientras una tarea de su cadena tenga una
+decisión asumida (dagyard block --assumed) sin el sí. Imprime solo el id. ${IF_ABSENT_HELP[1]}`,
     ],
-    flags: ['title', 'stage', 'goal', 'team', 'dep', 'status', 'report', 'link', 'from', 'why', ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
+    flags: ['title', 'stage', 'goal', 'team', 'dep', 'status', 'report', 'link', 'gate', 'from', 'why', ...kindFlag, ...quoteFlags, ...GLOBAL_FLAGS],
     bools: ['if-absent'],
     async run({ io, args }) {
       const [id] = need(args, [['node', 'nodo']]);
@@ -173,6 +175,8 @@ solo el id. ${IF_ABSENT_HELP[1]}`,
       if (report !== undefined) input.reportUrl = report;
       const link = linkArg(args);
       if (link !== undefined) input.link = link;
+      const gate = gateArg(args);
+      if (gate !== undefined) input.gate = gate;
       const node = await ifAbsent(args, () => client(io, args).addNode(project(io, args), input));
       io.stdout(node === EXISTS ? `${input.id} exists\n` : `${node?.id ?? input.id}\n`);
       return EXIT.ok;
@@ -186,15 +190,15 @@ export const COMMANDS: Record<string, Command> = {
   'request add': addNodeCommand('request'),
   'node update': {
     usage: [
-      'dagyard node update <node> [--title "…"] [--stage <stage>] [--goal "…"] [--team "…"] [--status <status>] [--progress <p>] [--report <url>] [--link <url>]',
-      'dagyard node update <nodo> [--title "…"] [--stage <etapa>] [--goal "…"] [--team "…"] [--status <estado>] [--progress <p>] [--report <url>] [--link <url>]',
+      'dagyard node update <node> [--title "…"] [--stage <stage>] [--goal "…"] [--team "…"] [--status <status>] [--progress <p>] [--report <url>] [--link <url>] [--gate client|production|none]',
+      'dagyard node update <nodo> [--title "…"] [--stage <etapa>] [--goal "…"] [--team "…"] [--status <estado>] [--progress <p>] [--report <url>] [--link <url>] [--gate client|production|none]',
     ],
     summary: ['changes fields of a task', 'cambia campos de una tarea'],
     help: [
-      '--progress takes 0..1 or a percentage (40%). --link: the issue or PR URL (the technical-detail link).',
-      '--progress acepta 0..1 o un porcentaje (40%). --link: URL del issue o del PR («Detalle técnico ↗»).',
+      '--progress takes 0..1 or a percentage (40%). --link: the issue or PR URL (the technical-detail link). --gate none removes it.',
+      '--progress acepta 0..1 o un porcentaje (40%). --link: URL del issue o del PR («Detalle técnico ↗»). --gate none lo quita.',
     ],
-    flags: ['title', 'stage', 'goal', 'team', 'status', 'progress', 'report', 'link', ...GLOBAL_FLAGS],
+    flags: ['title', 'stage', 'goal', 'team', 'status', 'progress', 'report', 'link', 'gate', ...GLOBAL_FLAGS],
     async run({ io, args }) {
       const [id] = need(args, [['node', 'nodo']]);
       const patch: NodePatch = {};
@@ -214,6 +218,8 @@ export const COMMANDS: Record<string, Command> = {
       if (report !== undefined) patch.reportUrl = report;
       const link = linkArg(args);
       if (link !== undefined) patch.link = link;
+      const gate = gateArg(args, true);
+      if (gate !== undefined) patch.gate = gate;
       if (Object.keys(patch).length === 0) throw new UsageError(t('nothing to change', 'no hay nada que cambiar'));
       await client(io, args).updateNode(project(io, args), nodeId(id), patch);
       io.stdout(`${nodeId(id)}\n`);
@@ -338,8 +344,8 @@ imprime «<de> → <a> exists», no escribe nada y sale 0. Cualquier otro confli
   },
   block: {
     usage: [
-      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due|--deadline <30m|4h|2d|ISO>] [--json]',
-      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due|--deadline <30m|4h|2d|ISO>] [--json]',
+      'dagyard block <node> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due|--deadline <30m|4h|2d|ISO> | --assumed "…"] [--json]',
+      'dagyard block <nodo> --kind decision|review|access --q "…" [--opt "…"]… [--label "…"] [--default "…" --due|--deadline <30m|4h|2d|ISO> | --assumed "…"] [--json]',
     ],
     summary: ['asks a person for a decision, a review or an access', 'le pide al humano una decisión, una revisión o un acceso'],
     help: [
@@ -349,6 +355,9 @@ access: --label names the access (e.g. «Payment gateway key»).
 --default and --due go together: if nobody answers before --due (30m, 4h, 2d or an ISO date, at most 30 days),
 the server picks --default (one of the options) and leaves it in writing. Money, client messages, brand and
 production take no default. An access never does.
+--assumed "<option>": you already went ahead with that option (your recommendation) while the person decides. The
+task is not held: it can close and what needs it starts; a task with --gate client|production down its chain waits
+for the yes. If the person picks another option, the server writes it on the task. Never with --default.
 Prints the blocker id, to pass to dagyard wait --blocker.`,
       `decision: --opt al menos una vez (máximo ${LIMITS.options}).
 review: sin --opt ofrece «Approve» y «Request changes» (en un proyecto en español, «Aprobar» y «Pedir cambios»).
@@ -356,9 +365,12 @@ access: --label nombra el acceso (p. ej. «Clave de la pasarela de pagos»).
 --default y --due van juntos: si nadie responde antes de --due (30m, 4h, 2d o una fecha ISO, a lo más 30 días),
 el servidor elige --default (una de las opciones) y lo deja escrito. Plata, mensajes al cliente, marca y
 producción no llevan default. Un acceso nunca.
+--assumed "<opción>": ya seguiste con esa opción (tu recomendación) mientras la persona decide. La tarea no se
+frena: puede cerrarse y lo que la necesita arranca; una tarea con --gate client|production más abajo en su cadena
+espera el sí. Si la persona elige otra, el servidor lo escribe en la tarea. Nunca junto a --default.
 Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`,
     ],
-    flags: ['kind', 'q', 'opt', 'label', 'default', 'due', 'deadline', ...GLOBAL_FLAGS],
+    flags: ['kind', 'q', 'opt', 'label', 'default', 'due', 'deadline', 'assumed', ...GLOBAL_FLAGS],
     bools: ['json'],
     async run({ io, args }) {
       const [id] = need(args, [['node', 'nodo']]);
@@ -395,6 +407,15 @@ Imprime el id del bloqueante, para pasarlo a dagyard wait --blocker.`,
           throw new UsageError(t(`--default must be one of the --opt (${opts.join(' | ')})`, `--default tiene que ser uno de los --opt (${opts.join(' | ')})`));
         input.defaultChoice = def;
         input.dueAt = parseDue(due, Date.now());
+      }
+      // #144: la opción con la que el sitio ya siguió; el servidor valida que sea una de las opciones
+      const assumed = flag(args, 'assumed')?.trim();
+      if (assumed !== undefined) {
+        if (kind === 'access') throw new UsageError(t('an access takes no --assumed', 'un acceso no lleva --assumed'));
+        if (def !== undefined) throw new UsageError(t('--assumed and --default do not go together', '--assumed y --default no van juntos'));
+        if (opts.length && !opts.includes(assumed))
+          throw new UsageError(t(`--assumed must be one of the --opt (${opts.join(' | ')})`, `--assumed tiene que ser uno de los --opt (${opts.join(' | ')})`));
+        input.assumed = assumed;
       }
       const blocker = await client(io, args).openBlocker(project(io, args), nodeId(id), input);
       io.stdout(args.bools.has('json') ? `${JSON.stringify(blocker)}\n` : `${blocker.id}\n`);
@@ -1151,6 +1172,18 @@ function optional(args: ParsedArgs, key: string, max?: number): string | undefin
     throw new UsageError(t(`--${key} is at most ${max} characters`, `--${key} va hasta ${max} caracteres`));
   }
   return v;
+}
+
+/** #144: `--gate client|production`; en `node update`, `none` lo quita. */
+function gateArg(args: ParsedArgs, clearable = false): NodeGate | null | undefined {
+  const g = flag(args, 'gate')?.trim();
+  if (g === undefined) return undefined;
+  if (clearable && g === 'none') return null;
+  if (!NODE_GATES.includes(g as NodeGate)) {
+    const all = [...NODE_GATES, ...(clearable ? ['none'] : [])].join('|');
+    throw new UsageError(t(`--gate must be ${all}`, `--gate debe ser ${all}`));
+  }
+  return g as NodeGate;
 }
 
 function linkArg(args: ParsedArgs): string | undefined {

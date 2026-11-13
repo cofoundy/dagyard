@@ -28,11 +28,22 @@ const edgesQ = (db: Db, pid: string) =>
   db.prepare('SELECT * FROM edges WHERE project_id = ? ORDER BY rowid').bind(pid);
 
 /** Proyecto, nodos y aristas en una lectura consistente. */
-export async function loadGraph(db: Db, pid: string): Promise<{ project: Project; nodes: DagNode[]; edges: Edge[] }> {
-  const [p, n, e] = await db.batch<Row>([db.prepare('SELECT * FROM projects WHERE id = ?').bind(pid), nodesQ(db, pid), edgesQ(db, pid)]);
+export async function loadGraph(db: Db, pid: string): Promise<{ project: Project; nodes: DagNode[]; edges: Edge[]; assumed: Set<string> }> {
+  const [p, n, e, a] = await db.batch<Row>([
+    db.prepare('SELECT * FROM projects WHERE id = ?').bind(pid),
+    nodesQ(db, pid),
+    edgesQ(db, pid),
+    // #144: las tareas con una decisión asumida abierta: lo que sale al cliente o a prod espera el sí
+    db.prepare("SELECT DISTINCT node_id FROM blockers WHERE project_id = ? AND status = 'open' AND assumed IS NOT NULL").bind(pid),
+  ]);
   const row = p!.results[0];
   if (!row) return notFound(`El proyecto «${pid}»`);
-  return { project: toProject(row), nodes: n!.results.map(toNode), edges: e!.results.map(toEdge) };
+  return {
+    project: toProject(row),
+    nodes: n!.results.map(toNode),
+    edges: e!.results.map(toEdge),
+    assumed: new Set(a!.results.map((r) => String(r.node_id))),
+  };
 }
 
 export async function snapshot(db: Db, pid: string): Promise<ProjectSnapshot> {

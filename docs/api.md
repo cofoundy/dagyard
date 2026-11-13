@@ -292,6 +292,15 @@ y agrega siempre el mensaje del sistema «Nadie respondió antes del plazo: sigo
 «No answer before the deadline: going with «X», the default.»). Una respuesta del dueño posterior da `409`. Plata, mensajes al
 cliente, marca y producción no llevan default: lo decide quien pregunta.
 
+**Decisión asumida (#144).** Una `decision` o `review` puede traer `assumed` (texto exacto de una opción): la opción con
+la que el sitio ya siguió mientras el dueño decide. No va con `defaultChoice`/`dueAt` ni en un `access` (`400`). Abrirla
+**no** pone el nodo en `blocked` y se puede abrir sobre un nodo `done` (la etapa entregada con su recomendación); el nodo
+puede cambiar de estado y cerrarse con ella abierta, y sus dependientes arrancan. Un nodo con `gate: "client" |
+"production"` no sale en `GET …/next` mientras una tarea de su cadena («necesita», transitiva) tenga una asumida
+abierta. Al responder, el nodo no se mueve y el servidor escribe «El dueño confirmó «X», la opción con la que ya
+seguimos.» o, si eligió otra, `resolution.overrode: true` y «El dueño eligió «Y», no «X», con la que ya seguimos: hay que
+revisar lo que se construyó encima.» Reabrir lo construido encima le toca a quien lo construyó.
+
 `wait` responde apenas el bloqueante se resuelve, o al vencer el `timeout` con el bloqueante todavía
 `open` (el CLI vuelve a llamar). `BlockerWaitResult = {blocker, value}`; `value` es el secreto
 descifrado **solo** si `kind = access`, está resuelto y el rol es `agent`. Para el `owner` siempre `null`.

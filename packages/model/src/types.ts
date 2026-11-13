@@ -19,6 +19,12 @@ export type BlockerStatus = 'open' | 'resolved';
  * una `task` arranca (`next`); `goal` y `stream` no se cierran como `done`.
  */
 export type NodeKind = 'goal' | 'request' | 'task' | 'stream';
+/**
+ * #144: lo que sale de la fábrica hacia afuera. Una tarea con gate no arranca mientras su cadena tenga una
+ * decisión asumida sin el sí del dueño (`Blocker.assumed`).
+ */
+export type NodeGate = 'client' | 'production';
+export const NODE_GATES: readonly NodeGate[] = ['client', 'production'];
 export const NODE_KINDS: readonly NodeKind[] = ['goal', 'request', 'task', 'stream'];
 /** El de un nodo guardado antes de #90 (o de un servidor viejo). */
 export const DEFAULT_KIND: NodeKind = 'task';
@@ -111,6 +117,8 @@ export interface DagNode {
   quoteBy?: string | null;
   /** motivo de cierre; null = abierto. Un nodo cerrado queda en `status: 'done'` */
   closedAs?: CloseAs | null;
+  /** #144: sale al cliente o a producción; null = interna. Opcional: servidores viejos */
+  gate?: NodeGate | null;
   /** por qué se cerró; obligatorio para `replaced`, `dropped` y `learned` */
   closedReason?: string | null;
   /** id del nodo que lo reemplaza; solo con `replaced` */
@@ -168,6 +176,8 @@ export interface BlockerResolution {
   hasValue: boolean;
   /** true si nadie respondió antes de `dueAt` y el servidor aplicó `defaultChoice` (#131). Ausente en las viejas */
   byDefault?: boolean;
+  /** #144: true si el dueño eligió otra opción que la asumida (`Blocker.assumed`) */
+  overrode?: boolean;
 }
 
 export interface Blocker {
@@ -190,6 +200,11 @@ export interface Blocker {
   defaultChoice?: string | null;
   /** #131: el plazo; al vencer, el servidor resuelve con `defaultChoice` y lo deja escrito */
   dueAt?: IsoDate | null;
+  /**
+   * #144: la opción con la que el sitio ya siguió mientras el dueño decide. La tarea no queda en `blocked` y sus
+   * dependientes arrancan; una tarea con `gate` en su cadena espera el sí. Nunca junto a `defaultChoice`
+   */
+  assumed?: string | null;
   createdAt: IsoDate;
 }
 
@@ -321,6 +336,8 @@ export interface NodeInput {
   reportUrl?: string | null;
   /** detalle técnico: URL del issue o del PR */
   link?: string | null;
+  /** #144: `client` o `production` si sale hacia afuera */
+  gate?: NodeGate | null;
   /** ids de los nodos de los que depende (aristas from → este nodo) */
   deps?: string[];
   /** de qué nodos nace (#90) */
@@ -358,6 +375,8 @@ export interface BlockerInput {
   defaultChoice?: string | null;
   /** #131: ISO, en el futuro y a lo más a 30 días; exige `defaultChoice` */
   dueAt?: IsoDate | null;
+  /** #144: una de `options`: con la que el sitio ya siguió. Nunca con `defaultChoice` ni en un acceso */
+  assumed?: string | null;
 }
 
 export interface ResolveInput {

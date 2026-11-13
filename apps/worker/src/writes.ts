@@ -182,8 +182,11 @@ class Tx {
   origins(pid: string): Origin[] {
     return this.all('SELECT * FROM origins WHERE project_id = ? ORDER BY rowid', pid).map(toOrigin);
   }
+  /** Las preguntas abiertas que frenan la tarea. Una asumida (#144) no la frena: el sitio ya siguió. */
   openBlockers(pid: string, nid: string): number {
-    return Number(this.one("SELECT COUNT(*) AS n FROM blockers WHERE project_id = ? AND node_id = ? AND status = 'open'", pid, nid)!.n);
+    return Number(
+      this.one("SELECT COUNT(*) AS n FROM blockers WHERE project_id = ? AND node_id = ? AND status = 'open' AND assumed IS NULL", pid, nid)!.n,
+    );
   }
   /** Bloqueantes de la tarea, abiertos y ya respondidos: lo que un agente no puede hacer desaparecer. */
   heldBlockers(pid: string, nid: string): { open: number; resolved: number } {
@@ -197,12 +200,12 @@ class Tx {
   insertNode(n: DagNode): void {
     this.all(
       `INSERT INTO nodes (project_id, id, stage, title, status, progress, team, goal, report_url, link, started_at, done_at, team_id,
-         kind, born_at, quote, quote_by, closed_as, closed_reason, replaced_by, closed_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         kind, born_at, quote, quote_by, closed_as, closed_reason, replaced_by, closed_at, gate, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       n.projectId, n.id, n.stage, n.title, n.status, n.progress, n.team, n.goal, n.reportUrl, n.link,
       n.startedAt ?? null, n.doneAt ?? null, n.teamId ?? null,
       nodeKind(n), n.bornAt ?? n.createdAt, n.quote ?? null, n.quoteBy ?? null, n.closedAs ?? null, n.closedReason ?? null, n.replacedBy ?? null, n.closedAt ?? null,
-      n.createdAt, n.updatedAt,
+      n.gate ?? null, n.createdAt, n.updatedAt,
     );
   }
   /** Reinserta una fila tal cual estaba (todas sus columnas): un nodo que un PUT no trae, con su rowid nuevo (#90). */
@@ -218,14 +221,15 @@ class Tx {
   }
   insertBlocker(b: Blocker): void {
     this.all(
-      `INSERT INTO blockers (id, project_id, node_id, kind, question, options, access_label, status, default_choice, due_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
-      b.id, b.projectId, b.nodeId, b.kind, b.question, JSON.stringify(b.options), b.accessLabel, b.defaultChoice ?? null, b.dueAt ?? null, b.createdAt,
+      `INSERT INTO blockers (id, project_id, node_id, kind, question, options, access_label, status, default_choice, due_at, assumed, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
+      b.id, b.projectId, b.nodeId, b.kind, b.question, JSON.stringify(b.options), b.accessLabel, b.defaultChoice ?? null, b.dueAt ?? null,
+      b.assumed ?? null, b.createdAt,
     );
   }
   /** Reinserta un bloqueante tal cual estaba: id, respuesta y valor cifrado incluidos. */
   restoreBlocker(r: Row): void {
-    const cols = ['id', 'project_id', 'node_id', 'kind', 'question', 'options', 'access_label', 'status', 'resolution', 'resolved_by', 'resolved_at', 'access_value', 'default_choice', 'due_at', 'created_at'];
+    const cols = ['id', 'project_id', 'node_id', 'kind', 'question', 'options', 'access_label', 'status', 'resolution', 'resolved_by', 'resolved_at', 'access_value', 'default_choice', 'due_at', 'assumed', 'created_at'];
     this.all(`INSERT INTO blockers (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, ...cols.map((c) => r[c] as V));
   }
   /** Reinserta un mensaje tal cual estaba: id, firma y fecha incluidos. */
@@ -251,7 +255,7 @@ class Tx {
   updateNode(
     pid: string,
     nid: string,
-    cols: Partial<Record<'stage' | 'title' | 'status' | 'progress' | 'team' | 'goal' | 'report_url' | 'link' | 'team_id' | 'kind' | 'quote' | 'quote_by', V>>,
+    cols: Partial<Record<'stage' | 'title' | 'status' | 'progress' | 'team' | 'goal' | 'report_url' | 'link' | 'team_id' | 'kind' | 'quote' | 'quote_by' | 'gate', V>>,
     where = '',
     close?: { as: CloseAs; reason: string | null; by: string | null },
   ): DagNode | null {
@@ -347,6 +351,7 @@ function newNode(pid: string, input: NodeInput, stages: Stage[], now: string, at
     goal: input.goal ?? null,
     reportUrl: input.reportUrl ?? null,
     link: input.link ?? null,
+    gate: input.gate ?? null,
     // #75: una tarea que nace en marcha o lista nace con su hora; el cliente no la escribe
     startedAt: status === 'working' ? now : null,
     doneAt: status === 'done' ? now : null,
@@ -390,6 +395,7 @@ function newBlocker(pid: string, nodeId: string, input: BlockerInput & { created
     resolvedAt: null,
     defaultChoice: input.defaultChoice ?? null,
     dueAt: input.dueAt ?? null,
+    assumed: input.assumed ?? null,
     createdAt: input.createdAt !== undefined && input.createdAt < now ? input.createdAt : now,
   };
 }
@@ -417,6 +423,18 @@ const DEFAULT_TEXT: Record<Lang, (choice: string) => string> = {
   es: (c) => `Nadie respondió antes del plazo: sigo con «${c}», la opción por defecto.`,
 };
 
+/** #144: lo que el servidor escribe cuando el dueño responde una decisión asumida, en el idioma del proyecto. */
+const ASSUMED_TEXT: Record<Lang, { same: (c: string) => string; other: (c: string, a: string) => string }> = {
+  en: {
+    same: (c) => `The owner confirmed «${c}», the option we had gone ahead with.`,
+    other: (c, a) => `The owner chose «${c}», not «${a}», the one we had gone ahead with: what was built on top needs another look.`,
+  },
+  es: {
+    same: (c) => `El dueño confirmó «${c}», la opción con la que ya seguimos.`,
+    other: (c, a) => `El dueño eligió «${c}», no «${a}», con la que ya seguimos: hay que revisar lo que se construyó encima.`,
+  },
+};
+
 const BLOCKED_BY_HAND = 'status: «blocked» lo pone un bloqueante, no se pone a mano';
 const pending = (n: number) => (n === 1 ? 'una pregunta abierta' : `${n} preguntas abiertas`);
 /** «una pregunta abierta para el dueño y 2 respuestas del dueño»; y el pronombre que la retoma. */
@@ -436,15 +454,27 @@ const messageKey = (nodeId: unknown, text: unknown, reportUrl: unknown) => JSON.
  * servidor lo deja escrito. Un default siempre deja su mensaje; una respuesta del dueño, solo si destraba la tarea.
  */
 function settle(tx: Tx, pid: string, blocker: Blocker): Blocker {
-  const unblocked = tx.openBlockers(pid, blocker.nodeId) === 0;
-  const node = tx.updateNode(pid, blocker.nodeId, unblocked ? { status: 'working' } : {})!;
+  // una asumida (#144) nunca frenó la tarea: responderla no la mueve, solo deja escrito qué eligió el dueño
+  const assumed = blocker.assumed ?? null;
+  const unblocked = !assumed && tx.openBlockers(pid, blocker.nodeId) === 0;
+  const prevNode = tx.node(pid, blocker.nodeId);
+  const node = tx.updateNode(pid, blocker.nodeId, unblocked && prevNode.status === 'blocked' ? { status: 'working' } : {})!;
   // contesta en el idioma del proyecto (#77); la demo inglesa firma como sus equipos (#74)
   const { lang } = tx.project(pid);
   const en = lang === 'en';
   const byDefault = blocker.resolution?.byDefault === true;
-  const text = byDefault ? DEFAULT_TEXT[lang](blocker.resolution!.choice ?? '') : en ? RESUME_TEXT_EN : RESUME_TEXT;
+  const choice = blocker.resolution?.choice ?? '';
+  const text = assumed
+    ? blocker.resolution?.overrode
+      ? ASSUMED_TEXT[lang].other(choice, assumed)
+      : ASSUMED_TEXT[lang].same(choice)
+    : byDefault
+      ? DEFAULT_TEXT[lang](choice)
+      : en
+        ? RESUME_TEXT_EN
+        : RESUME_TEXT;
   const message: Message | null =
-    unblocked || byDefault
+    unblocked || byDefault || assumed
       ? {
           id: randomId('m_'),
           projectId: pid,
@@ -561,7 +591,11 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     const answeredKeys = new Set(
       kept.filter((b) => b.status === 'resolved').map((b) => blockerKey(b.node_id, b.kind, b.question, b.options as string, b.access_label)),
     );
-    const blockedBy = new Set([...graphBlockers.map((b) => b.nodeId), ...keptOpen.map((b) => b.node_id as string)]);
+    // una asumida (#144) no frena su tarea
+    const blockedBy = new Set([
+      ...graphBlockers.filter((b) => !b.assumed).map((b) => b.nodeId),
+      ...keptOpen.filter((b) => !b.assumed).map((b) => b.node_id as string),
+    ]);
     nodes.forEach((node, i) => {
       if (node.status === 'blocked' && !blockedBy.has(node.id))
         fail('invalid', `nodes[${i}].status: «blocked» lo pone un bloqueante; agrégalo en blockers`);
@@ -768,6 +802,7 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     if (patch.goal !== undefined) cols.goal = patch.goal;
     if (patch.reportUrl !== undefined) cols.report_url = patch.reportUrl;
     if (patch.link !== undefined) cols.link = patch.link;
+    if (patch.gate !== undefined) cols.gate = patch.gate;
     if (patch.teamId !== undefined) cols.team_id = patch.teamId;
     if (status === 'done') cols.progress = 1;
     else if (patch.status === 'working' && prev.status === 'pending') cols.progress = patch.progress ?? 0;
@@ -861,13 +896,17 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     const { lang } = tx.project(pid);
     // una pregunta no reabre en silencio un nodo cerrado (#90): primero se reabre, con su porqué en el log
     const target = tx.node(pid, nid);
-    if (target.status === 'done') fail('conflict', `La tarea «${target.title}» está cerrada (${target.closedAs ?? 'done'}); reábrela antes de preguntar`);
+    // #144: una decisión asumida sí va sobre una tarea entregada («la entregué con esta recomendación»)
+    if (target.status === 'done' && !input.assumed)
+      fail('conflict', `La tarea «${target.title}» está cerrada (${target.closedAs ?? 'done'}); reábrela antes de preguntar`);
     const full = withDefaultOptions(input, lang);
     checkDue(full, tx.now);
+    if (full.assumed && !full.options?.includes(full.assumed))
+      fail('invalid', `assumed: tiene que ser una de las opciones (${(full.options ?? []).join(' | ')})`);
     const blocker = newBlocker(pid, nid, full, tx.now);
     tx.insertBlocker(blocker);
-    // solo la columna de estado: el resto del nodo queda como esté
-    const node = tx.updateNode(pid, nid, { status: 'blocked' })!;
+    // solo la columna de estado: el resto del nodo queda como esté. Una asumida no la frena
+    const node = full.assumed ? target : tx.updateNode(pid, nid, { status: 'blocked' })!;
     tx.emit(pid, actor, { type: 'blocker.opened', payload: { blocker } }, { type: 'node.updated', payload: { node } });
     return blocker;
   },
@@ -877,7 +916,8 @@ const ops: { [K in WriteOp['kind']]: (tx: Tx, op: Extract<WriteOp, { kind: K }>)
     if (!row) return notFound(`El bloqueante «${bid}»`);
     const prev = toBlocker(row);
     if (prev.kind !== expectKind) fail('conflict', 'El bloqueante cambió mientras lo resolvías; vuelve a intentarlo');
-    const resolution = { choice, note, hasValue: sealed !== null };
+    const resolution: BlockerResolution = { choice, note, hasValue: sealed !== null };
+    if (prev.assumed && choice !== prev.assumed) resolution.overrode = true;
     // la condición `status = 'open'` va en el UPDATE: si no tocó ninguna fila, ya estaba resuelto
     const updated = tx.one(
       `UPDATE blockers SET status = 'resolved', resolution = ?, resolved_by = 'owner', resolved_at = ?, access_value = ?

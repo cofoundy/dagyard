@@ -256,8 +256,8 @@ app.delete('/api/projects/:pid', async (c) => {
 });
 
 app.get('/api/projects/:pid/next', async (c) => {
-  const { project, nodes, edges } = await loadGraph(dbOf(c.env), pidParam(c));
-  return c.json(nextStartable(project.stages, nodes, edges));
+  const { project, nodes, edges, assumed } = await loadGraph(dbOf(c.env), pidParam(c));
+  return c.json(nextStartable(project.stages, nodes, edges, assumed));
 });
 
 app.get('/api/projects/:pid/events', async (c) => {
