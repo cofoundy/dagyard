@@ -5,10 +5,10 @@ Integración de Cofoundy (no la necesita quien instala Dagyard por su cuenta): e
 proyecto y avisa por los dos canales que el dueño mira:
 
     blocker.opened   → DM de Buzz al dueño (la app móvil lo notifica; una vez por pregunta)
-                       + brain.py tarea add --clave dagyard:<id> (Vikunja → la barra de myturn en el Mac)
+                       + brain.py tarea add --clave dagyard:<id> (su lista de tareas en Vikunja)
     blocker.resolved → brain.py tarea cerrar --clave dagyard:<id>
 
-brain sola no basta: myturn trae Vikunja a la barra del Mac, no al celular (`~/dotfiles/docs/myturn.md`).
+brain sola no basta: la tarea en Vikunja queda en su lista, pero no garantiza un aviso al celular.
 
 Corre para siempre: si `watch` sale (el servidor dejó de responder, la red), espera y vuelve desde su cursor, así
 no se pierde ni se repite nada. Stdlib only.
