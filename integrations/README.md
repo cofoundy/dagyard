@@ -5,7 +5,7 @@ Lo que conecta Dagyard con las herramientas internas de Cofoundy. Quien instala 
 ## Avisos al dueño (`brain-avisos.py`)
 
 Cada pregunta nueva de un proyecto (`dagyard block`) le llega al dueño por dos vías: un DM de Buzz, que la app
-móvil notifica, y una tarea en Vikunja (`brain tarea add`), que myturn muestra en la barra del Mac. Cuando se
+móvil notifica, y una tarea en Vikunja (`brain tarea add`), que le llega a su lista de tareas. Cuando se
 responde (o rige su default, #131), la tarea se cierra sola. Un DM sale una sola vez por pregunta, aunque el
 servicio se reinicie.
 
